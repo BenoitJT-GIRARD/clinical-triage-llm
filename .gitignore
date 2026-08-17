@@ -1,0 +1,55 @@
+# Environnements et caches Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Outils
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets
+.env
+
+# Poids de modeles : plusieurs gigaoctets, publies sur le Hugging Face Hub.
+models/
+
+# Jeux d'entrainement : derives du code et des corpus, regeneres a l'identique
+# par le pipeline de preparation (graine fixee) et publies sur le Hub. Le jeu
+# d'evaluation
+# clinique et la fiche metadata.json restent versionnes : ils sont petits, et
+# on doit pouvoir lire les cas notes et le controle d'anonymisation sans rien
+# telecharger.
+data/processed/sft_train.jsonl
+data/processed/sft_validation.jsonl
+data/processed/sft_test.jsonl
+data/processed/dpo_train.jsonl
+
+# Caches generes par Unsloth a la racine du projet : noyaux compiles et tampons
+# temporaires, reconstruits a chaque entrainement.
+unsloth_compiled_cache/
+_unsloth_temporary_saved_buffers/
+
+# Suivi d'experiences MLflow : base locale, regenerable a chaque entrainement.
+mlruns/
+
+# Journaux d'audit du service : donnees d'execution, pas du code. En conteneur,
+# ils vivent dans un volume nomme.
+logs/
+
+# Documentation de travail, hors dépôt.
+infos/
+
+reports/*.zip
+
+# Divers OS
+.DS_Store
+Thumbs.db

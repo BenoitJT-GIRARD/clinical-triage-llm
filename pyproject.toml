@@ -1,0 +1,183 @@
+[project]
+name = "clinical-triage"
+version = "1.0.0"
+description = "POC d'un agent IA de triage medical : fine-tuning SFT/LoRA puis alignement DPO d'un Qwen3-1.7B, servi par une API FastAPI devant vLLM"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Benoît J. T. GIRARD", email = "53222414+BenoitJT-GIRARD@users.noreply.github.com" }]
+keywords = ["llm", "fine-tuning", "lora", "dpo", "triage", "sante"]
+
+# Dependances du service et de la chaine de donnees. Ce qu'il faut pour
+# construire le dataset, evaluer un modele, servir l'API et rendre les figures.
+# L'entrainement, lui, vit dans le groupe `train` : la passerelle de service n'a
+# aucun besoin de torch, et l'y inclure ferait installer 2,5 Go de CUDA a chaque
+# execution de l'integration continue.
+dependencies = [
+    # --- Donnees ---
+    # Borne haute imposee par Unsloth (`datasets<4.4.0`), qui fournit les noyaux
+    # d'entrainement. La faille PYSEC-2026-3716 des versions <5.0.1 porte sur les
+    # constructeurs de jeux par dossier, que ce projet n'utilise jamais : il lit
+    # du JSONL et des depots du Hub.
+    "datasets>=4.2,<4.4",
+    "numpy>=1.26,<2.2",
+    # `datasets` tire pandas. La borne haute evite la version 3.0.4, retiree de
+    # l'index par ses auteurs pour des plantages sur les dates.
+    "pandas>=2.2,<3",
+    # --- Anonymisation RGPD ---
+    "presidio-analyzer>=2.2",
+    "presidio-anonymizer>=2.2",
+    "spacy>=3.7,<3.9",
+    # Modeles spaCy requis par Presidio, installes depuis leur roue officielle.
+    "fr-core-news-md",
+    "en-core-web-sm",
+    # --- Figures ---
+    "matplotlib>=3.9",
+    # --- Reference classique de l'evaluation ---
+    # Un classifieur lineaire sur n-grammes, entraine sur les memes paires que le
+    # modele, dit ce que vaut le fine-tuning face a une approche ordinaire. Sans
+    # cette reference, l'evaluation ne compare le modele qu'a des references
+    # triviales et ne peut rien conclure sur l'interet du fine-tuning.
+    "scikit-learn>=1.5",
+    # --- Configuration locale ---
+    # Lecture du fichier `.env`. Deja presente par `uvicorn[standard]`, mais le
+    # paquet l'importe directement : une dependance dont on se sert se declare.
+    "python-dotenv>=1.0",
+    # --- Service d'inference ---
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.10",
+    "httpx>=0.28",
+]
+
+# vLLM n'est pas declare en dependance : le serveur d'inference tourne dans sa
+# propre image. L'y ajouter figerait en plus les versions de torch et de
+# transformers du projet sur celles que vLLM impose.
+
+[project.scripts]
+clinical-triage = "clinical_triage.cli:main"
+
+[project.urls]
+Repository = "https://github.com/BenoitJT-GIRARD/clinical-triage"
+
+[build-system]
+requires = ["uv_build>=0.9,<0.12"]
+build-backend = "uv_build"
+
+[dependency-groups]
+# Fine-tuning et alignement. Installe par defaut en developpement ; l'integration
+# continue s'en passe avec `uv sync --no-group train`.
+train = [
+    "torch>=2.12,<2.13",
+    # Unsloth fournit les noyaux de fine-tuning LoRA du projet. C'est lui qui
+    # fixe les bornes de `transformers` et de `trl` : il reecrit des fonctions
+    # internes de ces deux bibliotheques, et une version qu'il ne connait pas se
+    # traduit par un echec a l'import, pas par une degradation silencieuse.
+    # `datasets`, en revanche, reste a la version corrigee : Unsloth n'en depend
+    # que par une borne basse, et la 4.3 qu'il accepterait porte une faille de
+    # traversee de repertoire.
+    "unsloth>=2026.9",
+    "transformers>=4.57,<=5.5",
+    "trl>=0.23,<=0.24",
+    "accelerate>=1.15",
+    "peft>=0.21",
+    "sentencepiece>=0.2",
+    "protobuf>=5",
+    "huggingface-hub>=0.27",
+    "mlflow>=3.5",
+]
+
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    # Plancher aligné sur la version épinglée dans `.pre-commit-config.yaml` :
+    # deux versions majeures d'écart, ce sont deux linters différents, et le
+    # développeur voit passer ce que l'intégration continue refuse ensuite.
+    "ruff>=0.16.7",
+    "bandit[toml]>=1.8",
+    "pip-audit>=2.7",
+    "pre-commit>=4.0",
+    "ipykernel>=6.29",
+    "jupyter>=1.1",
+    "nbformat>=5.10",
+    "nbconvert>=7.16",
+    "reportlab>=4.2",
+    "python-pptx>=1.0",
+    # Client de deploiement de l'endpoint de demonstration.
+    "modal>=1.0",
+]
+
+[tool.uv]
+default-groups = ["dev", "train"]
+
+# --- Index PyTorch CUDA 13.0 (RTX 4060 Ti) et modeles spaCy ---
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+fr-core-news-md = { url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_md-3.8.0/fr_core_news_md-3.8.0-py3-none-any.whl" }
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Aucune exclusion. Un motif d'exclusion vaut pour tout dossier de ce nom, à
+# n'importe quelle profondeur : exclure `data` écarterait aussi le dossier
+# `data/` du paquet — catalogue clinique, règle de triage, constantes vitales et
+# anonymisation — et l'analyse passerait au vert sans avoir lu le cœur du projet.
+
+[tool.ruff.lint]
+extend-select = ["I", "UP", "B", "C4", "SIM"]
+# E501 : la longueur de ligne est geree par le formateur.
+# RUF001-003 : le code, les commentaires et les chaines sont en francais accentue.
+ignore = ["E501", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.pytest.ini_options]
+addopts = "-ra -q --cov=clinical_triage --cov-report=term-missing --cov-fail-under=70"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.coverage.run]
+source = ["src/clinical_triage"]
+# Ces modules-la demandent un GPU : ils sont verifies par des executions reelles
+# du pipeline d'entrainement, pas par des tests unitaires. Les fichiers sont
+# nommes un par un, et non par un motif sur le groupe training/, qui en
+# exempterait aussi le suivi d'experiences et le calcul du nombre de pas de
+# chauffe -- deux modules de pur Python que les tests couvrent.
+omit = ["*/training/sft.py", "*/training/dpo.py", "*/inference.py", "*/bootstrap.py"]
+
+[tool.bandit]
+exclude_dirs = [".venv", "tests"]
+# Ces deux dérogations valent pour tout ce que bandit analyse : le paquet et les
+# scripts, les deux périmètres que l'intégration continue lui passe en ligne de
+# commande. Elles suppriment neuf constats dans le paquet et six dans les
+# scripts ; sans elles, l'analyse sort en erreur dans les deux cas.
+#
+# B615 signale tout téléchargement depuis le Hugging Face Hub sans révision
+# épinglée. Onze appels sont concernés, de trois natures :
+#   - `load_dataset("json", data_files=...)` dans `training/sft.py` et
+#     `training/dpo.py` ne touche pas au Hub : c'est le lecteur de fichiers
+#     locaux, appelé sur les JSONL que `scripts/01` vient d'écrire ;
+#   - les `from_pretrained` sur un chemin local — l'adaptateur et le modèle
+#     fusionné dans `scripts/04`, les poids servis dans `inference.py` —
+#     relisent ce que le dépôt a produit ;
+#   - les téléchargements réels, eux, nomment un dépôt public sans numéro de
+#     révision : le modèle de base `Qwen/Qwen3-1.7B-Base` dans `scripts/01` et
+#     `scripts/04`, et les cinq corpus médicaux de `DATA.corpora` dans
+#     `data/corpus_sources.py`. Les identifiants sont fixés dans `config.py`,
+#     mais une révision ne l'est pas. Ces appels n'ont lieu qu'à la construction
+#     du dataset et à l'entraînement, sur la machine de développement ; l'image
+#     de service ne les exécute pas, et ce qui part en production est une
+#     révision figée par étiquette (voir `.github/workflows/cd.yml`).
+# B311 signale l'usage de `random`. Les quatre appels concernés construisent un
+# `random.Random` initialisé par une graine explicite, pour mélanger et
+# échantillonner des jeux de données de manière reproductible, jamais pour
+# produire un secret. Les seuls secrets du projet sont comparés avec
+# `secrets.compare_digest`.
+skips = ["B615", "B311"]
