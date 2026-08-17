@@ -1,0 +1,19 @@
+# Normalisation des fins de ligne : le dépôt est écrit sous Windows et
+# l'intégration continue tourne sous Linux.
+* text=auto eol=lf
+
+# Fichiers binaires : ni conversion, ni différence ligne à ligne.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.pptx binary
+*.safetensors binary
+*.db binary
+
+# Le dataset est versionné. Le marquer comme généré garde les
+# différences repliées par défaut dans les revues, sans l'exclure des recherches.
+data/processed/*.jsonl text eol=lf linguist-generated=true
+
+# Les notebooks se lisent en JSON : fins de ligne fixes, et pas de détection
+# automatique de type qui les rendrait illisibles dans les différences.
+*.ipynb text eol=lf linguist-language=Python
