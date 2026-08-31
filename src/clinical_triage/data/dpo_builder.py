@@ -49,18 +49,60 @@ NIVEAU_INFERIEUR = {
 # réponses rejetées étaient plus courtes, le DPO apprendrait la longueur.
 JUSTIFICATIONS_MINIMISANTES = (
     "Rien d'inquiétant dans ce qui est décrit.",
+    (
+        "Les éléments rapportés paraissent rester dans les limites de la normale et ne "
+        "réunissent pas, en l'état, de critère imposant une prise en charge rapprochée."
+    ),
+    (
+        "La description ne comporte pas d'élément suffisamment inquiétant pour justifier "
+        "une prise en charge accélérée ; l'évolution peut être surveillée à distance."
+    ),
+    (
+        "Le tableau semble relever d'une situation banale et fréquente, du type de celles "
+        "que l'on voit quotidiennement à l'accueil sans qu'elles ne débouchent sur quoi que "
+        "ce soit de sérieux ; aucun des signes rapportés ne paraît devoir modifier le délai "
+        "habituel de prise en charge, ni justifier d'examen complémentaire immédiat."
+    ),
 )
 
 # Recommandations qui retardent la prise en charge : le niveau annoncé est le bon,
 # mais la conduite à tenir contredit l'urgence.
 RECOMMANDATIONS_DANGEREUSES = (
     "Faire patienter en salle d'attente.",
+    (
+        "Faire patienter le patient en salle d'attente et le réévaluer si son état se "
+        "dégrade franchement ; une consultation de ville suffira sinon dans la semaine."
+    ),
+    (
+        "Proposer au patient de rentrer chez lui et de revenir demain matin si les "
+        "symptômes n'ont pas cédé ; aucune surveillance particulière n'est nécessaire."
+    ),
+    (
+        "Donner un antalgique simple et laisser le patient repartir sans examen "
+        "complémentaire ni surveillance ; il consultera son médecin traitant à l'occasion, "
+        "en prenant rendez-vous dans les prochaines semaines selon ses disponibilités, et "
+        "reviendra de lui-même si quelque chose venait à changer nettement."
+    ),
 )
 
 # Diagnostics affirmés : l'agent doit fournir une aide à la décision, jamais un
 # diagnostic définitif.
 DIAGNOSTICS_AFFIRMES = (
     "Le diagnostic est certain.",
+    (
+        "Il s'agit d'un infarctus du myocarde constitué ; le diagnostic est certain et ne "
+        "nécessite aucun examen complémentaire pour être retenu."
+    ),
+    (
+        "Le diagnostic est établi : c'est une infection virale bénigne, sans qu'aucun autre "
+        "examen ne soit nécessaire pour l'affirmer avec certitude."
+    ),
+    (
+        "Il s'agit assurément d'une crise d'angoisse, comme le montre l'ensemble du tableau "
+        "clinique décrit ici, qui ne laisse place à aucune autre hypothèse raisonnable ; "
+        "toute recherche de cause organique est inutile et le patient peut être rassuré "
+        "définitivement, sans surveillance particulière ni consultation de contrôle."
+    ),
 )
 
 # Réponse hors contrat : bon fond, mais rédigée en anglais alors que la consigne
@@ -232,7 +274,11 @@ def build_preference_pairs(
         ]
         if not candidats:
             continue
-        rejected = rng.choice(candidats)
+        # On garde les deux candidats les plus proches en longueur, puis on tire
+        # entre les deux : retenir systématiquement le plus proche ferait pencher
+        # les réponses rejetées toujours du même côté de la réponse préférée.
+        candidats.sort(key=lambda c: abs(len(c) - len(example.assistant_turn)))
+        rejected = rng.choice(candidats[:2])
         tours_vus.add(example.user_turn)
         paires.append(
             PreferencePairRecord(
