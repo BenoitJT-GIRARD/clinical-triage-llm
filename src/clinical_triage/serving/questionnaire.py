@@ -301,10 +301,98 @@ def _enoncer(identifiant: str, reponse: str) -> str:
     return f"{intitule} : {texte}."
 
 
+# Réponse qui, pour une question de gravité, constitue un signe d'alerte.
+# « Le patient est-il conscient ? non » et « Y a-t-il une difficulté à respirer ?
+# oui » sont tous deux alarmants, mais l'un par la négative et l'autre par
+# l'affirmative : le sens de chaque question doit être écrit, pas deviné.
+REPONSE_ALARMANTE = {
+    "conscience": "non",
+    "respiration": "oui",
+    "saignement": "oui",
+    # Un « oui » à la question du déficit décrit un accident vasculaire en cours,
+    # un « oui » à la céphalée en coup de tonnerre une hémorragie méningée, un
+    # « non » à la parole une détresse respiratoire, un « non » à la nuque souple
+    # un syndrome méningé. Continuer à poser des questions après l'une de ces
+    # réponses n'a pas de sens.
+    "deficit": "oui",
+    "cephalee": "oui",
+    "intention": "oui",
+    "parole": "non",
+    "nuque": "non",
+    # `vomissements` en est absent à dessein : la question est double
+    # (« y a-t-il des vomissements, et contiennent-ils du sang ? »), et un « oui »
+    # nu ne dit pas lequel des deux. C'est le texte libre qui tranche, et la
+    # règle de triage le relit.
+}
+
+AFFIRMATIONS = frozenset({"oui", "yes", "présent", "present", "positif", "positive"})
+NEGATIONS = frozenset(
+    {"non", "no", "aucun", "aucune", "absent", "absente", "négatif", "negatif", "rien"}
+)
+
+_MOTS = re.compile(r"[^\W\d_]+")
+
+
+def _reponse_binaire(reponse: str) -> str | None:
+    """Ramène une réponse à « oui », « non », ou rien si elle n'est pas binaire.
+
+    Deux précautions, et elles sont toutes les deux nées d'un contre-exemple.
+
+    La comparaison porte sur un **mot entier**, jamais sur un préfixe : « no »
+    est une négation en anglais, et le début de « Notre », « Nous » et
+    « Normalement » en français. Lire « Notre fille saigne du nez » comme un
+    « non » inverse une réponse clinique sans que rien ne le signale.
+
+    Et seule une réponse **réduite à ce seul mot** est traitée comme binaire.
+    Dès qu'un soignant écrit autre chose, son texte est repris tel quel plus
+    loin : c'est toujours le choix le plus sûr, puisque le texte part alors mot
+    pour mot au modèle et que la règle de triage le relit, là où une réponse
+    ramenée à « oui » ou « non » perd tout ce qu'elle portait.
+    """
+    mots = _MOTS.findall(reponse.strip().lower())
+    if len(mots) != 1:
+        return None
+    if mots[0] in AFFIRMATIONS:
+        return "oui"
+    if mots[0] in NEGATIONS:
+        return "non"
+    return None
+
+
+def has_red_flag(chief_complaint: str, answers: dict[str, str]) -> bool:
+    """Dit si un signe de détresse vitale ressort déjà de la collecte.
+
+    Attention au piège : appliquer la règle de triage à la synthèse complète
+    reviendrait à la lui appliquer sur le **texte des questions**, qui contient
+    par construction le vocabulaire des signes graves (« Y a-t-il une difficulté
+    à respirer ? »). Le questionnaire s'arrêterait alors systématiquement dès la
+    première question. On examine donc le motif et les réponses, jamais les
+    questions.
+    """
+    if classify(chief_complaint) == VITAL:
+        return True
+    for identifiant, reponse in answers.items():
+        # Les deux valeurs sont comparées seulement si la question attend
+        # réellement une réponse binaire. Sans cette garde, une question qui n'en
+        # attend pas — le mécanisme d'un traumatisme, la localisation d'une
+        # douleur — confronterait deux `None` : toute réponse en texte libre y
+        # passerait pour un signe de détresse vitale et arrêterait la collecte.
+        attendue = REPONSE_ALARMANTE.get(identifiant)
+        if attendue is not None and _reponse_binaire(reponse) == attendue:
+            return True
+        # La règle s'applique à **toute** réponse, y compris à celle qui commence
+        # par « oui » : « oui, hémiplégie droite depuis trente minutes » porte le
+        # signe dans ce qui suit le « oui », et le réserver aux réponses non
+        # binaires reviendrait à ne jamais le lire.
+        if classify(reponse) == VITAL:
+            return True
+    return False
+
+
 def next_question(chief_complaint: str, answers: dict[str, str]) -> NextQuestion:
     """Détermine la prochaine question, ou signale la fin de la collecte."""
     theme = detect_theme(chief_complaint)
-    if classify(compile_symptoms(chief_complaint, answers)) == VITAL:
+    if has_red_flag(chief_complaint, answers):
         # Un signe de détresse vitale est apparu : on arrête d'interroger.
         return NextQuestion(None, None, True, theme)
     for identifiant, texte in plan(chief_complaint):
