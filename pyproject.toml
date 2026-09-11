@@ -18,7 +18,7 @@ dependencies = [
     # Borne haute imposee par Unsloth (`datasets<4.4.0`), qui fournit les noyaux
     # d'entrainement. La faille PYSEC-2026-3716 des versions <5.0.1 porte sur les
     # constructeurs de jeux par dossier, que ce projet n'utilise jamais : il lit
-    # du JSONL et des depots du Hub.
+    # du JSONL et des depots du Hub. L'exception est inscrite dans l'audit de CI.
     "datasets>=4.2,<4.4",
     "numpy>=1.26,<2.2",
     # `datasets` tire pandas. La borne haute evite la version 3.0.4, retiree de
@@ -50,9 +50,9 @@ dependencies = [
     "httpx>=0.28",
 ]
 
-# vLLM n'est pas declare en dependance : le serveur d'inference tourne dans sa
-# propre image. L'y ajouter figerait en plus les versions de torch et de
-# transformers du projet sur celles que vLLM impose.
+# vLLM n'est pas declare en dependance : le serveur d'inference tourne dans son
+# image officielle (voir deploy/docker-compose.yml). L'y ajouter figerait en plus
+# les versions de torch et de transformers du projet sur celles que vLLM impose.
 
 [project.scripts]
 clinical-triage = "clinical_triage.cli:main"
@@ -103,7 +103,7 @@ dev = [
     "nbconvert>=7.16",
     "reportlab>=4.2",
     "python-pptx>=1.0",
-    # Client de deploiement de l'endpoint de demonstration.
+    # Client de deploiement de l'endpoint de demonstration (deploy/modal_app.py).
     "modal>=1.0",
 ]
 
