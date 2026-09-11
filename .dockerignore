@@ -1,0 +1,25 @@
+# Ce qui ne doit jamais entrer dans le contexte de construction Docker.
+# Sans ce fichier, le démon reçoit les poids de modèles, le dataset et
+# l'historique git à chaque construction : plusieurs gigaoctets pour une image
+# qui ne copie que `src/`.
+
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+models/
+data/
+mlruns/
+logs/
+reports/
+notebooks/
+infos/
+
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
