@@ -1,0 +1,68 @@
+{
+  "endpoint": "http://localhost:8080",
+  "cible": "passerelle (POST /triage)",
+  "modele": "qwen3-1.7b-clinical-triage",
+  "mesures": {
+    "concurrence_1": {
+      "moyenne_ms": 1494.8,
+      "p50_ms": 1473.5,
+      "p95_ms": 1682.6,
+      "requetes": 40,
+      "debit_req_par_s": 0.67,
+      "tokens_par_s": 0.0,
+      "part_niveau_extrait": 1.0,
+      "surcout_passerelle_ms": 28.3
+    },
+    "concurrence_4": {
+      "moyenne_ms": 1574.6,
+      "p50_ms": 1542.0,
+      "p95_ms": 1829.8,
+      "requetes": 40,
+      "debit_req_par_s": 2.42,
+      "tokens_par_s": 0.0,
+      "part_niveau_extrait": 1.0,
+      "surcout_passerelle_ms": 27.0
+    },
+    "concurrence_8": {
+      "moyenne_ms": 1646.4,
+      "p50_ms": 1592.0,
+      "p95_ms": 2244.9,
+      "requetes": 40,
+      "debit_req_par_s": 4.71,
+      "tokens_par_s": 0.0,
+      "part_niveau_extrait": 1.0,
+      "surcout_passerelle_ms": 27.2
+    }
+  },
+  "endpoint_moteur": "http://localhost:8001",
+  "version_moteur": "0.11.0",
+  "mesures_moteur": {
+    "concurrence_1": {
+      "moyenne_ms": 1448.6,
+      "p50_ms": 1445.5,
+      "p95_ms": 1657.5,
+      "requetes": 40,
+      "debit_req_par_s": 0.69,
+      "tokens_par_s": 67.3,
+      "part_niveau_extrait": 1.0
+    },
+    "concurrence_4": {
+      "moyenne_ms": 1767.6,
+      "p50_ms": 1526.7,
+      "p95_ms": 3402.2,
+      "requetes": 40,
+      "debit_req_par_s": 2.18,
+      "tokens_par_s": 228.1,
+      "part_niveau_extrait": 0.95
+    },
+    "concurrence_8": {
+      "moyenne_ms": 1864.2,
+      "p50_ms": 1573.0,
+      "p95_ms": 3586.8,
+      "requetes": 40,
+      "debit_req_par_s": 4.13,
+      "tokens_par_s": 429.4,
+      "part_niveau_extrait": 0.95
+    }
+  }
+}

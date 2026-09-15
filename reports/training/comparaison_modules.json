@@ -1,0 +1,65 @@
+{
+  "protocole": {
+    "pas": 75,
+    "cas_valides": 60,
+    "graine": 42
+  },
+  "configurations": [
+    {
+      "configuration": "projections seules",
+      "modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ],
+      "parametres_entrainables": 17432576,
+      "exactitude": 0.85,
+      "arrets_propres": 0.0,
+      "jetons_median": 220,
+      "duree_s": 519.4,
+      "memoire_gpu_max_go": 4.52
+    },
+    {
+      "configuration": "projections + embeddings",
+      "modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj",
+        "embed_tokens"
+      ],
+      "parametres_entrainables": 328597504,
+      "exactitude": 0.85,
+      "arrets_propres": 0.0,
+      "jetons_median": 220,
+      "duree_s": 348.2,
+      "memoire_gpu_max_go": 9.26
+    },
+    {
+      "configuration": "projections + tête de sortie",
+      "modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj",
+        "lm_head"
+      ],
+      "parametres_entrainables": 328597504,
+      "exactitude": 0.9,
+      "arrets_propres": 1.0,
+      "jetons_median": 97,
+      "duree_s": 362.5,
+      "memoire_gpu_max_go": 9.03
+    }
+  ]
+}

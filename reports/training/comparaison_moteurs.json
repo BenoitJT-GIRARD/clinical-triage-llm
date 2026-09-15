@@ -1,0 +1,60 @@
+{
+  "protocole": {
+    "pas": 30,
+    "lora_r": 16,
+    "modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj",
+      "lm_head"
+    ],
+    "parametres_entrainables": 328597504,
+    "torch": "2.12.1+cu130"
+  },
+  "unsloth": {
+    "moteur": "unsloth",
+    "pas": 30,
+    "lora_r": 16,
+    "modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj",
+      "lm_head"
+    ],
+    "parametres_entrainables": 328597504,
+    "memoire_gpu_max_go": 7.23,
+    "duree_s": 199.4,
+    "secondes_par_pas": 6.65,
+    "perte_finale": 1.1157,
+    "torch": "2.12.1+cu130"
+  },
+  "transformers": {
+    "moteur": "transformers",
+    "pas": 30,
+    "lora_r": 16,
+    "modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj",
+      "lm_head"
+    ],
+    "parametres_entrainables": 328597504,
+    "memoire_gpu_max_go": 10.03,
+    "duree_s": 153.5,
+    "secondes_par_pas": 5.12,
+    "perte_finale": 1.0522,
+    "torch": "2.12.1+cu130"
+  }
+}
