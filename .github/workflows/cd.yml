@@ -97,8 +97,11 @@ jobs:
       # The `train` group stays out: publishing a model card needs neither torch nor Unsloth.
       # The commands that follow carry `--no-sync`, without which `uv run` resynchronises with
       # the default groups (`dev` and `train`) and reinstalls what this step has just left out.
+      # As in continuous integration, both syncs of this file carry `--locked`: that flag
+      # fails when `uv.lock` no longer matches `pyproject.toml`, where `--frozen` merely
+      # refrains from updating it and would publish from a stale lock.
       - name: Sync the dependencies
-        run: uv sync --frozen --no-group train
+        run: uv sync --locked --no-group train
 
       # The runner publishes only what it actually has: the **model cards**, which are
       # versioned. Neither the weights nor the training sets are in the repository — the first
@@ -155,7 +158,7 @@ jobs:
       # several gigabytes of CUDA wheels reinstalled inside a fifteen-minute job that still has
       # a health probe to wait for.
       - name: Sync the dependencies
-        run: uv sync --frozen --no-group train
+        run: uv sync --locked --no-group train
 
       # Modal rebuilds its two containers from `infra/modal_app.py`: the vLLM engine, which
       # reads the weights from the Hub at the revision below, and the FastAPI gateway. Outside a

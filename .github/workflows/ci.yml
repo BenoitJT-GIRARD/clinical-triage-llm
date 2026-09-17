@@ -12,6 +12,11 @@ name: CI
 # environment with the default groups (`dev` and `train`, see `[tool.uv]` in pyproject.toml) and
 # immediately reinstalls the group the sync had just left out.
 #
+# Both syncs carry `--locked` rather than `--frozen`: `--frozen` merely refrains from updating
+# `uv.lock`, whereas `--locked` fails when the lock no longer matches `pyproject.toml`. Without
+# it, a dependency added to the manifest without running `uv lock` again would go green, and both
+# the tests and the audit would run against a stale lock.
+#
 # Actions are pinned by commit: a tag moves, and a moved tag is code nobody reviewed running
 # with this repository's token.
 
@@ -46,7 +51,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Sync the dependencies
-        run: uv sync --frozen --no-group train
+        run: uv sync --locked --no-group train
 
       - name: Lint
         run: uv run --no-sync ruff check .
@@ -134,7 +139,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Sync the dependencies
-        run: uv sync --frozen --no-group train
+        run: uv sync --locked --no-group train
 
       - name: Tests and coverage
         run: uv run --no-sync pytest
