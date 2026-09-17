@@ -1,12 +1,10 @@
-"""Calcul du nombre de pas de chauffe d'un entraînement.
+"""Computing the number of warm-up steps of a training run.
 
-Les versions récentes de la bibliothèque d'entraînement n'acceptent plus une
-*proportion* de chauffe, seulement un nombre de pas. Une proportion reste
-pourtant le bon réglage : elle s'adapte à la taille du corpus et au lot effectif,
-là où un nombre fixe devient absurde dès que l'un des deux change.
+Recent versions of the training library no longer accept a warm-up *ratio*, only a number of
+steps. A ratio is nonetheless the right setting: it adapts to the size of the corpus and to the
+effective batch, where a fixed number becomes absurd as soon as either changes.
 
-On convertit donc la proportion en pas, ici, à partir de ce que l'entraînement
-va réellement exécuter.
+The ratio is therefore converted into steps here, from what the training will actually run.
 """
 
 from __future__ import annotations
@@ -15,19 +13,19 @@ import math
 
 
 def warmup_steps(
-    nombre_exemples: int,
-    lot_effectif: int,
+    example_count: int,
+    effective_batch: int,
     epochs: int,
     max_steps: int,
-    proportion: float,
+    ratio: float,
 ) -> int:
-    """Convertit une proportion de chauffe en nombre de pas d'optimisation.
+    """Convert a warm-up ratio into a number of optimiser steps.
 
-    `max_steps > 0` fixe directement le nombre de pas de l'entraînement, et
-    l'emporte donc sur le calcul à partir de la taille du corpus.
+    ``max_steps > 0`` sets the number of training steps directly, and therefore wins over the
+    computation from the corpus size.
     """
     if max_steps > 0:
-        pas_total = max_steps
+        total_steps = max_steps
     else:
-        pas_total = math.ceil(nombre_exemples / max(1, lot_effectif)) * max(1, epochs)
-    return max(1, round(pas_total * proportion))
+        total_steps = math.ceil(example_count / max(1, effective_batch)) * max(1, epochs)
+    return max(1, round(total_steps * ratio))

@@ -1,12 +1,12 @@
 {
-  "nom": "sft",
-  "hyperparametres": {
-    "modele_de_base": "Qwen/Qwen3-1.7B-Base",
-    "moteur": "unsloth",
+  "name": "sft",
+  "hyperparameters": {
+    "base_model": "Qwen/Qwen3-1.7B-Base",
+    "engine": "unsloth",
     "epochs": 2,
     "batch_size": 4,
     "grad_accum": 4,
-    "lot_effectif": 16,
+    "effective_batch": 16,
     "learning_rate": 0.0002,
     "lora_r": 32,
     "lora_alpha": 64,
@@ -15,26 +15,26 @@
     "max_length": 768,
     "gradient_checkpointing": true,
     "max_steps": -1,
-    "graine": 42
+    "seed": 42
   },
-  "metriques": {
+  "metrics": {
     "train_loss": 0.08260749747790397,
     "eval_loss": 0.0030274828895926476,
-    "parametres_entrainables": 346030080,
-    "parametres_total": 2377769984,
-    "part_entrainable_pct": 14.553,
-    "duree_s": 3396.0,
-    "memoire_gpu_max_go": 7.43,
-    "exemples_par_seconde": 2.36
+    "trainable_parameters": 346030080,
+    "total_parameters": 2377769984,
+    "trainable_share_pct": 14.553,
+    "duration_s": 3396.0,
+    "peak_gpu_memory_gb": 7.43,
+    "examples_per_second": 2.36
   },
-  "environnement": {
+  "environment": {
     "torch": "2.12.1+cu130",
     "transformers": "5.5.0",
     "trl": "0.24.0",
     "gpu": "NVIDIA GeForce RTX 4060 Ti",
-    "memoire_gpu_go": 16.0
+    "gpu_memory_gb": 16.0
   },
-  "historique": [
+  "history": [
     {
       "loss": 1.753697395324707,
       "grad_norm": 4.035765171051025,

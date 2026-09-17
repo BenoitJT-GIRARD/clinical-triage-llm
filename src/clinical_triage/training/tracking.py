@@ -1,16 +1,17 @@
-"""Suivi des expériences d'entraînement avec MLflow.
+"""Experiment tracking with MLflow.
 
-Le cahier des charges laisse le choix entre MLflow et Weights & Biases. On
-retient MLflow parce qu'il fonctionne entièrement en local : les exécutions sont
-écrites dans `mlruns/`, aucun compte ni aucune clé d'API n'est nécessaire, et
-aucune donnée ne quitte le poste. Pour un projet de santé, cette dernière
-propriété n'est pas un détail.
+MLflow is used because it runs entirely locally: runs are written under ``var/mlruns/``, no
+account and no API key are needed, and no data leaves the machine. For a health project, that
+last property is not a detail.
 
-Ce module fait trois choses et rien d'autre : ouvrir une exécution, y déposer
-les hyperparamètres et les métriques, et écrire à la fin un résumé JSON versionné
-dans `reports/`. Ce résumé est ce qui permet de relire les résultats d'un
-entraînement sans installer quoi que ce soit — y compris pour un lecteur du
-projet, qui n'aura pas `mlruns/` sous la main.
+This module does three things and nothing else: open a run, put the hyper-parameters and the
+metrics into it, and write at the end a versioned JSON summary under ``reports/``. That summary
+is what lets anyone read a training run's results back without installing anything.
+
+Nothing here may ever fail a training run. Training costs hours of GPU; tracking costs a few
+kilobytes of JSON. Every way tracking can fail — an absent package, a locked store, an
+unreachable path, an unusable environment description — degrades to the JSON summary and lets
+the run continue.
 """
 
 from __future__ import annotations
@@ -22,149 +23,159 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from clinical_triage.config import PATHS
-from clinical_triage.utils import chemin_pour_journal, get_logger
+from clinical_triage.utils import get_logger, path_for_log
 
 logger = get_logger("tracking")
 
 
 def tracking_uri() -> str:
-    """Adresse du magasin d'exécutions MLflow.
+    """Address of the MLflow run store.
 
-    Les versions récentes de MLflow stockent les exécutions dans une base
-    SQLite. Par défaut, elle vit dans `mlruns/` à la racine du projet :
+    Recent MLflow versions store runs in a SQLite database. By default it lives under
+    ``var/mlruns/`` at the project root::
 
-        uv run mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db
+        uv run mlflow ui --backend-store-uri sqlite:///var/mlruns/mlflow.db
 
-    **Attention aux dossiers synchronisés.** Si le dépôt est posé sur un espace
-    de stockage synchronisé, le client de synchronisation verrouille et recopie
-    le fichier pendant que SQLite écrit, ce qui interrompt la création du schéma
-    avec une erreur de table manquante. Sur un tel poste, il faut placer le
-    magasin ailleurs, comme on le fait déjà pour l'environnement Python et les
-    caches de modèles :
+    **Beware of synchronised folders.** If the repository sits on synchronised storage, the sync
+    client locks and copies the file while SQLite writes, which interrupts schema creation with a
+    missing-table error. On such a machine the store must go elsewhere, as the Python environment
+    and the model caches already do::
 
         export MLFLOW_TRACKING_URI="sqlite:///$HOME/.local/share/clinical-triage/mlflow.db"
 
-    La variable est celle de MLflow : aucune configuration propre au projet.
+    The variable is MLflow's own: no project-specific configuration.
     """
-    configure = os.getenv("MLFLOW_TRACKING_URI")
-    if configure:
-        return configure
+    configured = os.getenv("MLFLOW_TRACKING_URI")
+    if configured:
+        return configured
     PATHS.tracking.mkdir(parents=True, exist_ok=True)
     return f"sqlite:///{(PATHS.tracking / 'mlflow.db').as_posix()}"
 
 
 @dataclass
 class RunSummary:
-    """Résumé d'une exécution d'entraînement, écrit dans `reports/`."""
+    """Summary of one training run, written under ``reports/``."""
 
-    nom: str
-    hyperparametres: dict = field(default_factory=dict)
-    metriques: dict = field(default_factory=dict)
-    environnement: dict = field(default_factory=dict)
-    historique: list = field(default_factory=list)
+    name: str
+    hyperparameters: dict = field(default_factory=dict)
+    metrics: dict = field(default_factory=dict)
+    environment: dict = field(default_factory=dict)
+    history: list = field(default_factory=list)
+
+
+#: Written in place of a version when the library is not installed. The training path imports
+#: torch long before reaching here and would fail there with a clear message; this function only
+#: describes an environment, and an environment it cannot describe must not raise.
+UNAVAILABLE = "unavailable"
 
 
 def describe_environment() -> dict:
-    """Décrit le matériel et les versions utilisés, pour la reproductibilité."""
-    import torch
-    import transformers
-    import trl
+    """Describe the hardware and the library versions used, for reproducibility.
 
-    description = {
-        "torch": torch.__version__,
-        "transformers": transformers.__version__,
-        "trl": trl.__version__,
-        "gpu": "aucun",
-        "memoire_gpu_go": 0.0,
-    }
-    if torch.cuda.is_available():
-        proprietes = torch.cuda.get_device_properties(0)
-        description["gpu"] = proprietes.name
-        description["memoire_gpu_go"] = round(proprietes.total_memory / 1024**3, 1)
+    Degrades rather than raising. The service image and the continuous integration install the
+    project without its training group: importing torch there raises ``ModuleNotFoundError``, and
+    a summary that cannot name a version is still a summary. Raising here would take down the
+    tests that exercise this module's own promise — that tracking never fails a run — in the very
+    environment where they run.
+    """
+    description: dict[str, object] = {}
+    for name in ("torch", "transformers", "trl"):
+        try:
+            description[name] = __import__(name).__version__
+        except Exception:  # noqa: BLE001 - absent, broken or unreadable: same outcome
+            description[name] = UNAVAILABLE
+    description["gpu"] = "none"
+    description["gpu_memory_gb"] = 0.0
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            properties = torch.cuda.get_device_properties(0)
+            description["gpu"] = properties.name
+            description["gpu_memory_gb"] = round(properties.total_memory / 1024**3, 1)
+    except Exception as error:  # noqa: BLE001 - no torch, no driver, no GPU
+        logger.debug("No GPU description available (%s).", error)
     return description
 
 
-def _ouvrir_mlflow(nom: str, hyperparametres: dict, environnement: dict):
-    """Ouvre une exécution MLflow, ou renvoie `None` si le suivi est indisponible.
+def _open_mlflow(name: str, hyperparameters: dict, environment: dict):
+    """Open an MLflow run, or return ``None`` when tracking is unavailable.
 
-    Le suivi ne doit jamais faire échouer un entraînement, et les façons dont il
-    peut lui-même échouer ne se limitent pas à l'absence du paquet : un magasin
-    SQLite verrouillé par un client de synchronisation, un chemin de suivi
-    inaccessible ou une variable d'environnement mal formée lèvent tout autre
-    chose. Dans tous ces cas, la sortie se dégrade au seul résumé JSON et
-    l'entraînement continue — c'est lui qui coûte des heures de GPU.
+    The ways tracking can fail are not limited to the package being absent: a SQLite store locked
+    by a sync client, an unreachable tracking path or a malformed environment variable each raise
+    something different. In every case the output degrades to the JSON summary alone and training
+    continues — training is what costs hours of GPU.
     """
     try:
         import mlflow
 
         mlflow.set_tracking_uri(tracking_uri())
         mlflow.set_experiment("clinical-triage")
-        mlflow.start_run(run_name=nom)
-        mlflow.log_params({cle: str(valeur) for cle, valeur in hyperparametres.items()})
-        mlflow.log_params({f"env_{cle}": str(valeur) for cle, valeur in environnement.items()})
+        mlflow.start_run(run_name=name)
+        mlflow.log_params({key: str(value) for key, value in hyperparameters.items()})
+        mlflow.log_params({f"env_{key}": str(value) for key, value in environment.items()})
     except ImportError:
-        logger.warning("MLflow absent : seul le résumé JSON sera écrit.")
+        logger.warning("MLflow absent: only the JSON summary will be written.")
         return None
-    except Exception as erreur:  # noqa: BLE001 — capture volontaire, voir la docstring
-        logger.warning("Suivi MLflow indisponible (%s) : seul le résumé JSON sera écrit.", erreur)
+    except Exception as error:  # noqa: BLE001 - deliberate, see the docstring
+        logger.warning("MLflow tracking unavailable (%s): only the JSON summary.", error)
         return None
     return mlflow
 
 
-def _refermer_mlflow(mlflow, resume: RunSummary, echoue: bool) -> None:
-    """Dépose métriques et historique dans l'exécution, puis la referme.
+def _close_mlflow(mlflow, summary: RunSummary, failed: bool) -> None:
+    """Put metrics and history into the run, then close it.
 
-    Une exécution refermée après une erreur est marquée « FAILED » : sans cela,
-    une comparaison d'expériences dans l'interface MLflow mélangerait les
-    entraînements aboutis et ceux qui se sont interrompus en route.
+    A run closed after an error is marked "FAILED": without that, comparing experiments in the
+    MLflow interface would mix completed runs with those that stopped mid-way.
     """
     try:
-        for cle, valeur in resume.metriques.items():
-            if isinstance(valeur, (int, float)):
-                mlflow.log_metric(cle, float(valeur))
-        for etape, enregistrement in enumerate(resume.historique):
-            for cle, valeur in enregistrement.items():
-                if isinstance(valeur, (int, float)) and cle != "epoch":
-                    mlflow.log_metric(f"train_{cle}", float(valeur), step=etape)
-        mlflow.end_run(status="FAILED" if echoue else "FINISHED")
-    except Exception as erreur:  # noqa: BLE001 — capture volontaire, voir la docstring
+        for key, value in summary.metrics.items():
+            if isinstance(value, (int, float)):
+                mlflow.log_metric(key, float(value))
+        for step, record in enumerate(summary.history):
+            for key, value in record.items():
+                if isinstance(value, (int, float)) and key != "epoch":
+                    mlflow.log_metric(f"train_{key}", float(value), step=step)
+        mlflow.end_run(status="FAILED" if failed else "FINISHED")
+    except Exception as error:  # noqa: BLE001 - deliberate, see the docstring
         logger.warning(
-            "Écriture du suivi MLflow interrompue (%s) ; le résumé JSON reste écrit.", erreur
+            "Writing the MLflow run was interrupted (%s); the JSON summary is still written.",
+            error,
         )
 
 
 @contextmanager
-def track(nom: str, hyperparametres: dict):
-    """Ouvre une exécution MLflow et renvoie son résumé, à compléter par l'appelant.
+def track(name: str, hyperparameters: dict):
+    """Open an MLflow run and yield its summary, for the caller to complete.
 
-    Le résumé JSON est écrit dans tous les cas, y compris si l'entraînement
-    échoue : ce qui a été mesuré avant l'erreur reste la première pièce du
-    diagnostic.
+    The JSON summary is written in every case, including when training fails: what was measured
+    before the error remains the first piece of the diagnosis.
     """
-    resume = RunSummary(
-        nom=nom, hyperparametres=hyperparametres, environnement=describe_environment()
+    summary = RunSummary(
+        name=name, hyperparameters=hyperparameters, environment=describe_environment()
     )
-    mlflow = _ouvrir_mlflow(nom, hyperparametres, resume.environnement)
+    mlflow = _open_mlflow(name, hyperparameters, summary.environment)
 
-    echoue = False
+    failed = False
     try:
-        yield resume
+        yield summary
     except Exception:
-        echoue = True
+        failed = True
         raise
     finally:
         if mlflow is not None:
-            _refermer_mlflow(mlflow, resume, echoue)
-        write_summary(resume)
+            _close_mlflow(mlflow, summary, failed)
+        write_summary(summary)
 
 
-def write_summary(resume: RunSummary) -> Path:
-    """Écrit le résumé d'exécution dans `reports/training/`."""
-    dossier = PATHS.reports / "training"
-    dossier.mkdir(parents=True, exist_ok=True)
-    chemin = dossier / f"{resume.nom}.json"
-    chemin.write_text(
-        json.dumps(asdict(resume), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+def write_summary(summary: RunSummary) -> Path:
+    """Write the run summary under ``reports/training/``."""
+    directory = PATHS.reports / "training"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{summary.name}.json"
+    path.write_text(
+        json.dumps(asdict(summary), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
-    logger.info("Résumé d'entraînement écrit → %s", chemin_pour_journal(chemin))
-    return chemin
+    logger.info("Training summary written → %s", path_for_log(path))
+    return path

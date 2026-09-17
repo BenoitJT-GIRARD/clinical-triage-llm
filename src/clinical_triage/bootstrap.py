@@ -1,16 +1,14 @@
-"""Réglages à appliquer au tout début d'un script, avant les imports lourds.
+"""Settings to apply at the very top of a script, before the heavy imports.
 
-Deux contraintes de la machine de développement, réunies ici pour que les
-scripts n'aient pas à les répéter :
+Two constraints of the development machine, gathered here so that scripts do not repeat them:
 
-- **ordre des imports.** Sous Windows, importer `torch` avant `pyarrow` (que
-  `datasets` charge) provoque un conflit de bibliothèques dynamiques qui termine
-  le processus par une faute de segmentation, sans message. Importer ce module
-  en premier charge `datasets` dans le bon ordre.
-- **encodage de la console.** La sortie standard de Windows est en cp1252 ;
-  toute trace contenant un caractère accentué ou un symbole interrompt le script.
+- **import order.** On Windows, importing ``torch`` before ``pyarrow`` (which ``datasets``
+  loads) causes a dynamic-library conflict that ends the process with a segmentation fault and
+  no message. Importing this module first loads ``datasets`` in the right order.
+- **console encoding.** Windows standard output is cp1252; any trace containing an accented
+  character or a symbol interrupts the script.
 
-Un script d'entraînement commence donc par :
+A training script therefore starts with::
 
     from clinical_triage.bootstrap import use_utf8_console
 
@@ -21,11 +19,11 @@ from __future__ import annotations
 
 import sys
 
-import datasets  # noqa: F401  (import volontaire : il doit précéder celui de torch)
+import datasets  # noqa: F401  (deliberate import: it must precede torch)
 
 
 def use_utf8_console() -> None:
-    """Passe la sortie standard en UTF-8, en remplaçant ce qui n'est pas encodable."""
-    for flux in (sys.stdout, sys.stderr):
-        if hasattr(flux, "reconfigure"):
-            flux.reconfigure(encoding="utf-8", errors="replace")
+    """Switch standard output to UTF-8, replacing what cannot be encoded."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")

@@ -1,26 +1,22 @@
-"""Ce que le jeu produit contient réellement, mesuré plutôt qu'affirmé.
+"""What the produced set actually contains, measured rather than asserted.
 
-Un dataset se décrit d'ordinaire par ses volumes. Trois autres mesures disent ce
-que ces volumes valent, et elles conditionnent la lecture de tous les résultats
-publiés ensuite :
+A dataset is usually described by its volumes. Three other measurements say what those volumes
+are worth, and they condition the reading of every result published afterwards:
 
-- **la diversité des cibles.** Les vignettes sont dérivées d'un catalogue de
-  présentations, et toutes celles qui viennent d'une même présentation partagent
-  la même réponse attendue. Compter les réponses distinctes dit combien de
-  décisions différentes le modèle a réellement vues ;
-- **la séparabilité.** Un découpage aléatoire place des reformulations d'un même
-  cas de part et d'autre de la frontière : ce qu'on mesure alors sur le jeu de
-  test est la reconnaissance de cas déjà vus. Le même calcul, découpé par
-  présentation d'origine, mesure le transfert à des cas nouveaux. L'écart entre
-  les deux chiffres est la part de restitution contenue dans le premier ;
-- **la fuite par les métadonnées.** Le générateur tire le délai d'installation et
-  le profil de constantes de la présentation, donc du niveau. Un vote majoritaire
-  sur ces deux seuls champs mesure ce que le niveau doit à la forme du gabarit
-  plutôt qu'au contenu clinique.
+- **target diversity.** The vignettes derive from a catalogue of presentations, and all those
+  coming from one presentation share the same expected answer. Counting the distinct answers
+  says how many different decisions the model actually saw;
+- **separability.** A random split places rewordings of the same case on either side of the
+  boundary: what is then measured on the test set is the recognition of cases already seen. The
+  same computation, split by source presentation, measures transfer to new cases. The gap
+  between the two numbers is the share of restatement contained in the first;
+- **metadata leakage.** The generator draws the onset delay and the vital-sign profile from the
+  presentation, hence from the level. A majority vote on those two fields alone measures what
+  the level owes to the shape of the template rather than to the clinical content.
 
-Ces trois nombres sont écrits dans la carte du dataset et repris par le rapport.
-Ils ne flattent pas le projet ; c'est précisément pourquoi ils sont calculés à
-chaque construction plutôt que laissés à l'appréciation du lecteur.
+These three numbers go into the dataset card and are picked up by the published protocol. They
+do not flatter the project; that is precisely why they are computed at every build rather than
+left to the reader's judgement.
 """
 
 from __future__ import annotations
@@ -28,56 +24,55 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 
-def _reponse_attendue(exemple) -> str:
-    """Le texte que le modèle doit produire, quel que soit le format d'entrée.
+def _expected_answer(example) -> str:
+    """The text the model must produce, whatever the input shape.
 
-    Les exemples circulent sous deux formes dans le projet : l'objet
-    `TriageExample`, qui nomme ce champ `assistant_turn`, et la ligne JSONL
-    relue depuis le disque, qui le nomme `completion`.
+    Examples travel in two forms in this project: the ``TriageExample`` object, which names this
+    field ``assistant_turn``, and the JSONL line read back from disk, which names it
+    ``completion``.
     """
-    if isinstance(exemple, dict):
-        return exemple.get("completion") or exemple.get("assistant_turn", "")
-    return getattr(exemple, "assistant_turn", None) or getattr(exemple, "completion", "")
+    if isinstance(example, dict):
+        return example.get("completion") or example.get("assistant_turn", "")
+    return getattr(example, "assistant_turn", None) or getattr(example, "completion", "")
 
 
-def _champ(exemple, nom: str, defaut=""):
-    """Lit un champ, que l'exemple soit un objet ou une ligne JSONL."""
-    if isinstance(exemple, dict):
-        return exemple.get(nom, defaut)
-    return getattr(exemple, nom, defaut)
+def _field(example, name: str, default=""):
+    """Read a field, whether the example is an object or a JSONL line."""
+    if isinstance(example, dict):
+        return example.get(name, default)
+    return getattr(example, name, default)
 
 
-def completions_distinctes(exemples: list) -> dict:
-    """Compte les réponses attendues réellement distinctes, et leur répétition."""
-    par_source: dict[str, list[str]] = defaultdict(list)
-    for exemple in exemples:
-        origine = "vignettes" if _champ(exemple, "source") == "vignette_clinique" else "corpus"
-        par_source[origine].append(_reponse_attendue(exemple))
+def distinct_completions(examples: list) -> dict:
+    """Count the genuinely distinct expected answers, and their repetition."""
+    by_source: dict[str, list[str]] = defaultdict(list)
+    for example in examples:
+        origin = "vignettes" if _field(example, "source") == "clinical_vignette" else "corpus"
+        by_source[origin].append(_expected_answer(example))
 
     detail = {}
-    for origine, reponses in par_source.items():
-        distinctes = len(set(reponses))
-        detail[origine] = {
-            "exemples": len(reponses),
-            "reponses_distinctes": distinctes,
-            "repetition_moyenne": round(len(reponses) / distinctes, 1) if distinctes else 0.0,
+    for origin, answers in by_source.items():
+        distinct = len(set(answers))
+        detail[origin] = {
+            "examples": len(answers),
+            "distinct_answers": distinct,
+            "mean_repetition": round(len(answers) / distinct, 1) if distinct else 0.0,
         }
     return {
-        "total": len({_reponse_attendue(e) for e in exemples}),
-        "par_origine": detail,
+        "total": len({_expected_answer(e) for e in examples}),
+        "by_origin": detail,
     }
 
 
-def separabilite(exemples: list, decoupages: int = 5) -> dict:
-    """Exactitude d'un classifieur simple, en découpage aléatoire puis groupé.
+def separability(examples: list, splits: int = 5) -> dict:
+    """Accuracy of a simple classifier, under a random split and then a grouped one.
 
-    Le classifieur n'a pas d'intérêt en soi : il sert de sonde. S'il atteint la
-    perfection en découpage aléatoire et redescend nettement en découpage groupé
-    par présentation, c'est que le jeu de test aléatoire contient surtout des
-    reformulations de cas vus à l'entraînement.
+    The classifier is of no interest in itself: it is a probe. If it reaches near-perfection
+    under a random split and drops markedly under a split grouped by presentation, then the
+    random test set mostly contains rewordings of cases seen during training.
 
-    Renvoie un dictionnaire vide si scikit-learn n'est pas disponible : la mesure
-    est un diagnostic, pas une étape dont dépend la construction du jeu.
+    Returns an empty dictionary when scikit-learn is unavailable: the measurement is a
+    diagnostic, not a step the construction of the set depends on.
     """
     try:
         from sklearn.feature_extraction.text import TfidfVectorizer
@@ -89,65 +84,64 @@ def separabilite(exemples: list, decoupages: int = 5) -> dict:
 
     vignettes = [
         e
-        for e in exemples
-        if _champ(e, "source") == "vignette_clinique" and _champ(e, "presentation_id")
+        for e in examples
+        if _field(e, "source") == "clinical_vignette" and _field(e, "presentation_id")
     ]
-    if len(vignettes) < decoupages * 2:
+    if len(vignettes) < splits * 2:
         return {}
-    textes = [_champ(e, "user_turn") for e in vignettes]
-    niveaux = [_champ(e, "level") for e in vignettes]
-    groupes = [_champ(e, "presentation_id") for e in vignettes]
-    if len(set(groupes)) < decoupages:
+    texts = [_field(e, "user_turn") for e in vignettes]
+    levels = [_field(e, "level") for e in vignettes]
+    groups = [_field(e, "presentation_id") for e in vignettes]
+    if len(set(groups)) < splits:
         return {}
 
-    sonde = make_pipeline(
+    probe = make_pipeline(
         TfidfVectorizer(ngram_range=(1, 2), min_df=2), LogisticRegression(max_iter=2000)
     )
     try:
-        aleatoire = cross_val_score(sonde, textes, niveaux, cv=decoupages).mean()
-        groupee = cross_val_score(
-            sonde, textes, niveaux, cv=GroupKFold(n_splits=decoupages), groups=groupes
+        random_split = cross_val_score(probe, texts, levels, cv=splits).mean()
+        grouped = cross_val_score(
+            probe, texts, levels, cv=GroupKFold(n_splits=splits), groups=groups
         ).mean()
     except ValueError:
-        # Un découpage groupé peut isoler un pli qui ne contient qu'un seul
-        # niveau ; la sonde ne sait alors rien apprendre. C'est un diagnostic :
-        # il renonce et le dit, il ne fait pas échouer la construction du jeu.
+        # A grouped split can isolate a fold containing a single level; the probe then has
+        # nothing to learn. This is a diagnostic: it gives up and says so, it does not fail the
+        # construction of the set.
         return {}
     return {
         "vignettes": len(vignettes),
-        "presentations": len(set(groupes)),
-        "decoupage_aleatoire": round(float(aleatoire), 4),
-        "decoupage_par_presentation": round(float(groupee), 4),
-        "ecart": round(float(aleatoire - groupee), 4),
+        "presentations": len(set(groups)),
+        "random_split": round(float(random_split), 4),
+        "split_by_presentation": round(float(grouped), 4),
+        "gap": round(float(random_split - grouped), 4),
     }
 
 
-def fuite_par_metadonnees(exemples: list, presentations) -> dict:
-    """Part du niveau prédictible par le seul délai et le seul profil de constantes.
+def metadata_leakage(examples: list, presentations) -> dict:
+    """Share of the level predictable from the onset delay and the vital-sign profile alone.
 
-    Ces deux champs sont choisis par le générateur d'après la présentation, donc
-    d'après le niveau. Un patient qui consulte depuis trois semaines avec des
-    constantes normales relève effectivement d'une consultation différée : la
-    corrélation est en partie clinique. Elle est néanmoins mesurable, et un
-    modèle peut s'y appuyer au lieu de lire le motif.
+    Both fields are chosen by the generator from the presentation, hence from the level. A
+    patient presenting after three weeks with normal vital signs does indeed belong in a
+    deferred consultation: the correlation is partly clinical. It is measurable nonetheless, and
+    a model can lean on it instead of reading the complaint.
     """
-    fiches = {p.id: p for p in presentations}
-    cellules: dict[tuple[str, str], Counter] = defaultdict(Counter)
+    records = {p.id: p for p in presentations}
+    cells: dict[tuple[str, str], Counter] = defaultdict(Counter)
     total = 0
-    for exemple in exemples:
-        fiche = fiches.get(_champ(exemple, "presentation_id"))
-        if fiche is None:
+    for example in examples:
+        record = records.get(_field(example, "presentation_id"))
+        if record is None:
             continue
-        cellules[(fiche.delai, fiche.vitals_profile)][_champ(exemple, "level")] += 1
+        cells[(record.onset, record.vitals_profile)][_field(example, "level")] += 1
         total += 1
     if not total:
         return {}
 
-    justes = sum(compte.most_common(1)[0][1] for compte in cellules.values())
-    homogenes = sum(sum(c.values()) for c in cellules.values() if len(c) == 1)
+    correct = sum(count.most_common(1)[0][1] for count in cells.values())
+    homogeneous = sum(sum(c.values()) for c in cells.values() if len(c) == 1)
     return {
         "vignettes": total,
-        "cellules": len(cellules),
-        "exactitude_du_vote_majoritaire": round(justes / total, 4),
-        "part_en_cellule_homogene": round(homogenes / total, 4),
+        "cells": len(cells),
+        "majority_vote_accuracy": round(correct / total, 4),
+        "share_in_homogeneous_cell": round(homogeneous / total, 4),
     }

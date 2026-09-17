@@ -1,18 +1,14 @@
-"""Sérialisation, découpage et documentation du dataset.
+"""Serialisation, splitting and documentation of the dataset.
 
-Le format retenu est celui attendu par les bibliothèques d'entraînement, et il
-est le même du SFT au service :
+The format is the one the training libraries expect, and it is the same from SFT to serving:
 
-- jeu supervisé : `prompt` (l'échange ChatML jusqu'à l'ouverture du tour
-  assistant) et `completion` (la réponse attendue). Ce couple permet à
-  l'entraînement de ne calculer la perte que sur la réponse, sans collateur
-  particulier ;
-- jeu de préférences : `prompt`, `chosen`, `rejected`, avec exactement la même
-  invite que ci-dessus.
+- supervised set: ``prompt`` (the ChatML exchange up to the opening of the assistant turn) and
+  ``completion`` (the expected answer). That pair lets training compute the loss on the answer
+  only, with no special collator;
+- preference set: ``prompt``, ``chosen``, ``rejected``, with exactly the same prompt as above.
 
-Les deux jeux partagent donc mot pour mot le format utilisé à l'inférence. Les
-métadonnées cliniques voyagent dans des colonnes supplémentaires, que
-l'entraînement ignore mais qui rendent le dataset auditable.
+Both sets therefore share, word for word, the format used at inference. The clinical metadata
+travels in extra columns, which training ignores but which make the dataset auditable.
 """
 
 from __future__ import annotations
@@ -22,20 +18,20 @@ import random
 from pathlib import Path
 
 from clinical_triage.data.dpo_builder import PreferencePairRecord
-from clinical_triage.data.sft_builder import TriageExample, empreinte_de_cas
+from clinical_triage.data.sft_builder import TriageExample, case_fingerprint
 from clinical_triage.prompts import SYSTEM_PROMPT, build_messages, format_chatml
-from clinical_triage.utils import chemin_pour_journal, get_logger
+from clinical_triage.utils import get_logger, path_for_log
 
 logger = get_logger(__name__)
 
 
 def _prompt_for(user_turn: str) -> str:
-    """Invite ChatML complète, ouvrant le tour assistant."""
+    """The complete ChatML prompt, opening the assistant turn."""
     return format_chatml(build_messages(user_turn), add_generation_prompt=True)
 
 
 def sft_record(example: TriageExample) -> dict:
-    """Sérialise un exemple de triage pour l'entraînement supervisé."""
+    """Serialise a triage example for supervised training."""
     return {
         "prompt": _prompt_for(example.user_turn),
         "completion": example.assistant_turn,
@@ -43,16 +39,16 @@ def sft_record(example: TriageExample) -> dict:
         "level": example.level,
         "lang": example.lang,
         "source": example.source,
-        "confiance": example.confiance,
-        "symptomes": list(example.symptomes),
-        "antecedents": list(example.antecedents),
-        "constantes": example.constantes,
+        "confidence": example.confidence,
+        "symptoms": list(example.symptoms),
+        "medical_history": list(example.medical_history),
+        "vitals": example.vitals,
         "presentation_id": example.presentation_id,
     }
 
 
 def dpo_record(pair: PreferencePairRecord) -> dict:
-    """Sérialise une paire de préférence pour l'alignement DPO."""
+    """Serialise a preference pair for the DPO alignment."""
     return {
         "prompt": _prompt_for(pair.user_turn),
         "chosen": pair.chosen,
@@ -60,13 +56,13 @@ def dpo_record(pair: PreferencePairRecord) -> dict:
         "user_turn": pair.user_turn,
         "level": pair.level,
         "lang": pair.lang,
-        "strategie": pair.strategie,
+        "strategy": pair.strategy,
         "source": pair.source,
     }
 
 
 def eval_record(case) -> dict:
-    """Sérialise un cas du jeu d'évaluation clinique."""
+    """Serialise one case of the clinical evaluation set."""
     return {
         "prompt": _prompt_for(case.user_turn),
         "completion": "",
@@ -74,16 +70,16 @@ def eval_record(case) -> dict:
         "id": case.id,
         "level": case.level,
         "lang": case.lang,
-        "piege": case.piege,
+        "case_type": case.case_type,
         "description": case.description,
-        "note_clinique": case.note,
+        "clinical_note": case.note,
     }
 
 
-# Les six fichiers que produit la préparation. La liste vit ici parce que deux
-# endroits en dépendent et doivent rester d'accord : le script qui les écrit, et
-# la publication qui refuse de partir s'il en manque un.
-FICHIERS_DU_DATASET = (
+# The six files the preparation produces. The list lives here because two places depend on it
+# and must stay in agreement: the script that writes them, and the publication that refuses to
+# start if one is missing.
+DATASET_FILES = (
     "sft_train.jsonl",
     "sft_validation.jsonl",
     "sft_test.jsonl",
@@ -94,16 +90,16 @@ FICHIERS_DU_DATASET = (
 
 
 def write_jsonl(rows: list[dict], path: Path) -> None:
-    """Écrit une liste d'enregistrements en JSONL UTF-8, un objet par ligne."""
+    """Write a list of records as UTF-8 JSONL, one object per line."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
-    logger.info("Écrit %d lignes → %s", len(rows), chemin_pour_journal(path))
+    logger.info("Wrote %d lines → %s", len(rows), path_for_log(path))
 
 
 def read_jsonl(path: Path) -> list[dict]:
-    """Relit un fichier JSONL."""
+    """Read a JSONL file back."""
     with path.open(encoding="utf-8") as handle:
         return [json.loads(line) for line in handle if line.strip()]
 
@@ -114,158 +110,152 @@ def split_train_val_test(
     test_ratio: float,
     seed: int,
 ) -> dict[str, list[TriageExample]]:
-    """Découpe en train / validation / test.
+    """Split into train / validation / test.
 
-    Les exemples ont déjà été dédupliqués sur le tour utilisateur complet : un
-    même énoncé ne peut donc pas se retrouver des deux côtés du découpage.
-    `check_no_leakage` le vérifie explicitement après coup.
+    The examples have already been deduplicated on the full user turn: the same statement
+    therefore cannot land on both sides of the split. :func:`check_no_leakage` verifies it
+    explicitly afterwards.
     """
     rng = random.Random(seed)
-    melanges = list(examples)
-    rng.shuffle(melanges)
-    n = len(melanges)
+    shuffled = list(examples)
+    rng.shuffle(shuffled)
+    n = len(shuffled)
     n_test = int(n * test_ratio)
     n_val = int(n * val_ratio)
     return {
-        "test": melanges[:n_test],
-        "validation": melanges[n_test : n_test + n_val],
-        "train": melanges[n_test + n_val :],
+        "test": shuffled[:n_test],
+        "validation": shuffled[n_test : n_test + n_val],
+        "train": shuffled[n_test + n_val :],
     }
 
 
 def check_no_leakage(splits: dict[str, list[TriageExample]]) -> dict[str, int]:
-    """Compte les tours utilisateur partagés entre deux découpages.
+    """Count the user turns shared between two splits.
 
-    Toutes les valeurs doivent être nulles. Cette vérification est appelée par le
-    script de préparation, qui échoue si elle ne l'est pas : le cahier des charges
-    interdit de mélanger données d'entraînement et données d'évaluation, et une
-    affirmation de ce type doit être contrôlée par le code, pas par la
-    documentation.
+    Every value must be zero. This check is called by the preparation script, which fails if it
+    is not: training data and evaluation data must not mix, and a claim of that kind has to be
+    checked by code, not by documentation.
 
-    La comparaison porte sur la forme normalisée : un contrôle qui n'attrape que
-    les doublons exacts donne une assurance qu'il ne mérite pas.
+    The comparison is on the normalised form: a check that only catches exact duplicates gives
+    an assurance it has not earned.
     """
-    ensembles = {
-        nom: {empreinte_de_cas(e.user_turn) for e in items} for nom, items in splits.items()
-    }
-    noms = sorted(ensembles)
-    chevauchements: dict[str, int] = {}
-    for i, premier in enumerate(noms):
-        for second in noms[i + 1 :]:
-            chevauchements[f"{premier}∩{second}"] = len(ensembles[premier] & ensembles[second])
-    return chevauchements
+    sets = {name: {case_fingerprint(e.user_turn) for e in items} for name, items in splits.items()}
+    names = sorted(sets)
+    overlaps: dict[str, int] = {}
+    for i, first in enumerate(names):
+        for second in names[i + 1 :]:
+            overlaps[f"{first}∩{second}"] = len(sets[first] & sets[second])
+    return overlaps
 
 
-# --- Carte du dataset ---
+# --- The dataset card ---
 
-# Licence et provenance de chaque corpus, vérifiées sur la fiche du dépôt.
-SOURCES_DOCUMENTEES = {
-    "vignette_clinique": {
-        "origine": "Catalogue de présentations cliniques rédigé pour ce projet (src/clinical_triage/data/clinical_catalogue.py)",
-        "langue": "fr + en",
+# Licence and provenance of each corpus, checked on the repository page.
+DOCUMENTED_SOURCES = {
+    "clinical_vignette": {
+        "origin": "Catalogue of clinical presentations written for this project (src/clinical_triage/data/clinical_catalogue.py)",
+        "language": "fr + en",
         "licence": "MIT",
-        "role": "Vérité terrain du triage : le niveau vient de la présentation, pas du texte.",
+        "role": "Triage ground truth: the level comes from the presentation, not from the text.",
     },
     "mediqal": {
-        "origine": "https://huggingface.co/datasets/ANR-MALADES/MediQAl",
-        "langue": "fr",
+        "origin": "https://huggingface.co/datasets/ANR-MALADES/MediQAl",
+        "language": "fr",
         "licence": "CC BY 4.0",
-        "role": "Corpus du cahier des charges, et le seul à décrire des patients. Socle des vignettes cliniques françaises authentiques.",
+        "role": "The only source corpus that describes patients. Base of the authentic French vignettes.",
     },
     "medquad": {
-        "origine": "https://huggingface.co/datasets/keivalya/MedQuad-MedicalQnADataset",
-        "langue": "en",
-        # Le miroir Hub ne déclare aucune licence. Celle-ci est lue sur le dépôt
-        # d'origine des auteurs, github.com/abachaa/MedQuAD, dont le `LICENSE.txt`
-        # est le texte CC BY 4.0 et dont le `readme.txt` le répète en toutes
-        # lettres. Reprendre une licence sans la vérifier serait l'inventer, d'où
-        # le champ qui dit où elle a été lue.
+        "origin": "https://huggingface.co/datasets/keivalya/MedQuad-MedicalQnADataset",
+        "language": "en",
+        # The Hub mirror declares no licence. This one is read on the authors' original
+        # repository, github.com/abachaa/MedQuAD, whose `LICENSE.txt` is the CC BY 4.0 text and
+        # whose `readme.txt` repeats it in full. Copying a licence without checking it would be
+        # inventing it, hence the field that says where it was read.
         "licence": "CC BY 4.0",
-        "licence_verifiee_sur": "dépôt d'origine abachaa/MedQuAD",
-        "role": "Corpus du cahier des charges. Descriptions de symptômes, étiquetées par la règle (confiance moyenne).",
+        "licence_checked_on": "original repository abachaa/MedQuAD",
+        "role": "Symptom descriptions, labelled by the rule (medium confidence).",
     },
     "medmcqa": {
-        "origine": "https://huggingface.co/datasets/openlifescienceai/medmcqa",
-        "langue": "en",
+        "origin": "https://huggingface.co/datasets/openlifescienceai/medmcqa",
+        "language": "en",
         "licence": "Apache-2.0",
-        "role": "Hors cahier des charges, ajouté faute de vignettes cliniques anglophones dans les corpus imposés.",
+        "role": "Added because the other source corpora hold no English-language clinical vignettes.",
     },
     "frenchmedmcqa": {
-        "origine": "https://huggingface.co/datasets/nthngdy/frenchmedmcqa",
-        "langue": "fr",
-        # Même remarque : le miroir Parquet ne déclare rien, le dépôt des auteurs
-        # si. On passe par le miroir parce que le dépôt d'origine n'expose ses
-        # données que par un script de chargement, que `datasets` n'exécute plus.
+        "origin": "https://huggingface.co/datasets/nthngdy/frenchmedmcqa",
+        "language": "fr",
+        # Same remark: the Parquet mirror declares nothing, the authors' repository does. The
+        # mirror is used because the original repository only exposes its data through a loading
+        # script, which `datasets` no longer executes.
         "licence": "Apache-2.0",
-        "licence_verifiee_sur": "dépôt d'origine qanastek/frenchmedmcqa",
-        "role": "Corpus du cahier des charges. Questions de pharmacie, dont aucune n'est étiquetable en triage.",
+        "licence_checked_on": "original repository qanastek/frenchmedmcqa",
+        "role": "Pharmacy exam questions, none of which can be labelled for triage.",
     },
     "ultramedical_preference": {
-        "origine": "https://huggingface.co/datasets/TsinghuaC3I/UltraMedical-Preference",
-        "langue": "en",
+        "origin": "https://huggingface.co/datasets/TsinghuaC3I/UltraMedical-Preference",
+        "language": "en",
         "licence": "MIT",
-        "role": "Jeu de préférences externe, tenu à l'écart de l'entraînement : mesure indépendante de l'alignement.",
+        "role": "External preference set, kept out of training: an independent measure of the alignment.",
     },
 }
 
 
 def metadata_schema() -> dict:
-    """Schéma des métadonnées du dataset, champ par champ."""
+    """The dataset metadata schema, field by field."""
     return {
-        "champs_sft": {
-            "prompt": "Invite ChatML complète (consigne système + tour patient), ouvrant le tour assistant.",
-            "completion": "Réponse de triage attendue : niveau, justification, recommandation.",
-            "user_turn": "Tour patient seul, utile pour la déduplication et l'audit.",
-            "level": "Niveau de triage : URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE.",
-            "lang": "Langue de la description du patient (fr | en).",
-            "source": "Origine de l'exemple (vignette_clinique, mediqal, medquad, frenchmedmcqa, medmcqa).",
-            "confiance": "Niveau de confiance de l'étiquette : haute (catalogue clinique) | moyenne (règle appliquée à un corpus).",
-            "symptomes": "Signes cliniques présents dans la description.",
-            "antecedents": "Antécédents du patient mentionnés dans la description.",
-            "constantes": "Relevé de constantes vitales, vide si le triage se fait sans mesure.",
-            "presentation_id": "Identifiant de la présentation type du catalogue, vide pour les cas issus des corpus.",
+        "sft_fields": {
+            "prompt": "Complete ChatML prompt (system prompt + patient turn), opening the assistant turn.",
+            "completion": "Expected triage answer: level, justification, recommendation.",
+            "user_turn": "The patient turn alone, useful for deduplication and audit.",
+            "level": "Triage level: URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE.",
+            "lang": "Language of the patient description (fr | en).",
+            "source": "Origin of the example (clinical_vignette, mediqal, medquad, frenchmedmcqa, medmcqa).",
+            "confidence": "Confidence of the label: high (clinical catalogue) | medium (rule applied to a corpus).",
+            "symptoms": "Clinical signs present in the description.",
+            "medical_history": "Patient history mentioned in the description.",
+            "vitals": "Vital-sign reading, empty when triage happens without measurements.",
+            "presentation_id": "Identifier of the catalogue presentation, empty for corpus cases.",
         },
-        # Les trois listes donnent les colonnes **exactes** de chaque fichier, et
-        # pas seulement ce que l'un ajoute à l'autre : le jeu de préférences n'a
-        # ni `confiance` ni `constantes`, et le jeu d'évaluation expose une
-        # colonne `description` que rien ne documentait. Un consommateur du
-        # dataset publié qui filtre sur une colonne absente n'obtient rien, sans
-        # comprendre pourquoi.
-        "champs_dpo": {
-            "prompt": "Invite ChatML identique à celle du jeu supervisé.",
-            "chosen": "Réponse préférée : bon niveau, format respecté, conduite à tenir sûre.",
-            "rejected": "Réponse rejetée, de même format et de longueur comparable.",
-            "user_turn": "Tour patient seul, utile pour la déduplication et l'audit.",
-            "level": "Niveau de triage de référence du cas.",
-            "lang": "Langue de la description du patient.",
-            "strategie": "Nature du défaut introduit : sous_triage | recommandation_dangereuse | diagnostic_affirme | reponse_en_anglais.",
-            "source": "preference_securite.",
+        # The three lists give the **exact** columns of each file, and not only what one adds to
+        # another: the preference set has neither `confidence` nor `vitals`, and the evaluation
+        # set exposes a `description` column that nothing documented. A consumer of the
+        # published dataset who filters on an absent column gets nothing, without understanding
+        # why.
+        "dpo_fields": {
+            "prompt": "ChatML prompt identical to the supervised set's.",
+            "chosen": "Preferred answer: right level, format respected, safe course of action.",
+            "rejected": "Rejected answer, same format and comparable length.",
+            "user_turn": "The patient turn alone, useful for deduplication and audit.",
+            "level": "Reference triage level of the case.",
+            "lang": "Language of the patient description.",
+            "strategy": "The defect introduced: undertriage | unsafe_recommendation | asserted_diagnosis | answered_in_english.",
+            "source": "safety_preference.",
         },
-        "champs_evaluation": {
-            "prompt": "Invite ChatML identique à celle du jeu supervisé.",
-            "completion": "Toujours vide : la réponse attendue n'est pas donnée, seul le niveau l'est.",
-            "user_turn": "Tour patient seul, tel qu'il est soumis au modèle.",
-            "id": "Identifiant du cas d'évaluation.",
-            "level": "Niveau de triage de référence, écrit à la main.",
-            "lang": "Langue de la description du patient.",
-            "piege": "Nature de la difficulté : vide (présentation directe), faux_rassurant, faux_alarmant, negation, constantes_discordantes.",
-            "description": "Description du patient seule, sans la consigne qui l'encadre.",
-            "note_clinique": "Raison clinique de l'étiquette, pour l'auditabilité et l'analyse d'erreurs.",
+        "evaluation_fields": {
+            "prompt": "ChatML prompt identical to the supervised set's.",
+            "completion": "Always empty: the expected answer is not given, only the level is.",
+            "user_turn": "The patient turn alone, as it is submitted to the model.",
+            "id": "Identifier of the evaluation case.",
+            "level": "Reference triage level, written by hand.",
+            "lang": "Language of the patient description.",
+            "case_type": "Nature of the difficulty: empty (direct presentation), falsely_reassuring, falsely_alarming, negation, discordant_vitals.",
+            "description": "The patient description alone, without the framing prompt.",
+            "clinical_note": "Clinical reason for the label, for auditability and error analysis.",
         },
-        "taxonomie_triage": {
-            "URGENCE_VITALE": "Prise en charge immédiate (tris 1 et 2 de l'échelle FRENCH).",
-            "URGENCE_MODEREE": "Prise en charge sous quelques heures (tris 3 et 4).",
-            "CONSULTATION_DIFFEREE": "Pas de critère de gravité immédiat (tri 5).",
+        "triage_taxonomy": {
+            "URGENCE_VITALE": "Immediate care (sorts 1 and 2 of the FRENCH scale).",
+            "URGENCE_MODEREE": "Care within a few hours (sorts 3 and 4).",
+            "CONSULTATION_DIFFEREE": "No immediate severity criterion (sort 5).",
         },
-        "consigne_systeme": SYSTEM_PROMPT,
-        "sources": SOURCES_DOCUMENTEES,
+        "system_prompt": SYSTEM_PROMPT,
+        "sources": DOCUMENTED_SOURCES,
     }
 
 
 def write_metadata(meta: dict, path: Path) -> None:
-    """Enregistre la carte du dataset en JSON indenté."""
+    """Write the dataset card as indented JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
         json.dump(meta, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
-    logger.info("Métadonnées écrites → %s", chemin_pour_journal(path))
+    logger.info("Metadata written → %s", path_for_log(path))

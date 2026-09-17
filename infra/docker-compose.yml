@@ -1,0 +1,105 @@
+# Pile de démonstration complète : serveur d'inférence vLLM et passerelle API.
+#
+# Prérequis : un hôte disposant d'un GPU NVIDIA et de nvidia-container-toolkit,
+# et le modèle fusionné produit par scripts/merge_adapter.py --adapter dpo.
+#
+#   export TRIAGE_API_KEY="une-cle-choisie"
+#   docker compose -f infra/docker-compose.yml up --build
+#
+# La passerelle attend que vLLM se déclare en bonne santé avant de démarrer :
+# sans cette condition, les premières requêtes échouent pendant le chargement
+# des poids, et la sonde de la passerelle serait verte alors que l'inférence ne
+# répond pas encore.
+
+services:
+  vllm:
+    # Version épinglée par empreinte : un `latest`, et même un tag mobile,
+    # changerait le moteur d'inférence sans préavis sous un modèle et un
+    # contrat d'API donnés.
+    #
+    # Surchargeable pour une seule raison, documentée dans le README : le moteur
+    # V1 de vLLM exige l'adressage virtuel unifié de CUDA, que WSL 2 ne fournit
+    # pas. Sur un poste Windows, il s'arrête sur « UVA is not available » et la
+    # sonde de santé échoue sans dire pourquoi. Sur un hôte Linux — celui du
+    # déploiement — la version épinglée fonctionne.
+    image: ${TRIAGE_VLLM_IMAGE:-vllm/vllm-openai:v0.29.0@sha256:c2914767605584b6d8f45686b82de173ecc99e781897aa3d0a66dacd72c51ae1}
+    command:
+      - --model=/models/qwen3-1.7b-triage-dpo-merged
+      - --served-model-name=qwen3-1.7b-clinical-triage
+      - --max-model-len=1024
+      - --dtype=bfloat16
+      - --gpu-memory-utilization=0.85
+    volumes:
+      # Dossier des modeles, cote hote. Parametrable parce qu'il ne vit pas au
+      # meme endroit selon la machine : a cote du depot en developpement, sur un
+      # volume dedie en production. Sur un poste dont le depot est synchronise
+      # dans le nuage, il doit en sortir : Docker Desktop ne sait pas monter un
+      # disque virtuel de synchronisation, et le conteneur demarre alors sans
+      # voir les poids.
+      - ${TRIAGE_MODELS_DIR:-../models}:/models:ro
+    ports:
+      # Boucle locale uniquement. Le moteur n'a ni cle d'API ni quota : c'est la
+      # passerelle qui authentifie, trace et anonymise, et elle l'atteint par le
+      # reseau interne de la pile. Publie sur 0.0.0.0, il offrait une inference
+      # gratuite et sans trace a qui trouvait le port -- et Docker inserant ses
+      # regles avant celles du pare-feu de l'hote, le fermer ne suffisait pas.
+      # Le banc d'essai, lance depuis l'hote, continue de l'atteindre.
+      #
+      # Le port cote hote est parametrable : 8000 est un port courant, et une
+      # autre pile deja lancee sur la machine empeche sinon le demarrage. Le
+      # port interne, lui, ne bouge pas : c'est celui que la passerelle appelle
+      # par le reseau de la pile, et il ne depend pas de l'hote.
+      - "127.0.0.1:${TRIAGE_VLLM_PORT:-8000}:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 180s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    environment:
+      TRIAGE_BACKEND: vllm
+      TRIAGE_VLLM_URL: http://vllm:8000
+      TRIAGE_VLLM_MODEL: qwen3-1.7b-clinical-triage
+      TRIAGE_MODEL_VERSION: qwen3-1.7b-clinical-triage
+      TRIAGE_AUDIT_LOG: /app/logs/audit_triage.jsonl
+      # Quota par appelant. Soixante par minute correspond a un poste
+      # d'accueil ; un banc de charge, lui, ne tient qu'une cle et depasse ce
+      # compte des le premier palier de concurrence. Il le releve pour la
+      # duree de la mesure, sans changer la valeur de service.
+      TRIAGE_RATE_LIMIT: "${TRIAGE_RATE_LIMIT:-60}"
+      # Aucune valeur par défaut : le service refuse de démarrer sans clé.
+      TRIAGE_API_KEY: ${TRIAGE_API_KEY:?definissez TRIAGE_API_KEY avant de demarrer la pile}
+    volumes:
+      # Le journal d'audit doit survivre au conteneur : la traçabilité des
+      # décisions est une exigence métier, pas un fichier de travail.
+      #
+      # Volume nommé plutôt que dossier de l'hôte : Docker l'initialise avec le
+      # propriétaire du répertoire de l'image, donc l'utilisateur sans privilège
+      # qui fait tourner le service. Un dossier de l'hôte, lui, arrive monté à
+      # root, et chaque requête échouait alors sur l'écriture du journal — après
+      # avoir produit sa décision.
+      - audit:/app/logs
+    ports:
+      - "${TRIAGE_API_PORT:-8080}:8080"
+    restart: unless-stopped
+    depends_on:
+      vllm:
+        condition: service_healthy
+
+volumes:
+  # `docker compose cp api:/app/logs/audit_triage.jsonl .` en sort une copie ;
+  # `docker compose down` sans `-v` le conserve.
+  audit:

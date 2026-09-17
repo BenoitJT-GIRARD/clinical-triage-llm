@@ -121,7 +121,7 @@ jobs:
       # production qui échapperait au contrôle.
       - name: Vulnérabilités connues des dépendances de l'image
         run: |
-          grep -v 'spacy-models/releases' deploy/requirements-api.txt > image-auditee.txt
+          grep -v 'spacy-models/releases' infra/requirements-api.txt > image-auditee.txt
           uv run --no-sync pip-audit --strict -r image-auditee.txt
 
   tests:
@@ -158,7 +158,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/Dockerfile.api
+          file: infra/Dockerfile.api
           push: false
           load: true
           tags: clinical-triage-api:ci

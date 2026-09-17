@@ -1,12 +1,12 @@
 {
-  "nom": "dpo",
-  "hyperparametres": {
-    "modele_de_reference": "qwen3-1.7b-triage-sft-merged",
-    "moteur": "unsloth",
+  "name": "dpo",
+  "hyperparameters": {
+    "reference_model": "qwen3-1.7b-triage-sft-merged",
+    "engine": "unsloth",
     "epochs": 1,
     "batch_size": 2,
     "grad_accum": 8,
-    "lot_effectif": 16,
+    "effective_batch": 16,
     "learning_rate": 5e-06,
     "beta": 0.1,
     "rpo_alpha": 1.0,
@@ -14,25 +14,25 @@
     "lora_alpha": 32,
     "max_length": 768,
     "max_steps": -1,
-    "graine": 42
+    "seed": 42
   },
-  "metriques": {
+  "metrics": {
     "train_loss": 0.11406060181282185,
-    "paires_entrainement": 2160,
-    "paires_validation": 240,
+    "training_pairs": 2160,
+    "validation_pairs": 240,
     "eval_reward_accuracy": 1.0,
     "eval_reward_margin": 9.260257720947266,
-    "duree_s": 2889.8,
-    "memoire_gpu_max_go": 9.8
+    "duration_s": 2889.8,
+    "peak_gpu_memory_gb": 9.8
   },
-  "environnement": {
+  "environment": {
     "torch": "2.12.1+cu130",
     "transformers": "5.5.0",
     "trl": "0.24.0",
     "gpu": "NVIDIA GeForce RTX 4060 Ti",
-    "memoire_gpu_go": 16.0
+    "gpu_memory_gb": 16.0
   },
-  "historique": [
+  "history": [
     {
       "loss": 0.6716238021850586,
       "grad_norm": 20.70259666442871,

@@ -23,7 +23,7 @@ htmlcov/
 models/
 
 # Jeux d'entrainement : derives du code et des corpus, regeneres a l'identique
-# par scripts/01 (graine fixee) et publies sur le Hub. Le jeu d'evaluation
+# par scripts/build_dataset.py (graine fixee) et publies sur le Hub. Le jeu d'evaluation
 # clinique et la fiche metadata.json restent versionnes : ils sont petits, et
 # on doit pouvoir lire les cas notes et le controle d'anonymisation sans rien
 # telecharger.

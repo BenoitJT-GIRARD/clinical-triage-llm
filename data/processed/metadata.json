@@ -1,200 +1,202 @@
 {
-  "champs_sft": {
-    "prompt": "Invite ChatML complète (consigne système + tour patient), ouvrant le tour assistant.",
-    "completion": "Réponse de triage attendue : niveau, justification, recommandation.",
-    "user_turn": "Tour patient seul, utile pour la déduplication et l'audit.",
-    "level": "Niveau de triage : URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE.",
-    "lang": "Langue de la description du patient (fr | en).",
-    "source": "Origine de l'exemple (vignette_clinique, mediqal, medquad, frenchmedmcqa, medmcqa).",
-    "confiance": "Niveau de confiance de l'étiquette : haute (catalogue clinique) | moyenne (règle appliquée à un corpus).",
-    "symptomes": "Signes cliniques présents dans la description.",
-    "antecedents": "Antécédents du patient mentionnés dans la description.",
-    "constantes": "Relevé de constantes vitales, vide si le triage se fait sans mesure.",
-    "presentation_id": "Identifiant de la présentation type du catalogue, vide pour les cas issus des corpus."
+  "sft_fields": {
+    "prompt": "Complete ChatML prompt (system prompt + patient turn), opening the assistant turn.",
+    "completion": "Expected triage answer: level, justification, recommendation.",
+    "user_turn": "The patient turn alone, useful for deduplication and audit.",
+    "level": "Triage level: URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE.",
+    "lang": "Language of the patient description (fr | en).",
+    "source": "Origin of the example (clinical_vignette, mediqal, medquad, frenchmedmcqa, medmcqa).",
+    "confidence": "Confidence of the label: high (clinical catalogue) | medium (rule applied to a corpus).",
+    "symptoms": "Clinical signs present in the description.",
+    "medical_history": "Patient history mentioned in the description.",
+    "vitals": "Vital-sign reading, empty when triage happens without measurements.",
+    "presentation_id": "Identifier of the catalogue presentation, empty for corpus cases."
   },
-  "champs_dpo": {
-    "prompt": "Invite ChatML identique à celle du jeu supervisé.",
-    "chosen": "Réponse préférée : bon niveau, format respecté, conduite à tenir sûre.",
-    "rejected": "Réponse rejetée, de même format et de longueur comparable.",
-    "user_turn": "Tour patient seul, utile pour la déduplication et l'audit.",
-    "level": "Niveau de triage de référence du cas.",
-    "lang": "Langue de la description du patient.",
-    "strategie": "Nature du défaut introduit : sous_triage | recommandation_dangereuse | diagnostic_affirme | reponse_en_anglais.",
-    "source": "preference_securite."
+  "dpo_fields": {
+    "prompt": "ChatML prompt identical to the supervised set's.",
+    "chosen": "Preferred answer: right level, format respected, safe course of action.",
+    "rejected": "Rejected answer, same format and comparable length.",
+    "user_turn": "The patient turn alone, useful for deduplication and audit.",
+    "level": "Reference triage level of the case.",
+    "lang": "Language of the patient description.",
+    "strategy": "The defect introduced: undertriage | unsafe_recommendation | asserted_diagnosis | answered_in_english.",
+    "source": "safety_preference."
   },
-  "champs_evaluation": {
-    "prompt": "Invite ChatML identique à celle du jeu supervisé.",
-    "completion": "Toujours vide : la réponse attendue n'est pas donnée, seul le niveau l'est.",
-    "user_turn": "Tour patient seul, tel qu'il est soumis au modèle.",
-    "id": "Identifiant du cas d'évaluation.",
-    "level": "Niveau de triage de référence, écrit à la main.",
-    "lang": "Langue de la description du patient.",
-    "piege": "Nature de la difficulté : vide (présentation directe), faux_rassurant, faux_alarmant, negation, constantes_discordantes.",
-    "description": "Description du patient seule, sans la consigne qui l'encadre.",
-    "note_clinique": "Raison clinique de l'étiquette, pour l'auditabilité et l'analyse d'erreurs."
+  "evaluation_fields": {
+    "prompt": "ChatML prompt identical to the supervised set's.",
+    "completion": "Always empty: the expected answer is not given, only the level is.",
+    "user_turn": "The patient turn alone, as it is submitted to the model.",
+    "id": "Identifier of the evaluation case.",
+    "level": "Reference triage level, written by hand.",
+    "lang": "Language of the patient description.",
+    "case_type": "Nature of the difficulty: empty (direct presentation), falsely_reassuring, falsely_alarming, negation, discordant_vitals.",
+    "description": "The patient description alone, without the framing prompt.",
+    "clinical_note": "Clinical reason for the label, for auditability and error analysis."
   },
-  "taxonomie_triage": {
-    "URGENCE_VITALE": "Prise en charge immédiate (tris 1 et 2 de l'échelle FRENCH).",
-    "URGENCE_MODEREE": "Prise en charge sous quelques heures (tris 3 et 4).",
-    "CONSULTATION_DIFFEREE": "Pas de critère de gravité immédiat (tri 5)."
+  "triage_taxonomy": {
+    "URGENCE_VITALE": "Immediate care (sorts 1 and 2 of the FRENCH scale).",
+    "URGENCE_MODEREE": "Care within a few hours (sorts 3 and 4).",
+    "CONSULTATION_DIFFEREE": "No immediate severity criterion (sort 5)."
   },
-  "consigne_systeme": "Tu es l'assistant de triage médical du service des urgences. Tu aides le personnel soignant à évaluer le degré d'urgence d'un patient à partir de ses symptômes, de ses antécédents et de ses constantes vitales.\n\nTu réponds TOUJOURS en français et selon le format suivant :\nNiveau de priorité : <URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE>\nJustification : <explication clinique courte et claire>\nRecommandation : <conduite à tenir pour le patient et le personnel>\n\nRègles de sécurité :\n- En cas de doute ou de signe de gravité, surclasse le niveau d'urgence.\n- Ne pose jamais de diagnostic définitif : tu fournis une aide à la décision.\n- Rappelle de contacter le 15 (SAMU) devant tout signe vital engagé.",
+  "system_prompt": "Tu es l'assistant de triage médical du service des urgences. Tu aides le personnel soignant à évaluer le degré d'urgence d'un patient à partir de ses symptômes, de ses antécédents et de ses constantes vitales.\n\nTu réponds TOUJOURS en français et selon le format suivant :\nNiveau de priorité : <URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE>\nJustification : <explication clinique courte et claire>\nRecommandation : <conduite à tenir pour le patient et le personnel>\n\nRègles de sécurité :\n- En cas de doute ou de signe de gravité, surclasse le niveau d'urgence.\n- Ne pose jamais de diagnostic définitif : tu fournis une aide à la décision.\n- Rappelle de contacter le 15 (SAMU) devant tout signe vital engagé.",
   "sources": {
-    "vignette_clinique": {
-      "origine": "Catalogue de présentations cliniques rédigé pour ce projet (src/clinical_triage/data/clinical_catalogue.py)",
-      "langue": "fr + en",
-      "licence": "MIT (même licence que le code du projet)",
-      "role": "Vérité terrain du triage : le niveau vient de la présentation, pas du texte."
+    "clinical_vignette": {
+      "origin": "Catalogue of clinical presentations written for this project (src/clinical_triage/data/clinical_catalogue.py)",
+      "language": "fr + en",
+      "licence": "MIT",
+      "role": "Triage ground truth: the level comes from the presentation, not from the text."
     },
     "mediqal": {
-      "origine": "https://huggingface.co/datasets/ANR-MALADES/MediQAl",
-      "langue": "fr",
+      "origin": "https://huggingface.co/datasets/ANR-MALADES/MediQAl",
+      "language": "fr",
       "licence": "CC BY 4.0",
-      "role": "Corpus du cahier des charges, et le seul à décrire des patients : 3 075 vignettes cliniques françaises distinctes, dont 569 avec constantes lisibles."
+      "role": "The only source corpus that describes patients. Base of the authentic French vignettes."
     },
     "medquad": {
-      "origine": "https://huggingface.co/datasets/keivalya/MedQuad-MedicalQnADataset",
-      "langue": "en",
-      "licence": "CC BY 4.0 (déclarée par le dépôt d'origine abachaa/MedQuAD)",
-      "role": "Corpus du cahier des charges. Descriptions authentiques de symptômes, étiquetées par la règle (confiance moyenne)."
+      "origin": "https://huggingface.co/datasets/keivalya/MedQuad-MedicalQnADataset",
+      "language": "en",
+      "licence": "CC BY 4.0",
+      "licence_checked_on": "original repository abachaa/MedQuAD",
+      "role": "Symptom descriptions, labelled by the rule (medium confidence)."
     },
     "medmcqa": {
-      "origine": "https://huggingface.co/datasets/openlifescienceai/medmcqa",
-      "langue": "en",
+      "origin": "https://huggingface.co/datasets/openlifescienceai/medmcqa",
+      "language": "en",
       "licence": "Apache-2.0",
-      "role": "Hors cahier des charges, ajouté faute de vignettes cliniques anglophones dans les corpus imposés. On retire la question pour ne garder que la présentation."
+      "role": "Added because the other source corpora hold no English-language clinical vignettes."
     },
     "frenchmedmcqa": {
-      "origine": "https://huggingface.co/datasets/nthngdy/frenchmedmcqa",
-      "langue": "fr",
-      "licence": "Apache-2.0 (déclarée par le dépôt d'origine qanastek/frenchmedmcqa)",
-      "role": "Corpus du cahier des charges. 1 080 questions sur ses trois découpages, dont six décrivent un patient, aucune étiquetable."
+      "origin": "https://huggingface.co/datasets/nthngdy/frenchmedmcqa",
+      "language": "fr",
+      "licence": "Apache-2.0",
+      "licence_checked_on": "original repository qanastek/frenchmedmcqa",
+      "role": "Pharmacy exam questions, none of which can be labelled for triage."
     },
     "ultramedical_preference": {
-      "origine": "https://huggingface.co/datasets/TsinghuaC3I/UltraMedical-Preference",
-      "langue": "en",
+      "origin": "https://huggingface.co/datasets/TsinghuaC3I/UltraMedical-Preference",
+      "language": "en",
       "licence": "MIT",
-      "role": "Jeu de préférences externe, tenu à l'écart de l'entraînement et utilisé comme mesure indépendante de l'alignement."
+      "role": "External preference set, kept out of training: an independent measure of the alignment."
     }
   },
-  "construction": {
-    "graine": 42,
-    "revision_git": "7d5e5b2",
+  "build": {
+    "seed": 42,
+    "git_revision": "7d5e5b2",
     "date_utc": "2026-08-25",
-    "commande": "uv run python scripts/01_build_dataset.py"
+    "command": "uv run python scripts/build_dataset.py"
   },
-  "statistiques": {
+  "statistics": {
     "sft_total": 5000,
     "sft_train": 4000,
     "sft_validation": 500,
     "sft_test": 500,
     "dpo_total": 2400,
-    "evaluation_clinique": 60,
-    "repartition_niveaux": {
+    "clinical_evaluation": 60,
+    "by_level": {
       "URGENCE_VITALE": 1668,
       "URGENCE_MODEREE": 1666,
       "CONSULTATION_DIFFEREE": 1666
     },
-    "repartition_langues": {
+    "by_language": {
       "en": 2500,
       "fr": 2500
     },
-    "repartition_sources": {
-      "vignette_clinique": 3284,
+    "by_source": {
+      "clinical_vignette": 3284,
       "medmcqa": 1283,
       "mediqal": 313,
       "medquad": 120
     },
-    "repartition_confiance": {
-      "haute": 3284,
-      "moyenne": 1716
+    "by_confidence": {
+      "high": 3284,
+      "medium": 1716
     },
-    "part_avec_constantes": 0.493,
-    "dpo_repartition_strategies": {
-      "recommandation_dangereuse": 676,
-      "diagnostic_affirme": 627,
-      "reponse_en_anglais": 598,
-      "sous_triage": 499
+    "share_with_vitals": 0.493,
+    "dpo_by_strategy": {
+      "unsafe_recommendation": 676,
+      "asserted_diagnosis": 627,
+      "answered_in_english": 598,
+      "undertriage": 499
     },
-    "dpo_equilibre_longueurs": {
-      "chosen_moyenne": 354.5,
-      "rejected_moyenne": 345.2,
-      "part_chosen_plus_long": 0.437
+    "dpo_length_balance": {
+      "chosen_mean_chars": 354.5,
+      "rejected_mean_chars": 345.2,
+      "chosen_longer_share": 0.437
     },
-    "evaluation_repartition_niveaux": {
+    "evaluation_by_level": {
       "URGENCE_VITALE": 20,
       "URGENCE_MODEREE": 20,
       "CONSULTATION_DIFFEREE": 20
     },
-    "evaluation_repartition_langues": {
+    "evaluation_by_language": {
       "fr": 32,
       "en": 28
     },
-    "evaluation_pieges": {
-      "faux_alarmant": 11,
-      "faux_rassurant": 10,
+    "evaluation_case_types": {
+      "falsely_alarming": 11,
+      "falsely_reassuring": 10,
       "negation": 4,
-      "constantes_discordantes": 3
+      "discordant_vitals": 3
     },
-    "longueur_des_descriptions": {
-      "budget_jetons": 324,
-      "mediane_jetons": 68,
-      "maximum_jetons": 292,
-      "borne_caracteres": 800
+    "description_lengths": {
+      "token_budget": 324,
+      "median_tokens": 68,
+      "max_tokens": 292,
+      "char_cap": 800
     },
-    "longueur_des_reponses": {
-      "mediane_jetons": 98,
-      "p95_jetons": 115,
-      "maximum_jetons": 133,
-      "plafond_de_generation": 220
+    "answer_lengths": {
+      "median_tokens": 98,
+      "p95_tokens": 115,
+      "max_tokens": 133,
+      "generation_cap": 220
     },
-    "rendement_corpus": {
+    "corpus_yield": {
       "mediqal": {
-        "entrees_lues": 3075,
-        "cas_retenus": 313,
-        "entonnoir": {
-          "entrees": 3075,
-          "sans_presentation_de_patient": 1407,
-          "hors_bornes_de_longueur": 514,
-          "sans_signe_identifie": 792,
-          "doublons": 0,
-          "retenus": 362
+        "entries_read": 3075,
+        "cases_kept": 313,
+        "funnel": {
+          "entries": 3075,
+          "no_patient_presentation": 1407,
+          "outside_length_bounds": 514,
+          "no_identified_sign": 792,
+          "duplicates": 0,
+          "kept": 362
         }
       },
       "medquad": {
-        "entrees_lues": 16407,
-        "cas_retenus": 120,
-        "entonnoir": {
-          "entrees": 16407,
-          "sans_presentation_de_patient": 15909,
-          "hors_bornes_de_longueur": 0,
-          "sans_signe_identifie": 315,
-          "doublons": 0,
-          "retenus": 183
+        "entries_read": 16407,
+        "cases_kept": 120,
+        "funnel": {
+          "entries": 16407,
+          "no_patient_presentation": 15909,
+          "outside_length_bounds": 0,
+          "no_identified_sign": 315,
+          "duplicates": 0,
+          "kept": 183
         }
       },
       "medmcqa": {
-        "entrees_lues": 182822,
-        "cas_retenus": 1283,
-        "entonnoir": {
-          "entrees": 182822,
-          "sans_presentation_de_patient": 171251,
-          "hors_bornes_de_longueur": 372,
-          "sans_signe_identifie": 9038,
-          "doublons": 71,
-          "retenus": 2090
+        "entries_read": 182822,
+        "cases_kept": 1283,
+        "funnel": {
+          "entries": 182822,
+          "no_patient_presentation": 171251,
+          "outside_length_bounds": 372,
+          "no_identified_sign": 9038,
+          "duplicates": 71,
+          "kept": 2090
         }
       },
       "frenchmedmcqa": {
-        "entrees_lues": 1080,
-        "cas_retenus": 0,
-        "entonnoir": {
-          "entrees": 1080,
-          "sans_presentation_de_patient": 1074,
-          "hors_bornes_de_longueur": 0,
-          "sans_signe_identifie": 6,
-          "doublons": 0,
-          "retenus": 0
+        "entries_read": 1080,
+        "cases_kept": 0,
+        "funnel": {
+          "entries": 1080,
+          "no_patient_presentation": 1074,
+          "outside_length_bounds": 0,
+          "no_identified_sign": 6,
+          "duplicates": 0,
+          "kept": 0
         }
       }
     }
@@ -202,48 +204,48 @@
   "diagnostics": {
     "completions": {
       "total": 305,
-      "par_origine": {
+      "by_origin": {
         "corpus": {
-          "exemples": 1716,
-          "reponses_distinctes": 235,
-          "repetition_moyenne": 7.3
+          "examples": 1716,
+          "distinct_answers": 235,
+          "mean_repetition": 7.3
         },
         "vignettes": {
-          "exemples": 3284,
-          "reponses_distinctes": 70,
-          "repetition_moyenne": 46.9
+          "examples": 3284,
+          "distinct_answers": 70,
+          "mean_repetition": 46.9
         }
       }
     },
-    "separabilite": {
+    "separability": {
       "vignettes": 3284,
       "presentations": 70,
-      "decoupage_aleatoire": 0.9884,
-      "decoupage_par_presentation": 0.7734,
-      "ecart": 0.215
+      "random_split": 0.9884,
+      "split_by_presentation": 0.7734,
+      "gap": 0.215
     },
-    "fuite_par_metadonnees": {
+    "metadata_leakage": {
       "vignettes": 3284,
-      "cellules": 9,
-      "exactitude_du_vote_majoritaire": 0.8956,
-      "part_en_cellule_homogene": 0.6337
+      "cells": 9,
+      "majority_vote_accuracy": 0.8956,
+      "share_in_homogeneous_cell": 0.6337
     }
   },
-  "rgpd": {
-    "principe": "Minimisation : aucune donnée patient réelle. Les vignettes sont synthétiques, les corpus publics sont des jeux de recherche sans donnée identifiante.",
-    "masquage": "Presidio (spaCy français et anglais), limité aux entités réellement identifiantes (PERSON, PHONE_NUMBER, EMAIL_ADDRESS, CREDIT_CARD, IBAN_CODE, IP_ADDRESS, URL, US_SSN, FR_NIR, FR_TELEPHONE, DATE_NAISSANCE, DATE_NAISSANCE_ISO).",
-    "entites_ecartees": {
-      "DATE_TIME": "masque les délais d'évolution, qui sont un critère de triage",
-      "LOCATION": "masque les noms d'organes et de services hospitaliers",
-      "NRP": "masque des noms de pathologies et de molécules",
-      "MEDICAL_LICENSE": "déclenche sur des références bibliographiques des corpus"
+  "gdpr": {
+    "principle": "Minimisation: no real patient data. The vignettes are synthetic, and the public corpora are research sets with no identifying data.",
+    "masking": "Presidio (French and English spaCy), limited to genuinely identifying entities (PERSON, PHONE_NUMBER, EMAIL_ADDRESS, CREDIT_CARD, IBAN_CODE, IP_ADDRESS, URL, US_SSN, FR_NIR, FR_TELEPHONE, DATE_NAISSANCE, DATE_NAISSANCE_ISO).",
+    "entities_left_out": {
+      "DATE_TIME": "masks onset delays, which are a triage criterion",
+      "LOCATION": "masks the names of organs and of hospital departments",
+      "NRP": "masks the names of conditions and of molecules",
+      "MEDICAL_LICENSE": "fires on bibliographic references in the corpora"
     },
-    "entites_masquees_nombre": 246,
-    "controle_independant": {
-      "civilité suivie d'un nom": 3
+    "entities_masked": 246,
+    "independent_check": {
+      "title followed by a name": 3
     },
-    "anonymisation_appliquee": true,
-    "separation_entrainement_evaluation": {
+    "anonymisation_applied": true,
+    "train_evaluation_overlap": {
       "test∩train": 0,
       "test∩validation": 0,
       "train∩validation": 0

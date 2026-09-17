@@ -14,7 +14,7 @@ size_categories:
   - 1K<n<10K
 ---
 
-# Dataset de triage médical bilingue — CHSA
+# Dataset de triage médical bilingue — the emergency department
 
 Corpus d'entraînement d'un agent d'aide au triage des urgences. À partir d'une
 description de patient — motif, symptômes, antécédents, constantes relevées à
@@ -39,7 +39,7 @@ en français.
 | `metadata.json` | schéma, statistiques, provenance, RGPD, contrôles | auditabilité | oui |
 
 Les quatre jeux d'entraînement ne sont pas versionnés : ce sont des dérivés du
-code et des corpus publics, que `scripts/01_build_dataset.py` reconstruit à
+code et des corpus publics, que `scripts/build_dataset.py` reconstruit à
 l'identique à graine fixe, et qui sont publiés sur le Hub. Les deux autres le
 sont : on doit pouvoir lire les cas d'évaluation annotés et le contrôle
 d'anonymisation en clonant le dépôt, sans rien télécharger.
@@ -153,7 +153,7 @@ Trois règles encadrent la construction :
 | Champ | Contenu |
 |---|---|
 | `prompt` | invite ChatML complète, ouvrant le tour assistant |
-| `completion` | réponse attendue : niveau, justification, recommandation |
+| `completion` | réponse attendue : niveau, justification, recommendation |
 | `user_turn` | tour patient seul, utilisé pour la déduplication et l'audit |
 | `level` | `URGENCE_VITALE` · `URGENCE_MODEREE` · `CONSULTATION_DIFFEREE` |
 | `lang` | langue de la description du patient (`fr` ou `en`) |
@@ -228,7 +228,7 @@ n'exécute plus.
 Rendement mesuré de chaque corpus, après filtrage des cas réellement exploitables
 pour du triage :
 
-<!-- rendement:debut — tableau écrit par scripts/01_build_dataset.py, ne pas modifier à la main -->
+<!-- rendement:debut — tableau écrit par scripts/build_dataset.py, ne pas modifier à la main -->
 | Corpus | Entrées lues | Sans patient décrit | Hors bornes de longueur | Sans signe identifié | Doublons | Cas extraits | Cas livrés | Rendement |
 |---|---|---|---|---|---|---|---|---|
 | MediQAl | 3 075 | 1 407 | 514 | 792 | 0 | 362 | **313** | **10,2 %** |
@@ -306,7 +306,7 @@ se retrouve à l'entraînement. Les comptages sont publiés dans `metadata.json`
 ## Reproduire
 
 ```bash
-uv run python scripts/01_build_dataset.py
+uv run python scripts/build_dataset.py
 ```
 
 Graine fixée, sorties déterministes à version de corpus constante.

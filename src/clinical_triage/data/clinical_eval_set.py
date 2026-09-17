@@ -1,27 +1,26 @@
-"""Jeu d'évaluation clinique indépendant, rédigé à la main.
+"""The independent clinical evaluation set, written by hand.
 
-C'est le seul jeu sur lequel les chiffres publiés sont calculés, et il est bâti
-pour qu'ils veuillent dire quelque chose :
+It is the only set the published figures are computed on, and it is built so that they mean
+something:
 
-- **il ne vient ni de la règle ni du générateur.** Les vignettes d'entraînement
-  sont composées par `case_generator` à partir de gabarits ; les cas ci-dessous
-  sont écrits un par un, avec une autre syntaxe, un autre vocabulaire et des
-  informations désordonnées, comme le sont les récits recueillis à l'accueil ;
-- **il n'entre jamais dans l'entraînement.** Le script de préparation retire du
-  jeu SFT et du jeu DPO tout tour utilisateur identique à l'un de ces cas ;
-- **il contient des pièges.** Près de la moitié des cas sont des présentations
-  atypiques :
-  urgence qui se donne l'air bénin, symptôme spectaculaire mais sans gravité,
-  signe grave explicitement nié, constantes qui contredisent le récit. Une règle
-  à mots-clés se trompe sur ces cas ; c'est précisément là qu'un modèle de
-  langage doit démontrer sa valeur ajoutée.
+- **it comes neither from the rule nor from the generator.** The training vignettes are
+  composed by ``case_generator`` from templates; the cases below are written one by one, with a
+  different syntax, a different vocabulary and information out of order, as the narratives
+  collected at a reception desk are;
+- **it never enters training.** The preparation script removes from the SFT set and from the DPO
+  set any user turn identical to one of these cases;
+- **it contains traps.** Nearly half the cases are atypical presentations: an emergency that
+  looks benign, a spectacular but harmless symptom, a serious sign explicitly denied, vital
+  signs that contradict the narrative. A keyword rule gets those cases wrong; that is precisely
+  where a language model has to show what it adds.
 
-Chaque cas porte la raison clinique de son étiquette. Cette note n'est pas
-donnée au modèle : elle sert à l'auditabilité et à l'analyse d'erreurs.
+Each case carries the clinical reason for its label. That note is not given to the model: it
+serves auditability and error analysis.
 
-Limite assumée : ces cas ont été rédigés par un ingénieur à partir de la
-littérature de triage, pas par un médecin urgentiste. Leur relecture par un
-praticien est le premier point de la feuille de route.
+Acknowledged limit: these cases were written by an engineer from the triage literature, not by
+an emergency physician. Having a clinician review them is the first item of the roadmap.
+
+The cases are French and English clinical text: they are the data being evaluated on.
 """
 
 from __future__ import annotations
@@ -33,26 +32,26 @@ from clinical_triage.data.case_generator import USER_TEMPLATES
 
 @dataclass(frozen=True)
 class EvalCase:
-    """Cas d'évaluation clinique et sa vérité terrain."""
+    """One clinical evaluation case and its ground truth."""
 
     id: str
     lang: str
     level: str
-    # Nature du piège, vide si la présentation est directe. Sert à mesurer
-    # séparément la performance sur les cas typiques et sur les cas atypiques.
-    piege: str
+    # Nature of the trap, empty when the presentation is direct. Used to measure performance
+    # separately on typical and on atypical cases.
+    case_type: str
     description: str
     note: str
 
     @property
     def user_turn(self) -> str:
-        """Tour utilisateur présenté au modèle (premier gabarit, sans variation)."""
+        """The user turn presented to the model (first template, no variation)."""
         return USER_TEMPLATES[self.lang][0].format(description=self.description)
 
 
-# (identifiant, langue, niveau, piège, description, raison de l'étiquette)
+# (id, language, level, trap, description, reason for the label)
 _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
-    # ---------------- URGENCE VITALE — présentations directes ----------------
+    # ---------------- URGENCE_VITALE — direct presentations ----------------
     (
         "ev01",
         "fr",
@@ -168,12 +167,12 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         ),
         "État de mal épileptique : atteinte des voies aériennes et souffrance cérébrale.",
     ),
-    # ---------------- URGENCE VITALE — pièges ----------------
+    # ---------------- URGENCE_VITALE — traps ----------------
     (
         "ev11",
         "fr",
         "URGENCE_VITALE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "Femme de 71 ans, diabétique de longue date, se dit seulement « très fatiguée » depuis deux heures, "
             "avec une vague nausée et un essoufflement inhabituel en montant chez elle. Elle insiste sur le fait qu'elle n'a aucune douleur. "
@@ -185,7 +184,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev12",
         "en",
         "URGENCE_VITALE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "An 84-year-old nursing home resident is described as 'just not herself' since last night: more confused than usual, "
             "eating nothing. She has no fever. HR 104, BP 92/58, RR 24."
@@ -196,7 +195,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev13",
         "fr",
         "URGENCE_VITALE",
-        "constantes_discordantes",
+        "discordant_vitals",
         (
             "Homme de 29 ans venu pour « une grosse fatigue » après un match de football. Il parle normalement et marche seul. "
             "Constantes à l'accueil : FC 38, TA 82/48, SpO2 97 %, vigilance normale."
@@ -207,7 +206,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev14",
         "en",
         "URGENCE_VITALE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "A 26-year-old woman on the contraceptive pill returned from a long-haul flight yesterday. "
             "She feels short of breath when climbing stairs and has a mild ache in her right calf. She looks well at rest. RR 26, HR 116."
@@ -218,7 +217,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev15",
         "fr",
         "URGENCE_VITALE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "Adolescent de 16 ans amené pour douleurs abdominales et vomissements depuis la veille. Il dit avoir beaucoup soif "
             "et être allé uriner sans arrêt. Son haleine a une odeur sucrée. Il est diabétique et a arrêté ses injections depuis trois jours."
@@ -229,7 +228,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev16",
         "en",
         "URGENCE_VITALE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "A 47-year-old builder cut his forearm on a rusty sheet three days ago. The wound now looks only slightly red, "
             "but the pain is out of proportion and he feels feverish and shivery. HR 124, BP 94/56."
@@ -251,7 +250,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev18",
         "fr",
         "URGENCE_VITALE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "Femme de 24 ans qui a accouché il y a deux jours et rentre chez elle. Elle signale des « règles un peu abondantes » "
             "et a changé quatre protections en une heure, avec des caillots. Elle se sent partir en se levant. FC 122."
@@ -262,7 +261,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev19",
         "en",
         "URGENCE_VITALE",
-        "constantes_discordantes",
+        "discordant_vitals",
         (
             "A 19-year-old with known asthma says his chest feels 'a bit tight' and he is not too worried. "
             "He speaks in short phrases and stops between words. SpO2 90%, RR 32, HR 128."
@@ -273,14 +272,14 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev20",
         "fr",
         "URGENCE_VITALE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "Homme de 52 ans qui consulte pour un problème d'ordonnance. En fin d'entretien, il mentionne qu'il a tout préparé "
             "pour en finir ce week-end et qu'il a acheté une corde. Il refuse d'en dire plus."
         ),
         "Crise suicidaire avec scénario et moyen : risque immédiat malgré un motif de consultation anodin.",
     ),
-    # ---------------- URGENCE MODEREE — présentations directes ----------------
+    # ---------------- URGENCE_MODEREE — direct presentations ----------------
     (
         "ev21",
         "fr",
@@ -397,12 +396,12 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         ),
         "Crise vaso-occlusive sans syndrome thoracique : antalgie urgente sans défaillance d'organe.",
     ),
-    # ---------------- URGENCE MODEREE — pièges ----------------
+    # ---------------- URGENCE_MODEREE — traps ----------------
     (
         "ev31",
         "fr",
         "URGENCE_MODEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "Femme de 28 ans amenée par ses collègues : elle dit étouffer, a les mains qui fourmillent et répète qu'elle va mourir. "
             "Elle a déjà eu exactement les mêmes épisodes, suivis pour un trouble anxieux. Examen normal, SpO2 99 %, ECG normal."
@@ -413,7 +412,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev32",
         "en",
         "URGENCE_MODEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "A 14-year-old boy has been bleeding from the left nostril for twenty minutes. There is blood on his shirt and he is frightened. "
             "The bleeding stops with pinching. He is on no medication and has normal observations."
@@ -424,7 +423,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev33",
         "fr",
         "URGENCE_MODEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "Homme de 30 ans, sportif, très inquiet : il a une douleur dans la poitrine depuis deux jours, "
             "qui se réveille quand on appuie dessus et quand il bouge le bras. Aucun facteur de risque. ECG normal, troponine négative."
@@ -435,7 +434,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev34",
         "en",
         "URGENCE_MODEREE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "A 63-year-old woman has a rash of small blisters on her right forehead and upper eyelid that appeared two days ago. "
             "It is painful but she says it is 'just a rash'. Her right eye is slightly red."
@@ -446,7 +445,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev35",
         "fr",
         "URGENCE_MODEREE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "Homme de 44 ans qui consulte pour un mal de dos « comme d'habitude » depuis dix jours. "
             "Il signale en passant des sueurs la nuit et 38,2 ce matin. Pas de déficit, il marche normalement. "
@@ -469,7 +468,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev37",
         "fr",
         "URGENCE_MODEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "Femme de 47 ans qui vomit et ne tient pas debout depuis ce matin tant tout tourne. "
             "Les vertiges s'aggravent quand elle bouge la tête. Elle parle bien, bouge les quatre membres, marche en s'appuyant. "
@@ -481,7 +480,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev38",
         "en",
         "URGENCE_MODEREE",
-        "faux_rassurant",
+        "falsely_reassuring",
         (
             "A 38-year-old woman started a new antibiotic yesterday and now has hives over her trunk and arms with intense itching. "
             "She is breathing comfortably, swallowing normally, BP 118/72."
@@ -492,7 +491,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev39",
         "fr",
         "URGENCE_MODEREE",
-        "constantes_discordantes",
+        "discordant_vitals",
         (
             "Homme de 59 ans venu pour un renouvellement de traitement. Il ne se plaint de rien. "
             "Constantes systématiques à l'accueil : température 38,7, FC 108, TA 118/72, SpO2 97 %."
@@ -503,14 +502,14 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev40",
         "en",
         "URGENCE_MODEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "A 6-year-old has been crying and holding his right ear all night with a temperature of 38.4. "
             "He is playing with his toys in the waiting room, drinking normally and interacting well."
         ),
         "Otite moyenne aiguë chez un enfant en bon état général : examen et traitement dans la journée.",
     ),
-    # ---------------- CONSULTATION DIFFEREE — présentations directes ----------------
+    # ---------------- CONSULTATION_DIFFEREE — direct presentations ----------------
     (
         "ev41",
         "fr",
@@ -621,12 +620,12 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         ),
         "Cystite simple sans critère de complication.",
     ),
-    # ---------------- CONSULTATION DIFFEREE — pièges ----------------
+    # ---------------- CONSULTATION_DIFFEREE — traps ----------------
     (
         "ev51",
         "fr",
         "CONSULTATION_DIFFEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "Femme de 33 ans, migraineuse connue depuis l'adolescence, avec depuis trois heures sa céphalée habituelle : "
             "pulsatile d'un côté, avec nausées et gêne à la lumière, précédée des mêmes zigzags visuels que d'ordinaire, déjà dissipés. "
@@ -638,7 +637,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev52",
         "en",
         "CONSULTATION_DIFFEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "A 7-year-old fell off the sofa and has a large bruise on his thigh. He cried briefly, is now running around the waiting room, "
             "walks normally and has full movement. No head injury, no loss of consciousness."
@@ -649,7 +648,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev53",
         "fr",
         "CONSULTATION_DIFFEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "Homme de 41 ans inquiet d'avoir vu du sang sur le papier toilette depuis quelques jours, "
             "avec une gêne à la selle. Le saignement est minime et rouge vif, il n'a ni douleur intense, ni fièvre, "
@@ -672,7 +671,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev55",
         "fr",
         "CONSULTATION_DIFFEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "Mère inquiète pour son fils de 4 ans qui a 38,3 depuis ce matin. L'enfant court dans la salle d'attente, "
             "boit son biberon, joue et rit. Pas de raideur de nuque, pas d'éruption, pas de gêne respiratoire."
@@ -694,7 +693,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev57",
         "fr",
         "CONSULTATION_DIFFEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "Femme de 26 ans piquée par un moustique hier, avec une plaque rouge de 4 cm qui gratte beaucoup sur l'avant-bras. "
             "Elle respire normalement, n'a pas de gonflement du visage et la plaque ne s'étend plus depuis ce matin."
@@ -716,7 +715,7 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
         "ev59",
         "fr",
         "CONSULTATION_DIFFEREE",
-        "faux_alarmant",
+        "falsely_alarming",
         (
             "Homme de 55 ans affolé parce qu'il a une douleur dentaire depuis trois semaines qui le réveille la nuit. "
             "Il n'a pas de gonflement de la joue, pas de fièvre, ouvre la bouche normalement et avale sans difficulté."
@@ -738,13 +737,13 @@ _CASES: tuple[tuple[str, str, str, str, str, str], ...] = (
 
 
 def eval_cases() -> list[EvalCase]:
-    """Renvoie le jeu d'évaluation clinique complet."""
+    """Return the complete clinical evaluation set."""
     return [
-        EvalCase(id=c[0], lang=c[1], level=c[2], piege=c[3], description=c[4], note=c[5])
+        EvalCase(id=c[0], lang=c[1], level=c[2], case_type=c[3], description=c[4], note=c[5])
         for c in _CASES
     ]
 
 
 def eval_user_turns() -> set[str]:
-    """Tours utilisateur du jeu d'évaluation, à exclure de tout jeu d'entraînement."""
+    """User turns of the evaluation set, to be excluded from every training set."""
     return {case.user_turn for case in eval_cases()}

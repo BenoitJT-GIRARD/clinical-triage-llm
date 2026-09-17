@@ -1,0 +1,220 @@
+{
+  "images": {
+    "accuracy_by_case_type.png": {
+      "axes": [
+        {
+          "title": "Accuracy by kind of presentation",
+          "x": "kind of presentation",
+          "y": "accuracy (share of cases)"
+        }
+      ],
+      "dispersion": "95% interval on each proportion; below six cases no interval is publishable and the bar is hatched instead",
+      "dpi": 200,
+      "n": "n(direct_presentation) = 32, n(falsely_reassuring) = 10, n(falsely_alarming) = 11, n(negation) = 4, n(discordant_vitals) = 3",
+      "sha256": "d31f496bce7e540265145bfc731ffa02d5a237e28ac8108baf03519ebcbf6632",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    },
+    "confusion_matrices.png": {
+      "axes": [
+        {
+          "title": "Qwen3-1.7B-Base",
+          "x": "predicted level",
+          "y": "true level"
+        },
+        {
+          "title": "SFT + LoRA",
+          "x": "predicted level",
+          "y": "true level"
+        },
+        {
+          "title": "SFT + DPO (merged)",
+          "x": "predicted level",
+          "y": "true level"
+        }
+      ],
+      "dispersion": null,
+      "dpi": 200,
+      "n": "n(cases) = 60",
+      "sha256": "5004de2e19612089e6383345f19ec977097943d5ee12fa7e4512ffe83dc01960",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    },
+    "dataset_composition.png": {
+      "axes": [
+        {
+          "title": "By source",
+          "x": "category",
+          "y": "examples (count)"
+        },
+        {
+          "title": "By triage level",
+          "x": "category",
+          "y": "examples (count)"
+        },
+        {
+          "title": "By language",
+          "x": "category",
+          "y": "examples (count)"
+        },
+        {
+          "title": "By label confidence",
+          "x": "category",
+          "y": "examples (count)"
+        }
+      ],
+      "dispersion": null,
+      "dpi": 200,
+      "n": "n(training examples) = 5000",
+      "sha256": "649092897ea5b10361d721332a2192a438854a5531a4f92d6837865bc9c8de4d",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    },
+    "dpo_alignment.png": {
+      "axes": [
+        {
+          "title": "Preference optimisation",
+          "x": "optimiser step",
+          "y": "DPO loss (nats)"
+        },
+        {
+          "title": "Separation opened between the two answers",
+          "x": "optimiser step",
+          "y": "reward margin (log-probability ratio)"
+        }
+      ],
+      "dispersion": null,
+      "dpi": 200,
+      "n": "n(training pairs) = 2160",
+      "sha256": "26e649e6053b66e3d621283e050ca725fe7743253d46135c09f2bd29860b472d",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    },
+    "endpoint_latency.png": {
+      "axes": [
+        {
+          "title": "Perceived latency of POST /triage",
+          "x": "concurrent callers",
+          "y": "latency (ms)"
+        },
+        {
+          "title": "Throughput of the gateway",
+          "x": "concurrent callers",
+          "y": "requests per second"
+        }
+      ],
+      "dispersion": "order statistics: the bar spans the median to the 95th percentile",
+      "dpi": 200,
+      "n": "n(requests per concurrency level) = 40, n(requests) = 120",
+      "sha256": "a9849d49e5ad9dbc23a574d5b774ce139ea2e64f9a34fe24e62b4a63fec8cebb",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    },
+    "hyperparameter_tuning.png": {
+      "axes": [
+        {
+          "title": "Triage accuracy on the validation split",
+          "x": "LoRA setting",
+          "y": "accuracy (share of cases)"
+        },
+        {
+          "title": "Validation loss",
+          "x": "LoRA setting",
+          "y": "cross-entropy (nats per token)"
+        }
+      ],
+      "dispersion": "95% Clopper-Pearson interval on the accuracy; the loss is a single value",
+      "dpi": 200,
+      "n": "n(validation cases) = 60",
+      "sha256": "c1e1e5f93e9180310b9eebb03cecb37f6271d2bc9491d08ad293cb0b694946e0",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    },
+    "recall_versus_transfer.png": {
+      "axes": [
+        {
+          "title": "Restatement against transfer",
+          "x": "system",
+          "y": "accuracy (share of cases)"
+        },
+        {
+          "title": "Internal minus clinical, with its interval",
+          "x": "difference in accuracy (percentage points / 100)",
+          "y": "system"
+        }
+      ],
+      "dispersion": "95% Wilson interval on each accuracy; 95% Newcombe interval on the difference, the two sets being independent",
+      "dpi": 200,
+      "n": "n(internal cases) = 120, n(clinical cases) = 60",
+      "sha256": "67de5e7797296cef12a86c77efd07f46723d7d9651ef1e767625dbcfdc958591",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    },
+    "sft_training.png": {
+      "axes": [
+        {
+          "title": "Supervised fine-tuning",
+          "x": "optimiser step",
+          "y": "cross-entropy loss (nats per token)"
+        }
+      ],
+      "dispersion": null,
+      "dpi": 200,
+      "n": "n(logged steps) = 50",
+      "sha256": "fc17d646301fd17253e632c6205c536bd532d6a8c1f1d9d95677516a7daab91e",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    },
+    "systems_comparison.png": {
+      "axes": [
+        {
+          "title": "Accuracy",
+          "x": "system",
+          "y": "accuracy (share of cases)"
+        },
+        {
+          "title": "Undertriage — the failure that costs",
+          "x": "system",
+          "y": "share of urgent cases"
+        },
+        {
+          "title": "Overtriage — the cost of caution",
+          "x": "system",
+          "y": "share of all cases"
+        }
+      ],
+      "dispersion": "95% interval on each proportion — exact (Clopper-Pearson) on undertriage, Wilson on accuracy; overtriage is drawn without one, it is not the safety metric",
+      "dpi": 200,
+      "n": "n(cases) = 60, n(urgent cases) = 40",
+      "sha256": "b33f3a9495a1d73f7763353ee0ebf966207b9afd35a99566e5e4adf989050932",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    },
+    "undertriage_by_case_type.png": {
+      "axes": [
+        {
+          "title": "Undertriage by kind of presentation",
+          "x": "kind of presentation",
+          "y": "share of urgent cases missed"
+        }
+      ],
+      "dispersion": "95% exact (Clopper-Pearson) interval, drawn at every effective",
+      "dpi": 200,
+      "n": "n(urgent, direct) = 20, n(urgent, falsely reassuring) = 10, n(urgent, falsely alarming) = 5, n(urgent, negation) = 2, n(urgent, discordant vitals) = 3",
+      "sha256": "48624d902eb2e79e9ac02534913a4af04ed9fbcc17580e1dd349c12e802beb25",
+      "source": "scripts/build_figures.py",
+      "style_version": 1,
+      "written": "2026-09-17"
+    }
+  },
+  "schema": "image-manifest/1"
+}

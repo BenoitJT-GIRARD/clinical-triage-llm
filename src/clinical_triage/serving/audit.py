@@ -1,25 +1,23 @@
-"""Journal d'audit des interactions de triage.
+"""Audit log of triage interactions.
 
-Le cahier des charges demande de « garantir la traçabilité de chaque interaction
-pour les audits médicaux ». Concrètement : pouvoir, des mois plus tard, retrouver
-ce qui a été demandé, ce que l'agent a répondu, avec quel modèle, en combien de
-temps, et ce que la règle explicite en aurait dit.
+The requirement is to trace every interaction for medical audits. Concretely: to be able,
+months later, to find what was asked, what the agent answered, with which model, how fast, and
+what the explicit rule would have said about it.
 
-Deux points de conformité, qui ne vont pas de soi :
+Two compliance points that are not obvious:
 
-- **les deux textes sont anonymisés avant d'être écrits.** Le journal est le seul
-  endroit du système où des données patient réelles se déposeraient durablement.
-  La description reçue passe donc par le masquage RGPD avant d'atteindre le
-  disque — **et la réponse aussi**, parce que la justification produite par le
-  modèle reprend le récit du soignant et y ramènerait un nom masqué d'un côté
-  par la porte de l'autre. Le module qui prétend écrire des données anonymisées
-  doit les anonymiser lui-même, pas faire confiance à son appelant ;
-- **la version du modèle est celle réellement chargée**, transmise par le service
-  au moment de l'appel. Une constante de configuration pourrait décrire un modèle
-  qui n'est pas celui qui a répondu, et une traçabilité falsifiable ne trace rien.
+- **both texts are anonymised before being written.** The log is the only place in the system
+  where real patient data would settle durably. The description received therefore goes through
+  GDPR masking before reaching the disk — **and so does the answer**, because the justification
+  the model produces echoes the nurse's narrative and would bring back through one door a name
+  masked at the other. A module that claims to write anonymised data must anonymise it itself,
+  not trust its caller;
+- **the model version is the one actually loaded**, passed by the service at call time. A
+  configuration constant could describe a model that is not the one that answered, and
+  falsifiable traceability traces nothing.
 
-Le fichier est un JSONL : une ligne par interaction, lisible sans outil, et dont
-l'ajout est atomique tant que les écritures restent d'un seul processus.
+The file is JSONL: one line per interaction, readable without a tool, and appended atomically
+as long as writes come from a single process.
 """
 
 from __future__ import annotations
@@ -36,128 +34,124 @@ from clinical_triage.utils import get_logger
 
 logger = get_logger("audit")
 
-# Durée de conservation annoncée aux utilisateurs du service. Elle est inscrite
-# dans chaque ligne pour que l'obligation soit portée par la donnée elle-même.
-RETENTION_JOURS = 365
+# Retention period announced to users of the service. It is written into every line so that the
+# obligation is carried by the data itself.
+RETENTION_DAYS = 365
 
 
 def audit_log_path() -> Path:
-    """Chemin du journal d'audit, surchargeable pour le déploiement en conteneur."""
-    configure = os.getenv("TRIAGE_AUDIT_LOG")
-    return Path(configure) if configure else PATHS.logs / "audit_triage.jsonl"
+    """Path of the audit log, overridable for container deployment."""
+    configured = os.getenv("TRIAGE_AUDIT_LOG")
+    return Path(configured) if configured else PATHS.logs / "audit_triage.jsonl"
 
 
-def verifier_que_le_journal_est_ecrivable(log_path: Path | None = None) -> Path:
-    """Ouvre le journal en écriture au démarrage, et refuse de servir sinon.
+def check_log_is_writable(log_path: Path | None = None) -> Path:
+    """Open the log for writing at startup, and refuse to serve otherwise.
 
-    La traçabilité est une exigence de conformité : un service qui répond sans
-    pouvoir consigner ce qu'il a répondu ne remplit pas le contrat. Sans ce
-    contrôle, l'indisponibilité du journal ne se voit qu'à la première requête,
-    après que la décision a été produite, sous la forme d'une erreur 500 dont la
-    cause ne figure que dans les traces du conteneur.
+    Traceability is a compliance requirement: a service that answers without being able to
+    record what it answered does not meet the contract. Without this check, an unavailable log
+    only shows up at the first request, after the decision has been produced, as a 500 whose
+    cause appears only in the container logs.
 
-    Le cas se produit dès qu'un volume monté appartient à un autre utilisateur
-    que celui qui fait tourner le service.
+    The case occurs as soon as a mounted volume belongs to a user other than the one running
+    the service.
     """
-    chemin = log_path or audit_log_path()
+    path = log_path or audit_log_path()
     try:
-        chemin.parent.mkdir(parents=True, exist_ok=True)
-        with chemin.open("a", encoding="utf-8"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8"):
             pass
-    except OSError as erreur:
+    except OSError as error:
         raise RuntimeError(
-            f"Journal d'audit inaccessible en écriture ({chemin}) : {erreur}. "
-            "La traçabilité de chaque interaction est une exigence du service : "
-            "il ne démarre pas sans elle."
-        ) from erreur
-    return chemin
+            f"Audit log not writable ({path}): {error}. Tracing every interaction is a "
+            "requirement of this service: it does not start without it."
+        ) from error
+    return path
 
 
 def new_request_id() -> str:
-    """Génère un identifiant d'interaction unique."""
+    """Generate a unique interaction id."""
     return uuid.uuid4().hex[:16]
 
 
 @dataclass(frozen=True)
 class AuditEntry:
-    """Ligne du journal d'audit."""
+    """One line of the audit log."""
 
     request_id: str
     timestamp: str
-    symptomes_anonymises: str
-    niveau: str | None
-    niveau_regle: str | None
-    raisons_regle: list[str]
-    reponse_anonymisee: str
-    # Vrai lorsque la description dépasse la fenêtre du modèle et se trouve bornée
-    # avant l'appel : le modèle ne lit alors qu'une partie du récit. Une décision de
-    # triage prise sur un récit incomplet doit laisser une trace, c'est le sens même
-    # de ce journal.
-    description_tronquee: bool
-    latence_ms: float
-    modele: str
-    moteur: str
-    retention_jours: int
+    anonymised_symptoms: str
+    level: str | None
+    rule_level: str | None
+    rule_reasons: list[str]
+    anonymised_answer: str
+    # True when the description exceeds the model window and is bounded before the call: the
+    # model then reads only part of the narrative. A triage decision taken on an incomplete
+    # narrative must leave a trace — that is the very purpose of this log.
+    description_truncated: bool
+    latency_ms: float
+    model: str
+    engine: str
+    retention_days: int
 
 
-def masquer(texte: str) -> str:
-    """Masque les données personnelles d'un texte, sans savoir en quelle langue il est.
+def mask(text: str) -> str:
+    """Mask personal data in a text without knowing which language it is in.
 
-    L'API accepte du texte libre et le modèle est bilingue : une description
-    arrive aussi bien en anglais qu'en français. Anonymiser avec le seul moteur
-    français laisserait « Mr Jenkins » en clair dans le journal — le seul endroit
-    du système où une donnée personnelle est conservée, et pour un an.
+    The API accepts free text and the model is bilingual: a description arrives in English as
+    readily as in French. Anonymising with the French engine alone would leave "Mr Jenkins" in
+    the clear in the log — the one place in the system where personal data is kept, and for a
+    year.
 
-    Plutôt que de deviner la langue, on enchaîne les deux passes. Les deux
-    moteurs spaCy sont déjà chargés dans l'image de service, et la seconde passe
-    ne voit du texte de la première que ce qu'elle n'a pas masqué : les balises
-    posées par l'une ne sont pas des noms propres pour l'autre.
+    Rather than guessing the language, both passes are chained. Both spaCy engines are already
+    loaded in the service image, and the second pass sees of the first's text only what it did
+    not mask: the placeholders one leaves behind are not proper nouns to the other.
     """
     from clinical_triage.data.anonymize import anonymize_text
 
-    return anonymize_text(anonymize_text(texte, "fr"), "en")
+    return anonymize_text(anonymize_text(text, "fr"), "en")
 
 
 def record_interaction(
     request_id: str,
-    symptomes: str,
-    niveau: str | None,
-    reponse: str,
-    latence_ms: float,
-    modele: str,
-    moteur: str,
-    niveau_regle: str | None = None,
-    raisons_regle: list[str] | None = None,
-    description_tronquee: bool = False,
+    symptoms: str,
+    level: str | None,
+    answer: str,
+    latency_ms: float,
+    model: str,
+    engine: str,
+    rule_level: str | None = None,
+    rule_reasons: list[str] | None = None,
+    description_truncated: bool = False,
     log_path: Path | None = None,
 ) -> AuditEntry:
-    """Anonymise puis consigne une interaction, et renvoie la ligne écrite."""
-    entree = AuditEntry(
+    """Anonymise then record one interaction, and return the line written."""
+    entry = AuditEntry(
         request_id=request_id,
         timestamp=datetime.now(UTC).isoformat(),
-        symptomes_anonymises=masquer(symptomes),
-        niveau=niveau,
-        niveau_regle=niveau_regle,
-        raisons_regle=raisons_regle or [],
-        reponse_anonymisee=masquer(reponse),
-        description_tronquee=description_tronquee,
-        latence_ms=round(latence_ms, 1),
-        modele=modele,
-        moteur=moteur,
-        retention_jours=RETENTION_JOURS,
+        anonymised_symptoms=mask(symptoms),
+        level=level,
+        rule_level=rule_level,
+        rule_reasons=rule_reasons or [],
+        anonymised_answer=mask(answer),
+        description_truncated=description_truncated,
+        latency_ms=round(latency_ms, 1),
+        model=model,
+        engine=engine,
+        retention_days=RETENTION_DAYS,
     )
-    chemin = log_path or audit_log_path()
-    chemin.parent.mkdir(parents=True, exist_ok=True)
-    with chemin.open("a", encoding="utf-8") as fichier:
-        fichier.write(json.dumps(asdict(entree), ensure_ascii=False) + "\n")
-    return entree
+    path = log_path or audit_log_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(asdict(entry), ensure_ascii=False) + "\n")
+    return entry
 
 
 def read_entries(log_path: Path | None = None, limit: int | None = None) -> list[dict]:
-    """Relit le journal d'audit, pour vérification ou export."""
-    chemin = log_path or audit_log_path()
-    if not chemin.exists():
+    """Read the audit log back, for verification or export."""
+    path = log_path or audit_log_path()
+    if not path.exists():
         return []
-    with chemin.open(encoding="utf-8") as fichier:
-        lignes = [json.loads(ligne) for ligne in fichier if ligne.strip()]
-    return lignes[-limit:] if limit else lignes
+    with path.open(encoding="utf-8") as handle:
+        lines = [json.loads(line) for line in handle if line.strip()]
+    return lines[-limit:] if limit else lines

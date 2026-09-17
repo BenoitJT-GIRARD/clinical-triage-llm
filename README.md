@@ -1,4 +1,4 @@
-# Agent IA de triage médical
+# Agent IA de triage médical — the emergency department
 
 [![CI](https://github.com/BenoitJT-GIRARD/clinical-triage/actions/workflows/ci.yml/badge.svg)](https://github.com/BenoitJT-GIRARD/clinical-triage/actions/workflows/ci.yml)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
@@ -34,7 +34,7 @@ deux : un agent d'aide à la décision doit rendre son désaccord visible.
 ## Ce que ce dépôt contient
 
 ```
-clinical-triage/
+triage/
 ├── src/clinical_triage/
 │   ├── config.py            # chemins, graines, hyperparamètres — source unique
 │   ├── prompts.py           # format de dialogue, partagé par toutes les étapes
@@ -82,16 +82,17 @@ export MLFLOW_TRACKING_URI="sqlite:///$HOME/.local/share/clinical-triage/mlflow.
 ## Le pipeline, dans l'ordre
 
 ```bash
-uv run python scripts/01_build_dataset.py         # dataset bilingue et jeu d'évaluation
-uv run python scripts/02_tune_hyperparameters.py  # comparaison des configurations
-uv run python scripts/03_train_sft.py             # fine-tuning supervisé
-uv run python scripts/04_merge_and_export.py --adapter sft
-uv run python scripts/05_train_dpo.py             # alignement par préférences
-uv run python scripts/04_merge_and_export.py --adapter dpo
-uv run python scripts/06_evaluate.py              # évaluation comparée aux références
-docker compose -f deploy/docker-compose.yml up    # endpoint vLLM + passerelle
-uv run python scripts/07_benchmark_endpoint.py --api-key "$TRIAGE_API_KEY"  # latence et débit
-uv run python scripts/08_publish_hf.py --what tout
+uv run python scripts/build_dataset.py         # dataset bilingue et jeu d'évaluation
+uv run python scripts/tune_hyperparameters.py  # comparaison des configurations
+uv run python scripts/train_sft.py             # fine-tuning supervisé
+uv run python scripts/merge_adapter.py --adapter sft
+uv run python scripts/train_dpo.py             # alignement par préférences
+uv run python scripts/merge_adapter.py --adapter dpo
+uv run python scripts/run_evaluation.py              # évaluation comparée aux références
+docker compose -f infra/docker-compose.yml up    # endpoint vLLM + passerelle
+uv run python scripts/benchmark_endpoint.py --api-key "$TRIAGE_API_KEY"  # latence et débit
+uv run python scripts/publish_to_hub.py --what tout
+uv run python scripts/build_figures.py          # figures
 ```
 
 Les notebooks `01` à `05` commentent ces mêmes étapes et se rejouent une fois le
@@ -154,7 +155,7 @@ vérifie qu'elle démarre, répond, et refuse un appel sans clé**.
 |---|---|---|
 | 1 | Dataset médical bilingue | [`data/processed/`](data/processed) et le Hugging Face Hub |
 | 2 | Modèle spécialisé (SFT + LoRA, puis DPO) | Hugging Face Hub, cartes dans `reports/` |
-| 3 | Endpoint de démonstration | [`deploy/`](deploy/README.md) |
+| 3 | Endpoint de démonstration | [`infra/`](deploy/README.md) |
 | 4 | Pipeline CI/CD | [`.github/workflows/`](.github/workflows) |
 
 ## Licence

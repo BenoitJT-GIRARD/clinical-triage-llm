@@ -6,7 +6,7 @@ rupture sur l'un ou l'autre incrémente la version majeure.
 
 ## 1.0.0
 
-Première version complète du prototype.
+Première version complète du prototype, livrée à la direction médicale du service.
 
 ### Données
 
@@ -109,7 +109,7 @@ Première version complète du prototype.
   panneau, effectif et estimateur au pied de chaque figure, nombres à la
   française, échelle de couleur commune et barre d'échelle sur les matrices de
   confusion, et une mesure absente qui ne se dessine plus comme une valeur nulle.
-- Contrôles de sécurité sur le contenu généré : recommandation incohérente,
+- Contrôles de sécurité sur le contenu généré : recommendation incohérente,
   diagnostic affirmé, réponse hors langue, constante inventée ou falsifiée,
   structure de réponse incomplète, niveau annoncé hors de la taxonomie.
 - Contrôles de sécurité validés sur les réponses de référence du catalogue : les

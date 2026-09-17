@@ -1,24 +1,28 @@
-"""API de l'agent de triage.
+"""The triage service API.
 
-Trois points d'entrée : la sonde de santé, le questionnaire adaptatif et le
-triage. Deux moteurs d'inférence interchangeables derrière le même contrat :
+Three entry points: the health probe, the adaptive questionnaire and the triage itself. Two
+interchangeable inference engines behind one contract:
 
-- `vllm` — le mode de déploiement. L'API est une passerelle légère, sans torch,
-  qui délègue la génération à un serveur vLLM ;
-- `transformers` — le mode démonstration. Le modèle est chargé dans le processus,
-  ce qui permet de faire tourner la démonstration sur un poste sans vLLM.
+- ``vllm`` — the deployment mode. The API is a thin gateway, torch-free, that delegates
+  generation to a vLLM server;
+- ``transformers`` — the demonstration mode. The model is loaded in-process, which lets the
+  demonstration run on a machine without vLLM.
 
-Les précautions d'exploitation sont regroupées au démarrage plutôt que dispersées
-dans les points d'entrée :
+The operational precautions are gathered at startup rather than scattered across the entry
+points:
 
-- **la clé d'API est obligatoire.** Le service refuse de démarrer sans elle, sauf
-  si l'exploitant demande explicitement le mode ouvert. Une authentification qui
-  se désactive toute seule quand une variable manque n'est pas une authentification ;
-- **la comparaison des clés est à temps constant**, pour ne pas laisser fuiter la
-  clé octet par octet par la durée de la réponse ;
-- **le débit est limité par appelant**, parce que chaque requête mobilise un GPU ;
-- **la sonde de santé interroge réellement le moteur.** Une sonde qui répond
-  toujours « ok » ne déclenche aucun redémarrage le jour où l'inférence tombe.
+- **the API key is mandatory.** The service refuses to start without one, unless the operator
+  explicitly asks for open mode. An authentication that disables itself when a variable is
+  missing is not an authentication;
+- **key comparison is constant-time**, so the key cannot leak byte by byte through response
+  timing;
+- **throughput is capped per caller**, because every request occupies a GPU;
+- **the health probe really questions the engine.** A probe that always answers "ok" triggers
+  no restart the day inference falls over.
+
+Clinical text — the justification and the recommendation — stays in French, because that is
+what the model produces and what the staff reads. HTTP error details are in English: they are
+read by whoever integrates the service, not by a nurse.
 """
 
 from __future__ import annotations
@@ -41,9 +45,9 @@ from clinical_triage.prompts import (
     truncate_to_answer,
 )
 from clinical_triage.serving.audit import (
+    check_log_is_writable,
     new_request_id,
     record_interaction,
-    verifier_que_le_journal_est_ecrivable,
 )
 from clinical_triage.serving.questionnaire import compile_symptoms, next_question
 from clinical_triage.serving.schemas import (
@@ -53,14 +57,14 @@ from clinical_triage.serving.schemas import (
     TriageReply,
     TriageRequest,
 )
-from clinical_triage.utils import chemin_pour_journal, get_logger
+from clinical_triage.utils import get_logger, path_for_log
 
 logger = get_logger("api")
 
 
 @dataclass(frozen=True)
 class Settings:
-    """Configuration du service, lue une fois au démarrage."""
+    """Service configuration, read once at startup."""
 
     backend: str
     base_model: str
@@ -71,23 +75,22 @@ class Settings:
     vllm_url: str
     vllm_model: str
     vllm_api_key: str
-    requetes_par_minute: int
+    requests_per_minute: int
 
     @property
-    def entetes_vllm(self) -> dict[str, str]:
-        """En-têtes envoyés au moteur d'inférence.
+    def vllm_headers(self) -> dict[str, str]:
+        """Headers sent to the inference engine.
 
-        Quand le moteur est joignable autrement que par la boucle locale — c'est
-        le cas sur un hébergeur à la demande — il doit demander une clé, sinon il
-        offre une inférence GPU gratuite, sans quota et sans trace d'audit à qui
-        trouve son adresse. vLLM sait le faire avec `--api-key` ; la passerelle
-        la lui présente ici.
+        When the engine is reachable other than through the loopback — which is the case on an
+        on-demand host — it must ask for a key, otherwise it offers free GPU inference, with no
+        quota and no audit trail, to whoever finds its address. vLLM can do that with
+        ``--api-key``; the gateway presents it here.
         """
         return {"Authorization": f"Bearer {self.vllm_api_key}"} if self.vllm_api_key else {}
 
     @staticmethod
     def from_env() -> Settings:
-        """Construit la configuration à partir des variables d'environnement."""
+        """Build the configuration from the environment variables."""
         return Settings(
             backend=os.getenv("TRIAGE_BACKEND", "vllm"),
             base_model=os.getenv("TRIAGE_BASE_MODEL", str(PATHS.sft_merged)),
@@ -97,77 +100,73 @@ class Settings:
             allow_anonymous=os.getenv("TRIAGE_ALLOW_ANONYMOUS", "").lower() == "true",
             vllm_url=os.getenv("TRIAGE_VLLM_URL", "http://localhost:8000"),
             vllm_model=os.getenv("TRIAGE_VLLM_MODEL", SERVING.served_model_name),
-            # À défaut de clé propre au moteur, on lui présente celle du service :
-            # sur la pile locale le moteur n'en demande pas et l'en-tête est
-            # ignoré, chez un hébergeur il la réclame et la passerelle l'a.
+            # Failing a key of its own, the engine is presented with the service's: on the
+            # local stack the engine asks for none and the header is ignored, on a host it asks
+            # and the gateway has one.
             vllm_api_key=os.getenv("TRIAGE_VLLM_API_KEY") or os.getenv("TRIAGE_API_KEY", ""),
-            requetes_par_minute=int(os.getenv("TRIAGE_RATE_LIMIT", "60")),
+            requests_per_minute=int(os.getenv("TRIAGE_RATE_LIMIT", "60")),
         )
 
 
 @dataclass
 class RateLimiter:
-    """Limitation de débit par appelant, sur une fenêtre glissante d'une minute."""
+    """Per-caller rate limit, over a sliding one-minute window."""
 
-    requetes_par_minute: int
-    _historique: dict[str, deque[float]] = field(default_factory=lambda: defaultdict(deque))
-    _dernier_oubli: float = field(default_factory=time.monotonic)
+    requests_per_minute: int
+    _history: dict[str, deque[float]] = field(default_factory=lambda: defaultdict(deque))
+    _last_sweep: float = field(default_factory=time.monotonic)
 
-    def _oublier_les_appelants_silencieux(self, maintenant: float) -> None:
-        """Retire du suivi les appelants qui n'ont rien demandé depuis une minute.
+    def _forget_silent_callers(self, now: float) -> None:
+        """Drop from tracking the callers that have asked nothing for a minute.
 
-        Sans cela, le dictionnaire conserve une entrée par appelant vu depuis le
-        démarrage. En mode ouvert, où la clé est l'adresse de l'appelant, il
-        grossit indéfiniment : un compteur censé protéger le service finirait
-        par le mettre en difficulté lui-même. Le balayage ne coûte qu'une fois
-        par minute.
+        Without this, the dictionary keeps one entry per caller seen since startup. In open
+        mode, where the key is the caller's address, it grows without bound: a counter meant to
+        protect the service would end up straining it. The sweep costs once a minute.
         """
-        if maintenant - self._dernier_oubli < 60:
+        if now - self._last_sweep < 60:
             return
-        self._dernier_oubli = maintenant
-        silencieux = [
-            appelant
-            for appelant, recentes in self._historique.items()
-            if not recentes or maintenant - recentes[-1] > 60
+        self._last_sweep = now
+        silent = [
+            caller
+            for caller, recent in self._history.items()
+            if not recent or now - recent[-1] > 60
         ]
-        for appelant in silencieux:
-            del self._historique[appelant]
+        for caller in silent:
+            del self._history[caller]
 
-    def autorise(self, appelant: str) -> bool:
-        """Enregistre une requête et dit si elle reste dans le quota."""
-        maintenant = time.monotonic()
-        self._oublier_les_appelants_silencieux(maintenant)
-        recentes = self._historique[appelant]
-        while recentes and maintenant - recentes[0] > 60:
-            recentes.popleft()
-        if len(recentes) >= self.requetes_par_minute:
+    def allows(self, caller: str) -> bool:
+        """Record a request and say whether it stays inside the quota."""
+        now = time.monotonic()
+        self._forget_silent_callers(now)
+        recent = self._history[caller]
+        while recent and now - recent[0] > 60:
+            recent.popleft()
+        if len(recent) >= self.requests_per_minute:
             return False
-        recentes.append(maintenant)
+        recent.append(now)
         return True
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lit la configuration, vérifie la sécurité et charge le moteur d'inférence."""
+    """Read the configuration, check security and load the inference engine."""
     settings = Settings.from_env()
     if not settings.api_key and not settings.allow_anonymous:
         raise RuntimeError(
-            "TRIAGE_API_KEY n'est pas définie. Renseignez une clé, ou demandez explicitement "
-            "le mode ouvert avec TRIAGE_ALLOW_ANONYMOUS=true (démonstration locale uniquement)."
+            "TRIAGE_API_KEY is not set. Provide a key, or ask explicitly for open mode with "
+            "TRIAGE_ALLOW_ANONYMOUS=true (local demonstration only)."
         )
     if not settings.api_key:
-        logger.warning("Service démarré sans clé d'API : mode ouvert, réservé à la démonstration.")
+        logger.warning("Service started without an API key: open mode, demonstration only.")
 
-    # Le journal d'audit est ouvert ici, à vide, pour que son indisponibilité
-    # arrête le démarrage plutôt que la première requête.
-    logger.info(
-        "Journal d'audit : %s", chemin_pour_journal(verifier_que_le_journal_est_ecrivable())
-    )
+    # The audit log is opened here, empty, so that its unavailability stops startup rather than
+    # the first request.
+    logger.info("Audit log: %s", path_for_log(check_log_is_writable()))
 
     app.state.settings = settings
-    app.state.limiteur = RateLimiter(settings.requetes_par_minute)
+    app.state.limiter = RateLimiter(settings.requests_per_minute)
     app.state.agent = None
-    app.state.modele_charge = settings.model_version
+    app.state.loaded_model = settings.model_version
 
     if settings.backend == "transformers":
         from clinical_triage.inference import TriageAgent
@@ -175,33 +174,33 @@ async def lifespan(app: FastAPI):
         base = settings.base_model
         if not os.path.isdir(base):
             raise RuntimeError(
-                f"Modèle introuvable : {base}. Lancez scripts/04_merge_and_export.py, ou "
-                "pointez TRIAGE_BASE_MODEL vers un modèle disponible."
+                f"Model not found: {base}. Run scripts/merge_adapter.py, or point "
+                "TRIAGE_BASE_MODEL at a model that exists."
             )
-        adaptateur = settings.adapter_dir if os.path.isdir(settings.adapter_dir) else None
-        if adaptateur is None:
-            # Le service reste utilisable, mais sert alors le modèle supervisé
-            # seul : le journal d'audit doit en porter la trace, sans quoi les
-            # réponses seraient attribuées à un modèle qui ne les a pas produites.
+        adapter = settings.adapter_dir if os.path.isdir(settings.adapter_dir) else None
+        if adapter is None:
+            # The service stays usable, but then serves the supervised model alone: the audit
+            # log must carry that, otherwise the answers would be attributed to a model that
+            # did not produce them.
             logger.warning(
-                "Adaptateur introuvable (%s) : le modèle est servi sans alignement.",
-                chemin_pour_journal(settings.adapter_dir),
+                "Adapter not found (%s): the model is served without alignment.",
+                path_for_log(settings.adapter_dir),
             )
-        app.state.agent = TriageAgent(adapter_dir=adaptateur, base_model=base)
-        app.state.modele_charge = app.state.agent.description
-        logger.info("Moteur transformers prêt : %s", app.state.modele_charge)
+        app.state.agent = TriageAgent(adapter_dir=adapter, base_model=base)
+        app.state.loaded_model = app.state.agent.description
+        logger.info("transformers engine ready: %s", app.state.loaded_model)
     else:
-        logger.info("Moteur vLLM : génération déléguée à %s", settings.vllm_url)
+        logger.info("vLLM engine: generation delegated to %s", settings.vllm_url)
 
     yield
     app.state.agent = None
 
 
 app = FastAPI(
-    title="Agent IA de triage médical",
+    title="Emergency triage assistant",
     description=(
-        "Aide à la décision pour le triage des urgences. Le niveau proposé ne remplace "
-        "pas l'évaluation d'un soignant ; en cas de signe vital engagé, appeler le 15 (SAMU)."
+        "Decision support for emergency triage. The level proposed does not replace a "
+        "clinician's assessment; on any life-threatening sign, call the emergency services."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -209,120 +208,118 @@ app = FastAPI(
 
 
 def require_api_key(request: Request, x_api_key: str | None = Header(default=None)) -> None:
-    """Vérifie la clé d'API, en temps constant, puis applique la limite de débit."""
+    """Check the API key in constant time, then apply the rate limit."""
     settings: Settings = request.app.state.settings
     if settings.api_key:
-        fournie = x_api_key or ""
-        if not secrets.compare_digest(fournie, settings.api_key):
+        provided = x_api_key or ""
+        if not secrets.compare_digest(provided, settings.api_key):
             raise HTTPException(
                 status_code=401,
-                detail="Clé d'API absente ou invalide. Renseignez l'en-tête X-API-Key.",
+                detail="Missing or invalid API key. Set the X-API-Key header.",
             )
-    # L'en-tête ne sert d'identité de comptage que s'il vient d'être vérifié. En
-    # mode ouvert, il n'est vérifié par personne : un appelant qui en change à
-    # chaque requête obtiendrait un seau neuf à chaque fois, et le quota — seul
-    # garde-fou restant dans ce mode — ne compterait plus rien.
-    adresse = request.client.host if request.client else "inconnu"
-    appelant = x_api_key if (settings.api_key and x_api_key) else adresse
-    if not request.app.state.limiteur.autorise(appelant):
-        # Annoncer le quota évite à l'intégrateur de le découvrir par tâtonnement.
+    # The header only serves as a counting identity once it has just been verified. In open
+    # mode nobody verifies it: a caller changing it on every request would get a fresh bucket
+    # each time, and the quota — the only guard rail left in that mode — would count nothing.
+    address = request.client.host if request.client else "unknown"
+    caller = x_api_key if (settings.api_key and x_api_key) else address
+    if not request.app.state.limiter.allows(caller):
+        # Announcing the quota saves the integrator from discovering it by trial and error.
         raise HTTPException(
             status_code=429,
             detail=(
-                f"Quota de {settings.requetes_par_minute} requêtes par minute dépassé. "
-                "Réessayez dans une minute."
+                f"Quota of {settings.requests_per_minute} requests per minute exceeded. "
+                "Try again in a minute."
             ),
         )
 
 
-# Nombre de caractères au-delà duquel la passerelle borne la description.
+# Number of characters beyond which the gateway bounds the description.
 #
-# Le moteur vLLM sert une fenêtre de 1 024 jetons, dont 220 sont réservés à la
-# réponse et environ 224 à la consigne système : il reste 580 jetons pour le
-# récit du patient. Sur du français clinique, un jeton vaut environ 2,7
-# caractères ; on retient 1 500, soit une marge confortable sous la borne.
+# The vLLM engine serves a 1,024-token window, of which 220 are reserved for the answer and
+# about 224 for the system prompt: 580 tokens are left for the patient's narrative. On clinical
+# French a token is worth about 2.7 characters; 1,500 leaves a comfortable margin under the
+# bound.
 #
-# La passerelle n'embarque pas de tokenizer — c'est tout l'intérêt d'une
-# passerelle légère — d'où cette approximation par les caractères. Le moteur
-# local, lui, borne en jetons parce qu'il en a un.
-CARACTERES_MAXIMUM = 1500
+# The gateway carries no tokenizer — that is the whole point of a thin gateway — hence this
+# approximation in characters. The local engine bounds in tokens, because it has one.
+MAX_CHARACTERS = 1500
 
 
-def borner_en_caracteres(texte: str) -> tuple[str, bool]:
-    """Borne une description trop longue, et dit si elle l'a été."""
-    if len(texte) <= CARACTERES_MAXIMUM:
-        return texte, False
-    return texte[:CARACTERES_MAXIMUM], True
+def bound_in_characters(text: str) -> tuple[str, bool]:
+    """Bound a description that is too long, and say whether it was."""
+    if len(text) <= MAX_CHARACTERS:
+        return text, False
+    return text[:MAX_CHARACTERS], True
 
 
-def _generer_transformers(request: Request, symptomes: str) -> tuple[str, str | None, float, bool]:
-    """Génère la réponse avec le moteur local."""
-    reponse = request.app.state.agent.generate(symptomes)
-    return reponse.text, reponse.level, reponse.latency_ms, reponse.description_tronquee
+def _generate_transformers(request: Request, symptoms: str) -> tuple[str, str | None, float, bool]:
+    """Generate the answer with the local engine."""
+    answer = request.app.state.agent.generate(symptoms)
+    return answer.text, answer.level, answer.latency_ms, answer.description_truncated
 
 
-def _generer_vllm(request: Request, symptomes: str) -> tuple[str, str | None, float, bool]:
-    """Génère la réponse via le serveur vLLM, par son API compatible OpenAI."""
+def _generate_vllm(request: Request, symptoms: str) -> tuple[str, str | None, float, bool]:
+    """Generate the answer through the vLLM server, over its OpenAI-compatible API."""
     import httpx
 
     settings: Settings = request.app.state.settings
-    symptomes, tronquee = borner_en_caracteres(symptomes)
-    charge_utile = completion_payload(symptomes, settings.vllm_model)
-    debut = time.perf_counter()
+    symptoms, truncated = bound_in_characters(symptoms)
+    payload = completion_payload(symptoms, settings.vllm_model)
+    started = time.perf_counter()
     try:
         with httpx.Client(timeout=60) as client:
-            reponse = client.post(
+            response = client.post(
                 f"{settings.vllm_url}/v1/completions",
-                json=charge_utile,
-                headers=settings.entetes_vllm,
+                json=payload,
+                headers=settings.vllm_headers,
             )
-            reponse.raise_for_status()
-            texte = reponse.json()["choices"][0]["text"]
-    except httpx.HTTPError as erreur:
-        # La cause technique va au journal, pas à l'appelant : elle contient
-        # l'adresse interne du serveur d'inférence, que rien ne justifie
-        # d'exposer. L'appelant reçoit ce qu'il peut en faire — réessayer.
-        logger.error("Appel au serveur vLLM en échec : %s", erreur)
+            response.raise_for_status()
+            text = response.json()["choices"][0]["text"]
+    except httpx.HTTPError as error:
+        # The technical cause goes to the log, not to the caller: it contains the internal
+        # address of the inference server, which nothing justifies exposing. The caller gets
+        # what they can act on — retry.
+        logger.error("Call to the vLLM server failed: %s", error)
         raise HTTPException(
             status_code=503,
             detail=(
-                "Le moteur d'inférence ne répond pas. Le triage est momentanément "
-                "indisponible ; réessayez dans quelques instants."
+                "The inference engine is not responding. Triage is temporarily unavailable; "
+                "try again in a few moments."
             ),
-        ) from erreur
-    latence = (time.perf_counter() - debut) * 1000
-    texte = truncate_to_answer(texte)
-    return texte, extract_level(texte), latence, tronquee
+        ) from error
+    latency = (time.perf_counter() - started) * 1000
+    text = truncate_to_answer(text)
+    return text, extract_level(text), latency, truncated
 
 
 @app.get("/health", response_model=HealthReply)
 def health(request: Request) -> HealthReply:
-    """Sonde de disponibilité : interroge réellement le moteur d'inférence."""
+    """Availability probe: really questions the inference engine."""
     settings: Settings = request.app.state.settings
     if settings.backend == "transformers":
-        disponible = request.app.state.agent is not None
-        detail = None if disponible else "Le modèle n'est pas chargé."
+        available = request.app.state.agent is not None
+        detail = None if available else "The model is not loaded."
     else:
         import httpx
 
         try:
             with httpx.Client(timeout=3) as client:
                 client.get(
-                    f"{settings.vllm_url}/v1/models", headers=settings.entetes_vllm
+                    f"{settings.vllm_url}/v1/models", headers=settings.vllm_headers
                 ).raise_for_status()
-            disponible, detail = True, None
-        except Exception as erreur:  # noqa: BLE001 - toute panne du moteur doit être signalée
-            # Le message d'httpx contient l'adresse interrogée — sur Modal, c'est
-            # l'adresse du moteur. La sonde n'exige ni clé ni quota : elle doit
-            # donc dire qu'il y a panne, jamais où. La cause technique part au
-            # journal, comme pour la génération.
-            logger.error("Sonde vLLM en échec : %s", erreur)
-            disponible, detail = False, "Le moteur d'inférence ne répond pas."
+            available, detail = True, None
+        except Exception as error:  # noqa: BLE001 - any engine failure must be reported
+            # httpx's message contains the address it queried — on a managed host, that is the
+            # engine's address. The probe requires neither key nor quota: it must therefore say
+            # that there is a failure, never where. The technical cause goes to the log, as it
+            # does for generation.
+            logger.error("vLLM probe failed: %s", error)
+            available, detail = False, "The inference engine is not responding."
     return HealthReply(
-        status="ok" if disponible else "degraded",
+        status="ok" if available else "degraded",
         backend=settings.backend,
-        model_loaded=disponible,
-        model_version=request.app.state.modele_charge,
+        model_loaded=available,
+        model_version=request.app.state.loaded_model,
         detail=detail,
     )
 
@@ -333,60 +330,60 @@ def health(request: Request) -> HealthReply:
     dependencies=[Depends(require_api_key)],
 )
 def questionnaire_next(req: QuestionnaireRequest) -> QuestionnaireReply:
-    """Renvoie la prochaine question du questionnaire adaptatif, ou la fin de collecte."""
-    etape = next_question(req.chief_complaint, req.answers)
+    """Return the next question of the adaptive questionnaire, or the end of collection."""
+    step = next_question(req.chief_complaint, req.answers)
     return QuestionnaireReply(
-        next_question_id=etape.identifiant,
-        next_question=etape.texte,
-        theme=etape.theme,
-        finished=etape.termine,
+        next_question_id=step.identifier,
+        next_question=step.text,
+        theme=step.theme,
+        finished=step.finished,
         compiled_symptoms=compile_symptoms(req.chief_complaint, req.answers),
     )
 
 
 @app.post("/triage", response_model=TriageReply, dependencies=[Depends(require_api_key)])
 def triage(req: TriageRequest, request: Request) -> TriageReply:
-    """Évalue le niveau de priorité, le compare à la règle explicite et trace l'interaction."""
-    symptomes = req.symptoms.strip()
+    """Assess the priority level, compare it to the explicit rule and trace the interaction."""
+    symptoms = req.symptoms.strip()
     if req.patient_age is not None:
-        symptomes = f"Patient de {req.patient_age} ans. {symptomes}"
+        symptoms = f"Patient de {req.patient_age} ans. {symptoms}"
 
-    generer = (
-        _generer_transformers
+    generate = (
+        _generate_transformers
         if request.app.state.settings.backend == "transformers"
-        else _generer_vllm
+        else _generate_vllm
     )
-    texte, niveau, latence, description_tronquee = generer(request, symptomes)
+    text, level, latency, description_truncated = generate(request, symptoms)
 
-    niveau_regle = classify(symptomes)
-    raisons_regle = explain(symptomes)
-    parties = parse_response(texte)
+    rule_level = classify(symptoms)
+    rule_reasons = explain(symptoms)
+    parts = parse_response(text)
 
-    identifiant = new_request_id()
+    identifier = new_request_id()
     record_interaction(
-        request_id=identifiant,
-        symptomes=symptomes,
-        niveau=niveau,
-        reponse=texte,
-        latence_ms=latence,
-        modele=request.app.state.modele_charge,
-        moteur=request.app.state.settings.backend,
-        niveau_regle=niveau_regle,
-        raisons_regle=raisons_regle,
-        description_tronquee=description_tronquee,
+        request_id=identifier,
+        symptoms=symptoms,
+        level=level,
+        answer=text,
+        latency_ms=latency,
+        model=request.app.state.loaded_model,
+        engine=request.app.state.settings.backend,
+        rule_level=rule_level,
+        rule_reasons=rule_reasons,
+        description_truncated=description_truncated,
     )
 
     return TriageReply(
-        level=niveau,
-        level_label=TRIAGE.labels_fr.get(niveau) if niveau else None,
-        justification=parties["justification"],
-        recommendation=parties["recommendation"],
-        rule_level=niveau_regle,
-        rule_reasons=raisons_regle,
-        agreement=niveau == niveau_regle,
-        raw_response=texte,
-        description_truncated=description_tronquee,
-        latency_ms=round(latence, 1),
-        request_id=identifiant,
-        model_version=request.app.state.modele_charge,
+        level=level,
+        level_label=TRIAGE.labels_fr.get(level) if level else None,
+        justification=parts["justification"],
+        recommendation=parts["recommendation"],
+        rule_level=rule_level,
+        rule_reasons=rule_reasons,
+        agreement=level == rule_level,
+        raw_response=text,
+        description_truncated=description_truncated,
+        latency_ms=round(latency, 1),
+        request_id=identifier,
+        model_version=request.app.state.loaded_model,
     )

@@ -1,15 +1,14 @@
-"""Inférence de l'agent de triage : chargement du modèle et génération.
+"""Triage inference: loading the model and generating.
 
-Brique partagée par l'évaluation et par le service en mode démonstration. Le
-déploiement de production passe par vLLM (voir `deploy/`), mais les deux chemins
-produisent exactement la même invite et la même réponse : c'est le même gabarit
-ChatML, le même jeton de fin de séquence et la même troncature de sécurité.
+Shared by the evaluation and by the service in demonstration mode. Production deployment goes
+through vLLM (see ``infra/``), but both paths produce exactly the same prompt and the same
+answer: the same ChatML template, the same end-of-sequence token and the same safety
+truncation.
 
-La troncature mérite un mot. Un modèle de 1,7 milliard de paramètres finit
-parfois par oublier d'émettre son jeton de fin et continue à écrire. Sans filet,
-le texte renvoyé au personnel soignant et écrit au journal d'audit contient alors
-la suite de la génération, consigne système comprise. `truncate_to_answer` coupe
-après la ligne de recommandation, quoi qu'il arrive.
+That truncation deserves a word. A 1.7-billion-parameter model sometimes forgets to emit its
+end token and keeps writing. Without a net, the text returned to the nurse and written to the
+audit log then contains the rest of the generation, system prompt included.
+:func:`truncate_to_answer` cuts after the recommendation line, whatever happens.
 """
 
 from __future__ import annotations
@@ -20,58 +19,55 @@ from pathlib import Path
 
 from clinical_triage.config import MODEL, SERVING
 from clinical_triage.prompts import (
-    borner_la_description,
-    budget_de_description,
+    bound_description,
     build_messages,
+    description_budget,
     extract_level,
     format_chatml,
     prepare_tokenizer,
     truncate_to_answer,
 )
-from clinical_triage.utils import chemin_pour_journal, get_logger
+from clinical_triage.utils import get_logger, path_for_log
 
 logger = get_logger("inference")
 
 
 @dataclass
 class TriageResponse:
-    """Résultat d'une inférence de triage."""
+    """The result of one triage inference."""
 
     text: str
     level: str | None
     latency_ms: float
-    tokens_generes: int
-    arret_propre: bool  # le modèle a émis son jeton de fin avant la limite
-    # La description dépassait la fenêtre du modèle et a été coupée. Ce drapeau
-    # remonte jusqu'à la réponse rendue : le soignant est seul à savoir si ce qui
-    # manque comptait, et une troncature silencieuse d'un récit clinique est
-    # exactement ce qu'un système d'aide à la décision ne doit pas faire.
-    description_tronquee: bool = False
+    generated_tokens: int
+    clean_stop: bool  # the model emitted its end token before the cap
+    # The description exceeded the model's window and was cut. This flag travels all the way to
+    # the returned answer: the nurse alone knows whether what is missing mattered, and silently
+    # truncating a clinical narrative is exactly what a decision-support system must not do.
+    description_truncated: bool = False
 
 
-def _verifier_le_placement_sur_gpu(model) -> None:
-    """Vérifie qu'Unsloth a bien placé tout le modèle sur le GPU.
+def _check_gpu_placement(model) -> None:
+    """Check that Unsloth really put the whole model on the GPU.
 
-    Quand la mémoire vidéo manque, le chargement répartit silencieusement une
-    partie des couches sur le processeur. Unsloth mémorise l'emplacement de
-    chaque couche à cet instant, et une couche restée sur le processeur reçoit
-    un indice de périphérique vide. L'erreur ne remonte qu'à la première
-    génération, sous la forme d'un « Invalid target device: None » qui ne dit
-    rien de sa cause. On préfère la dire ici, avant d'avoir perdu le temps de
-    chargement, et avec la conduite à tenir.
+    When video memory runs short, loading silently spreads part of the layers onto the CPU.
+    Unsloth memorises the location of each layer at that moment, and a layer left on the CPU
+    gets an empty device index. The error only surfaces at the first generation, as an
+    "Invalid target device: None" that says nothing about its cause. Better to say it here,
+    before the loading time has been spent, and with what to do about it.
     """
-    emplacements = {parametre.device.type for parametre in model.parameters()}
-    if emplacements <= {"cuda"}:
+    locations = {parameter.device.type for parameter in model.parameters()}
+    if locations <= {"cuda"}:
         return
     raise RuntimeError(
-        "Mémoire GPU insuffisante : le modèle a été chargé en partie sur "
-        f"{', '.join(sorted(emplacements - {'cuda'}))}. Libérez la carte — un seul "
-        "travail GPU à la fois — puis relancez."
+        "Not enough GPU memory: the model was loaded partly on "
+        f"{', '.join(sorted(locations - {'cuda'}))}. Free the card — one GPU job at a time — "
+        "then run again."
     )
 
 
 class TriageAgent:
-    """Agent de triage : encapsule le modèle, le tokenizer et la génération."""
+    """Triage agent: wraps the model, the tokenizer and generation."""
 
     def __init__(
         self,
@@ -79,31 +75,29 @@ class TriageAgent:
         base_model: str = MODEL.base_model,
         device: str | None = None,
     ):
-        # Unsloth remplace le `forward` des couches d'attention de Qwen3 dès son
-        # import, et sa version attend des attributs qu'il ne pose que sur les
-        # modèles qu'il a lui-même chargés. Un modèle chargé par `transformers`
-        # nu dans le même processus tomberait donc sur un `forward` qui ne sait
-        # pas le manipuler. On charge avec Unsloth dès qu'il est présent, et on
-        # retombe sur `transformers` là où il ne l'est pas — l'image de service,
-        # qui n'embarque ni torch ni Unsloth.
+        # Unsloth replaces the `forward` of Qwen3's attention layers on import, and its version
+        # expects attributes it only sets on models it loaded itself. A model loaded by bare
+        # `transformers` in the same process would therefore hit a `forward` that cannot handle
+        # it. So Unsloth loads whenever it is present, and `transformers` takes over where it is
+        # not — the service image, which carries neither torch nor Unsloth.
         import importlib.util
 
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        avec_unsloth = importlib.util.find_spec("unsloth") is not None and torch.cuda.is_available()
+        with_unsloth = importlib.util.find_spec("unsloth") is not None and torch.cuda.is_available()
 
         self._torch = torch
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         dtype = torch.bfloat16 if self.device == "cuda" else torch.float32
         logger.info(
-            "Chargement du modèle %s sur %s (%s)",
-            chemin_pour_journal(base_model),
+            "Loading model %s on %s (%s)",
+            path_for_log(base_model),
             self.device,
-            "unsloth" if avec_unsloth else "transformers",
+            "unsloth" if with_unsloth else "transformers",
         )
 
-        if avec_unsloth:
+        if with_unsloth:
             from unsloth import FastLanguageModel
 
             model, self.tokenizer = FastLanguageModel.from_pretrained(
@@ -112,23 +106,23 @@ class TriageAgent:
                 dtype=dtype,
                 load_in_4bit=False,
             )
-            _verifier_le_placement_sur_gpu(model)
+            _check_gpu_placement(model)
         else:
             self.tokenizer = AutoTokenizer.from_pretrained(str(base_model))
             model = AutoModelForCausalLM.from_pretrained(str(base_model), dtype=dtype)
 
         self.end_token_id = prepare_tokenizer(self.tokenizer)
-        # Le remplissage se fait à gauche : en génération par lots, les réponses
-        # doivent toutes commencer juste après le dernier jeton de leur invite.
+        # Padding goes on the left: in batched generation every answer must start right after
+        # the last token of its own prompt.
         self.tokenizer.padding_side = "left"
 
         if adapter_dir is not None:
             from peft import PeftModel
 
-            logger.info("Application de l'adaptateur LoRA : %s", chemin_pour_journal(adapter_dir))
+            logger.info("Applying the LoRA adapter: %s", path_for_log(adapter_dir))
             model = PeftModel.from_pretrained(model, str(adapter_dir))
 
-        if avec_unsloth:
+        if with_unsloth:
             from unsloth import FastLanguageModel
 
             FastLanguageModel.for_inference(model)
@@ -141,18 +135,18 @@ class TriageAgent:
         )
 
     def _prompts(self, symptoms: list[str]) -> tuple[list[str], list[bool]]:
-        """Construit les invites ChatML, en bornant les descriptions trop longues.
+        """Build the ChatML prompts, bounding descriptions that are too long.
 
-        Une description qui déborde la fenêtre du modèle n'y produit pas une
-        réponse dégradée : elle interrompt la génération sur une erreur de
-        dimension. On la borne donc ici, et on dit pour chaque cas si elle l'a été.
+        A description that overflows the model's window does not produce a degraded answer
+        there: it interrupts generation with a dimension error. It is bounded here, and each
+        case says whether it was.
         """
-        budget = budget_de_description(self.tokenizer, MODEL.max_seq_length, SERVING.max_new_tokens)
-        bornees = [borner_la_description(s, self.tokenizer, budget) for s in symptoms]
-        invites = [
-            format_chatml(build_messages(texte), add_generation_prompt=True) for texte, _ in bornees
+        budget = description_budget(self.tokenizer, MODEL.max_seq_length, SERVING.max_new_tokens)
+        bounded = [bound_description(s, self.tokenizer, budget) for s in symptoms]
+        prompts = [
+            format_chatml(build_messages(text), add_generation_prompt=True) for text, _ in bounded
         ]
-        return invites, [coupee for _, coupee in bornees]
+        return prompts, [cut for _, cut in bounded]
 
     def generate_batch(
         self,
@@ -160,55 +154,54 @@ class TriageAgent:
         max_new_tokens: int = SERVING.max_new_tokens,
         temperature: float = SERVING.temperature,
     ) -> list[TriageResponse]:
-        """Génère les réponses de triage d'un lot de descriptions.
+        """Generate the triage answers of a batch of descriptions.
 
-        Le traitement par lots n'existe que pour l'évaluation : il divise par
-        plusieurs le temps nécessaire pour passer le jeu clinique complet. La
-        latence renvoyée est alors la latence moyenne par cas du lot, ce que
-        `latency.py` signale explicitement pour éviter toute confusion avec la
-        latence perçue par un utilisateur.
+        Batching exists only for the evaluation: it divides by several the time needed to pass
+        the whole clinical set. The latency returned is then the mean latency per case of the
+        batch, which ``latency.py`` states explicitly to avoid any confusion with the latency a
+        user perceives.
         """
-        invites, coupees = self._prompts(symptoms)
-        if any(coupees):
+        prompts, cuts = self._prompts(symptoms)
+        if any(cuts):
             logger.warning(
-                "%d description(s) sur %d dépassaient la fenêtre du modèle et ont été bornées.",
-                sum(coupees),
-                len(coupees),
+                "%d description(s) out of %d exceeded the model window and were bounded.",
+                sum(cuts),
+                len(cuts),
             )
-        entrees = self.tokenizer(invites, return_tensors="pt", padding=True).to(self.device)
-        longueur_invite = entrees["input_ids"].shape[1]
+        inputs = self.tokenizer(prompts, return_tensors="pt", padding=True).to(self.device)
+        prompt_length = inputs["input_ids"].shape[1]
 
-        debut = time.perf_counter()
+        started = time.perf_counter()
         with self._torch.no_grad():
-            sortie = self.model.generate(
-                **entrees,
+            output = self.model.generate(
+                **inputs,
                 max_new_tokens=max_new_tokens,
                 do_sample=temperature > 0,
                 temperature=temperature if temperature > 0 else None,
                 pad_token_id=self.tokenizer.pad_token_id,
                 eos_token_id=self.end_token_id,
             )
-        latence_totale = (time.perf_counter() - debut) * 1000
-        latence_par_cas = latence_totale / max(1, len(symptoms))
+        total_latency = (time.perf_counter() - started) * 1000
+        latency_per_case = total_latency / max(1, len(symptoms))
 
-        reponses: list[TriageResponse] = []
-        for ligne, coupee in zip(sortie, coupees, strict=True):
-            nouveaux = ligne[longueur_invite:].tolist()
-            arret_propre = self.end_token_id in nouveaux
-            if arret_propre:
-                nouveaux = nouveaux[: nouveaux.index(self.end_token_id)]
-            texte = truncate_to_answer(self.tokenizer.decode(nouveaux, skip_special_tokens=True))
-            reponses.append(
+        answers: list[TriageResponse] = []
+        for row, cut in zip(output, cuts, strict=True):
+            new_tokens = row[prompt_length:].tolist()
+            clean_stop = self.end_token_id in new_tokens
+            if clean_stop:
+                new_tokens = new_tokens[: new_tokens.index(self.end_token_id)]
+            text = truncate_to_answer(self.tokenizer.decode(new_tokens, skip_special_tokens=True))
+            answers.append(
                 TriageResponse(
-                    text=texte,
-                    level=extract_level(texte),
-                    latency_ms=latence_par_cas,
-                    tokens_generes=len(nouveaux),
-                    arret_propre=arret_propre,
-                    description_tronquee=coupee,
+                    text=text,
+                    level=extract_level(text),
+                    latency_ms=latency_per_case,
+                    generated_tokens=len(new_tokens),
+                    clean_stop=clean_stop,
+                    description_truncated=cut,
                 )
             )
-        return reponses
+        return answers
 
     def generate(
         self,
@@ -216,5 +209,5 @@ class TriageAgent:
         max_new_tokens: int = SERVING.max_new_tokens,
         temperature: float = SERVING.temperature,
     ) -> TriageResponse:
-        """Génère la réponse de triage d'une description unique."""
+        """Generate the triage answer of a single description."""
         return self.generate_batch([symptoms], max_new_tokens, temperature)[0]

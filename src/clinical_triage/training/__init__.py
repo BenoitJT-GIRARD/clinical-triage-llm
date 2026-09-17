@@ -1,12 +1,11 @@
-"""Spécialisation du modèle : fine-tuning supervisé puis alignement par préférences.
+"""Specialising the model: supervised fine-tuning, then preference alignment.
 
-- `sft`      : fine-tuning supervisé du modèle de base avec adaptation LoRA ;
-- `dpo`      : alignement par préférences au-dessus du modèle supervisé fusionné ;
-- `tracking` : suivi local des exécutions et résumés JSON versionnés.
+- ``sft``      : supervised fine-tuning of the base model with a LoRA adapter;
+- ``dpo``      : preference alignment above the merged supervised model;
+- ``tracking`` : local run tracking and versioned JSON summaries.
 
-Les deux entraînements importent torch tardivement : sous Windows, `datasets`
-doit être chargé avant lui, ce dont se charge `clinical_triage.bootstrap` au début
-de chaque script.
+Both trainings import torch late: on Windows, ``datasets`` must be loaded before it, which
+``clinical_triage.bootstrap`` takes care of at the top of every script.
 """
 
 from __future__ import annotations

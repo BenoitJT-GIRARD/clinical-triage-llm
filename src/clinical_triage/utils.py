@@ -1,7 +1,6 @@
-"""Fonctions utilitaires transverses : graines, revision git et journalisation.
+"""Cross-cutting helpers: seeds, git revision and logging.
 
-On isole ici ce qui est partage par toutes les etapes afin d'eviter les
-duplications et de garantir une reproductibilite homogene.
+What every stage shares lives here, to avoid duplication and to keep reproducibility uniform.
 """
 
 from __future__ import annotations
@@ -16,25 +15,25 @@ from clinical_triage.config import PATHS, SEED
 
 
 def set_seed(seed: int = SEED, include_torch: bool = True) -> None:
-    """Fixe la graine de `random`, `numpy` et (optionnellement) `torch`.
+    """Seed ``random``, ``numpy`` and, optionally, ``torch``.
 
-    On importe numpy/torch paresseusement pour que ce module reste utilisable
-    sans dependance lourde. `include_torch=False` est utile pour les etapes de
-    preparation des donnees : sous Windows, importer torch avant pyarrow peut
-    provoquer un conflit de DLL ; on garde donc le pipeline de donnees sans torch.
+    numpy and torch are imported lazily so that this module stays usable without a heavy
+    dependency. ``include_torch=False`` helps the data-preparation stages: on Windows,
+    importing torch before pyarrow can cause a DLL conflict, so the data pipeline stays free
+    of torch.
 
-    Poser ici `PYTHONHASHSEED` n'apporterait rien : CPython ne lit cette variable
-    qu'au demarrage du processus, la graine serait donc annoncee sans etre fixee.
-    Le seul endroit du pipeline dont le resultat depend de l'ordre d'un ensemble
-    se rend deterministe par lui-meme (`triage_rules._compile`), ce qui vaut mieux
-    qu'une variable d'environnement a ne pas oublier.
+    Setting ``PYTHONHASHSEED`` here would achieve nothing: CPython reads that variable only at
+    process start, so the seed would be announced without being fixed. The one place in the
+    pipeline whose result depends on the order of a set makes itself deterministic
+    (``triage_rules._compile``), which is worth more than an environment variable nobody must
+    forget.
     """
     random.seed(seed)
     try:
         import numpy as np
 
         np.random.seed(seed)
-    except ImportError:  # pragma: no cover - numpy toujours present en pratique
+    except ImportError:  # pragma: no cover - numpy is always present in practice
         pass
     if not include_torch:
         return
@@ -48,28 +47,26 @@ def set_seed(seed: int = SEED, include_torch: bool = True) -> None:
         pass
 
 
-def liberer_la_memoire_gpu() -> None:
-    """Rend au GPU la mémoire d'un modèle dont on n'a plus besoin.
+def free_gpu_memory() -> None:
+    """Give the card back the memory of a model that is no longer needed.
 
-    `del modele` ne suffit pas, pour deux raisons qui se cumulent : les modules
-    PyTorch forment des cycles de références que seul le ramasse-miettes casse,
-    et l'allocateur CUDA conserve ensuite les blocs libérés dans son cache. Un
-    script qui enchaîne plusieurs modèles dans le même processus finit donc par
-    saturer la carte, et la bibliothèque de chargement bascule silencieusement
-    une partie des couches sur le processeur — l'erreur ne remonte qu'à la
-    première génération, loin de sa cause.
+    ``del model`` is not enough, for two reasons that compound: PyTorch modules form reference
+    cycles that only the garbage collector breaks, and the CUDA allocator then keeps the freed
+    blocks in its cache. A script that loads several models in one process ends up saturating
+    the card, and the loading library silently moves part of the layers onto the CPU — the
+    error only surfaces at the first generation, far from its cause.
     """
     gc.collect()
     try:
         import torch
-    except ImportError:  # pragma: no cover - torch toujours present a l'entrainement
+    except ImportError:  # pragma: no cover - torch is always present when training
         return
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
 
 def get_logger(name: str = "clinical_triage") -> logging.Logger:
-    """Renvoie un logger configure simplement (format horodate, niveau INFO)."""
+    """Return a simply configured logger (timestamped format, INFO level)."""
     logger = logging.getLogger(name)
     if not logger.handlers:
         handler = logging.StreamHandler()
@@ -81,49 +78,45 @@ def get_logger(name: str = "clinical_triage") -> logging.Logger:
     return logger
 
 
-def chemin_pour_journal(chemin: str | Path) -> str:
-    """Rend un chemin tel qu'il doit apparaître dans une trace du projet.
+def path_for_log(path: str | Path) -> str:
+    """Render a path the way a trace of this project should show it.
 
-    Les journaux des modules finissent dans les sorties des carnets, qui sont
-    versionnées et livrées : un chemin absolu y inscrirait l'arborescence de la
-    machine qui a exécuté le code, et le lecteur n'en tire rien. Ce qui est sous
-    la racine du dépôt est donc écrit relativement à elle, avec des barres
-    obliques quelle que soit la plateforme. Le reste est rendu tel quel — un
-    identifiant de dépôt Hugging Face, un modèle monté ailleurs dans un
-    conteneur : le raccourcir le rendrait faux.
+    Module logs end up in notebook outputs, which are versioned and published: an absolute
+    path would write the directory tree of the machine that ran the code, and a reader gets
+    nothing from it. Anything under the repository root is therefore written relative to it,
+    with forward slashes whatever the platform. The rest is returned as is — a Hugging Face
+    repository id, a model mounted elsewhere in a container: shortening it would make it wrong.
     """
-    texte = str(chemin)
-    candidat = Path(texte)
-    if not candidat.is_absolute():
-        return texte
+    text = str(path)
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        return text
     try:
-        return candidat.relative_to(PATHS.root).as_posix()
+        return candidate.relative_to(PATHS.root).as_posix()
     except ValueError:
-        return texte
+        return text
 
 
-def revision_git() -> str:
-    """Revision courte du depot, ou « inconnue » hors depot git.
+def git_revision() -> str:
+    """Short revision of the repository, or ``"unknown"`` outside a git repository.
 
-    La carte du dataset et le manifeste des figures inscrivent tous deux cette
-    revision : c'est ce qui permet de retrouver le code exact qui a produit les
-    chiffres livres. Les deux scripts la lisent ici, et nulle part ailleurs :
-    deux copies, sous deux noms et avec deux valeurs de repli, laisseraient les
-    deux tracabilites diverger sans que cela se voie.
+    The dataset card and the published protocol both record this revision: it is what lets a
+    reader find the exact code that produced the numbers. Both read it here and nowhere else:
+    two copies, under two names and with two fallback values, would let the two traceabilities
+    drift apart unnoticed.
     """
     try:
-        # Liste d'arguments constante, sans shell ni entree exterieure. Les
-        # trois regles de bandit sur `subprocess` sont ecartees en ligne, ici
-        # pour l'appel et a l'import du module pour B404, et nulle part ailleurs
-        # dans le paquet. `git` est cherche dans le PATH a dessein, son
-        # emplacement variant d'une machine a l'autre.
-        sortie = subprocess.run(  # nosec B603 B607
+        # A constant argument list, no shell and no outside input. Bandit's three subprocess
+        # rules are waived inline, here for the call and at module import for B404, and
+        # nowhere else in the package. ``git`` is deliberately looked up on PATH, its location
+        # varying from machine to machine.
+        completed = subprocess.run(  # nosec B603 B607
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=PATHS.root,
             capture_output=True,
             text=True,
             check=True,
         )
-        return sortie.stdout.strip()
+        return completed.stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
-        return "inconnue"
+        return "unknown"

@@ -1,7 +1,7 @@
 [project]
 name = "clinical-triage"
 version = "1.0.0"
-description = "POC d'un agent IA de triage medical : fine-tuning SFT/LoRA puis alignement DPO d'un Qwen3-1.7B, servi par une API FastAPI devant vLLM"
+description = "POC d'un agent IA de triage medical pour le service des urgences : fine-tuning SFT/LoRA puis alignement DPO d'un Qwen3-1.7B, servi par une API FastAPI devant vLLM"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
@@ -51,7 +51,7 @@ dependencies = [
 ]
 
 # vLLM n'est pas declare en dependance : le serveur d'inference tourne dans son
-# image officielle (voir deploy/docker-compose.yml). L'y ajouter figerait en plus
+# image officielle (voir infra/docker-compose.yml). L'y ajouter figerait en plus
 # les versions de torch et de transformers du projet sur celles que vLLM impose.
 
 [project.scripts]
@@ -103,7 +103,7 @@ dev = [
     "nbconvert>=7.16",
     "reportlab>=4.2",
     "python-pptx>=1.0",
-    # Client de deploiement de l'endpoint de demonstration (deploy/modal_app.py).
+    # Client de deploiement de l'endpoint de demonstration (infra/modal_app.py).
     "modal>=1.0",
 ]
 
@@ -163,12 +163,12 @@ exclude_dirs = [".venv", "tests"]
 # épinglée. Onze appels sont concernés, de trois natures :
 #   - `load_dataset("json", data_files=...)` dans `training/sft.py` et
 #     `training/dpo.py` ne touche pas au Hub : c'est le lecteur de fichiers
-#     locaux, appelé sur les JSONL que `scripts/01` vient d'écrire ;
+#     locaux, appelé sur les JSONL que `scripts/build_dataset.py` vient d'écrire ;
 #   - les `from_pretrained` sur un chemin local — l'adaptateur et le modèle
 #     fusionné dans `scripts/04`, les poids servis dans `inference.py` —
 #     relisent ce que le dépôt a produit ;
 #   - les téléchargements réels, eux, nomment un dépôt public sans numéro de
-#     révision : le modèle de base `Qwen/Qwen3-1.7B-Base` dans `scripts/01` et
+#     révision : le modèle de base `Qwen/Qwen3-1.7B-Base` dans `scripts/build_dataset.py` et
 #     `scripts/04`, et les cinq corpus médicaux de `DATA.corpora` dans
 #     `data/corpus_sources.py`. Les identifiants sont fixés dans `config.py`,
 #     mais une révision ne l'est pas. Ces appels n'ont lieu qu'à la construction

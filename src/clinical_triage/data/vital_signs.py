@@ -1,17 +1,19 @@
-"""Constantes vitales : seuils d'alerte, génération et mise en forme.
+"""Vital signs: alert thresholds, generation and rendering.
 
-Le triage aux urgences ne repose pas uniquement sur le récit du patient : les
-constantes mesurées à l'accueil (fréquence cardiaque, tension, fréquence
-respiratoire, saturation, température, douleur, conscience) pèsent autant que
-les symptômes. Ce module les représente explicitement, les met en texte pour le
-modèle, et dit ce qu'elles déclenchent.
+Emergency triage does not rest on the patient's narrative alone: the readings taken at
+reception (heart rate, blood pressure, respiratory rate, saturation, temperature, pain,
+consciousness) weigh as much as the symptoms. This module represents them explicitly, renders
+them as text for the model, and says what they trigger.
 
-Les seuils adultes reprennent la logique du score d'alerte précoce NEWS2 et des
-critères de tri 1-2 de l'échelle FRENCH. Les seuils pédiatriques varient avec
-l'âge : on utilise une table de bandes d'âge, volontairement courte et lisible.
+The adult thresholds follow the logic of the NEWS2 early-warning score and of the sort 1-2
+criteria of the FRENCH scale. The paediatric thresholds vary with age: a table of age bands,
+deliberately short and readable.
 
-Ce module ne connaît rien du reste du projet : il décrit des mesures, pas des
-décisions de triage. La décision est prise dans `triage_rules`.
+This module knows nothing of the rest of the project: it describes measurements, not triage
+decisions. The decision is taken in ``triage_rules``.
+
+The finding labels are French because they travel to the nurse's screen through the API's
+``rule_reasons``: they are output, not prose about the project.
 """
 
 from __future__ import annotations
@@ -21,13 +23,12 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-# --- Bandes d'âge pédiatriques ---
-# (âge max en années, FC normale, FR normale, systolique normale). Au-delà de
-# 12 ans, les valeurs adultes s'appliquent.
+# --- Paediatric age bands ---
+# (max age in years, normal HR, normal RR, normal systolic). Above 12 years the adult values
+# apply.
 #
-# La systolique figure dans la bande au même titre que les fréquences : une
-# tension d'adulte, « TA 120/75 », n'existe pas chez un nourrisson, et la règle
-# la lirait pourtant comme normale.
+# The systolic sits in the band like the rates do: an adult blood pressure, "TA 120/75", does
+# not exist in an infant, and the rule would nonetheless read it as normal.
 PEDIATRIC_BANDS: tuple[tuple[int, tuple[int, int], tuple[int, int], tuple[int, int]], ...] = (
     (1, (100, 160), (30, 55), (72, 100)),
     (3, (90, 150), (22, 40), (80, 110)),
@@ -41,64 +42,64 @@ ADULT_SYSTOLIC = (100, 135)
 
 @dataclass(frozen=True)
 class VitalSigns:
-    """Relevé de constantes tel qu'il est saisi à l'accueil des urgences.
+    """A set of readings as entered at an emergency reception desk.
 
-    Chaque champ vaut `None` lorsque la mesure n'a pas été faite : à l'accueil,
-    un relevé partiel est la règle plutôt que l'exception, et il faut pouvoir
-    raisonner sur ce qui est disponible sans inventer le reste.
+    Every field is ``None`` when the measurement was not taken: at reception a partial reading
+    is the rule rather than the exception, and one must be able to reason on what is available
+    without inventing the rest.
     """
 
-    heart_rate: int | None = None  # battements par minute
-    systolic_bp: int | None = None  # pression artérielle systolique, mmHg
-    diastolic_bp: int | None = None  # pression artérielle diastolique, mmHg
-    resp_rate: int | None = None  # cycles par minute
-    spo2: int | None = None  # saturation en oxygène, %
+    heart_rate: int | None = None  # beats per minute
+    systolic_bp: int | None = None  # systolic blood pressure, mmHg
+    diastolic_bp: int | None = None  # diastolic blood pressure, mmHg
+    resp_rate: int | None = None  # breaths per minute
+    spo2: int | None = None  # oxygen saturation, %
     temperature: float | None = None  # °C
-    pain_score: int | None = None  # échelle visuelle analogique, 0 à 10
-    conscious: bool | None = None  # vigilance normale (éveillé et orienté)
+    pain_score: int | None = None  # visual analogue scale, 0 to 10
+    conscious: bool | None = None  # normal alertness (awake and oriented)
 
     def is_empty(self) -> bool:
-        """Dit si aucune mesure n'est disponible."""
-        return all(getattr(self, champ) is None for champ in self.__dataclass_fields__)
+        """Say whether no measurement is available."""
+        return all(getattr(self, field) is None for field in self.__dataclass_fields__)
 
     def render(self, lang: str) -> str:
-        """Met les constantes disponibles en une ligne de texte."""
-        parties: list[str] = []
+        """Render the available readings as one line of text."""
+        parts: list[str] = []
         if lang == "fr":
             if self.heart_rate is not None:
-                parties.append(f"FC {self.heart_rate}/min")
+                parts.append(f"FC {self.heart_rate}/min")
             if self.systolic_bp is not None and self.diastolic_bp is not None:
-                parties.append(f"TA {self.systolic_bp}/{self.diastolic_bp} mmHg")
+                parts.append(f"TA {self.systolic_bp}/{self.diastolic_bp} mmHg")
             if self.resp_rate is not None:
-                parties.append(f"FR {self.resp_rate}/min")
+                parts.append(f"FR {self.resp_rate}/min")
             if self.spo2 is not None:
-                parties.append(f"SpO2 {self.spo2} %")
+                parts.append(f"SpO2 {self.spo2} %")
             if self.temperature is not None:
-                parties.append(f"T {self.temperature:.1f} °C")
+                parts.append(f"T {self.temperature:.1f} °C")
             if self.pain_score is not None:
-                parties.append(f"douleur {self.pain_score}/10")
+                parts.append(f"douleur {self.pain_score}/10")
             if self.conscious is not None:
-                parties.append("vigilance normale" if self.conscious else "vigilance altérée")
-            return ", ".join(parties)
+                parts.append("vigilance normale" if self.conscious else "vigilance altérée")
+            return ", ".join(parts)
         if self.heart_rate is not None:
-            parties.append(f"HR {self.heart_rate}/min")
+            parts.append(f"HR {self.heart_rate}/min")
         if self.systolic_bp is not None and self.diastolic_bp is not None:
-            parties.append(f"BP {self.systolic_bp}/{self.diastolic_bp} mmHg")
+            parts.append(f"BP {self.systolic_bp}/{self.diastolic_bp} mmHg")
         if self.resp_rate is not None:
-            parties.append(f"RR {self.resp_rate}/min")
+            parts.append(f"RR {self.resp_rate}/min")
         if self.spo2 is not None:
-            parties.append(f"SpO2 {self.spo2}%")
+            parts.append(f"SpO2 {self.spo2}%")
         if self.temperature is not None:
-            parties.append(f"T {self.temperature:.1f} °C")
+            parts.append(f"T {self.temperature:.1f} °C")
         if self.pain_score is not None:
-            parties.append(f"pain {self.pain_score}/10")
+            parts.append(f"pain {self.pain_score}/10")
         if self.conscious is not None:
-            parties.append("alert" if self.conscious else "altered consciousness")
-        return ", ".join(parties)
+            parts.append("alert" if self.conscious else "altered consciousness")
+        return ", ".join(parts)
 
 
 def normal_ranges(age: int) -> tuple[tuple[int, int], tuple[int, int], tuple[int, int]]:
-    """Plages normales pour un âge : fréquence cardiaque, respiratoire, systolique."""
+    """Normal ranges for an age: heart rate, respiratory rate, systolic."""
     for max_age, heart_rate, resp_rate, systolic in PEDIATRIC_BANDS:
         if age <= max_age:
             return heart_rate, resp_rate, systolic
@@ -106,12 +107,11 @@ def normal_ranges(age: int) -> tuple[tuple[int, int], tuple[int, int], tuple[int
 
 
 def critical_findings(vitals: VitalSigns, age: int) -> list[str]:
-    """Anomalies imposant une prise en charge immédiate (détresse vitale).
+    """Abnormalities that call for immediate care.
 
-    Les bornes basses se dérivent de la bande d'âge, comme les bornes hautes.
-    Des valeurs fixes d'adulte, 8 et 40, masqueraient la bradycardie du
-    nourrisson, dont la fréquence normale commence à 100 : un enfant de six mois
-    à 52 battements par minute est en situation pré-arrêt.
+    The lower bounds derive from the age band, as the upper ones do. Fixed adult values, 8 and
+    40, would hide an infant's bradycardia, whose normal rate starts at 100: a six-month-old at
+    52 beats per minute is pre-arrest.
     """
     heart_rate, resp_rate, systolic = normal_ranges(age)
     findings: list[str] = []
@@ -127,8 +127,8 @@ def critical_findings(vitals: VitalSigns, age: int) -> list[str]:
         findings.append(f"fréquence cardiaque critique ({vitals.heart_rate}/min)")
     if vitals.systolic_bp is not None and vitals.systolic_bp < systolic[0] - 10:
         findings.append(f"hypotension ({vitals.systolic_bp} mmHg de systolique)")
-    # La tension est lue par le haut comme par le bas : une poussée à 230/130 est
-    # une urgence au même titre qu'un effondrement tensionnel.
+    # Blood pressure is read from above as well as from below: a surge to 230/130 is an
+    # emergency just as a collapse is.
     if (vitals.systolic_bp is not None and vitals.systolic_bp >= 180) or (
         vitals.diastolic_bp is not None and vitals.diastolic_bp >= 110
     ):
@@ -145,7 +145,7 @@ def critical_findings(vitals: VitalSigns, age: int) -> list[str]:
 
 
 def warning_findings(vitals: VitalSigns, age: int) -> list[str]:
-    """Anomalies justifiant une évaluation médicale rapprochée, sans détresse vitale."""
+    """Abnormalities calling for prompt medical assessment, short of vital distress."""
     heart_rate, resp_rate, systolic = normal_ranges(age)
     findings: list[str] = []
     if vitals.spo2 is not None and 92 <= vitals.spo2 <= 94:
@@ -156,9 +156,9 @@ def warning_findings(vitals: VitalSigns, age: int) -> list[str]:
         findings.append(f"bradypnée ({vitals.resp_rate}/min)")
     if vitals.heart_rate is not None and heart_rate[1] < vitals.heart_rate <= heart_rate[1] + 30:
         findings.append(f"tachycardie ({vitals.heart_rate}/min)")
-    # Le ralentissement a son degré intermédiaire, comme l'accélération : sous la
-    # borne basse de l'âge mais au-dessus du seuil critique, la bradycardie
-    # justifie une évaluation sans relever de la détresse vitale.
+    # Slowing has its intermediate degree, as acceleration does: below the lower bound for the
+    # age but above the critical threshold, bradycardia warrants assessment without amounting
+    # to vital distress.
     if vitals.heart_rate is not None and heart_rate[0] - 20 <= vitals.heart_rate < heart_rate[0]:
         findings.append(f"bradycardie ({vitals.heart_rate}/min)")
     if vitals.systolic_bp is not None and systolic[0] - 10 <= vitals.systolic_bp < systolic[0]:
@@ -174,13 +174,13 @@ def warning_findings(vitals: VitalSigns, age: int) -> list[str]:
     return findings
 
 
-# --- Lecture des constantes dans un texte libre ---
+# --- Reading vital signs out of free text ---
 
-# Chaque mesure est cherchée derrière les abréviations employées à l'accueil, en
-# français comme en anglais. La règle de triage s'en sert pour lire les relevés
-# écrits dans le récit ; sans cela, on la comparerait au modèle en la privant
-# d'une information que le modèle, lui, voit.
-MESURES = {
+# Each measurement is looked for behind the abbreviations used at reception, in French as in
+# English. The triage rule uses this to read the readings written into the narrative; without
+# it, the rule would be compared to the model while being deprived of information the model
+# does see.
+MEASURES = {
     "heart_rate": re.compile(
         r"\b(?:FC|HR|pouls|pulse|heart rate|fréquence cardiaque)\b\D{0,12}?(\d{2,3})", re.IGNORECASE
     ),
@@ -190,177 +190,171 @@ MESURES = {
     "spo2": re.compile(r"\b(?:SpO2|SaO2|saturation|sats?)\b\D{0,12}?(\d{2,3})", re.IGNORECASE),
     "pain_score": re.compile(r"\b(?:douleur|pain|EVA)\b\D{0,12}?(\d{1,2})\s*/\s*10", re.IGNORECASE),
 }
-TENSION = re.compile(
+BLOOD_PRESSURE = re.compile(
     r"\b(?:TA|BP|tension|blood pressure)\b\D{0,12}?(\d{2,3})\s*/\s*(\d{2,3})", re.IGNORECASE
 )
-# Deux formes, et la distinction entre les deux est délibérée :
+# Two forms, and the distinction between them is deliberate:
 #
-#   - avec un mot d'annonce (« T 39 °C », « fever 39C »), la partie décimale est
-#     facultative : le mot lève l'ambiguïté ;
-#   - sans mot d'annonce, la décimale est exigée. « 38,2 » dans une phrase est
-#     presque sûrement une température ; « 38 » tout seul peut être un âge, une
-#     fréquence respiratoire ou un numéro de département.
+#   - with a cue word ("T 39 °C", "fever 39C"), the decimal part is optional: the word removes
+#     the ambiguity;
+#   - without a cue word, the decimal is required. "38,2" in a sentence is almost certainly a
+#     temperature; "38" alone could be an age, a respiratory rate or a postcode.
 #
-# La fin du nombre est marquée par « pas un autre chiffre » et non par une
-# frontière de mot : « 39.1C », sans espace avant l'unité, est une écriture
-# courante qu'un `\b` rejetterait.
-_ANNONCE_TEMPERATURE = r"(?:T|temp(?:érature|erature)?|fièvre|fever|fébrile|febrile)"
+# The end of the number is marked by "not another digit" and not by a word boundary: "39.1C",
+# with no space before the unit, is a common spelling that a `\b` would reject.
+_TEMPERATURE_CUE = r"(?:T|temp(?:érature|erature)?|fièvre|fever|fébrile|febrile)"
 TEMPERATURE = re.compile(
-    rf"\b{_ANNONCE_TEMPERATURE}\b\D{{0,14}}?(3[3-9]|4[0-2])(?:[.,](\d))?(?!\d)"
+    rf"\b{_TEMPERATURE_CUE}\b\D{{0,14}}?(3[3-9]|4[0-2])(?:[.,](\d))?(?!\d)"
     rf"|\b(3[3-9]|4[0-2])[.,](\d)(?!\d)",
     re.IGNORECASE,
 )
-# Motifs écrits sans accents : la lecture se fait sur un texte normalisé, comme
-# dans la règle de triage. Une note d'accueil écrit « vigilance alteree » aussi
-# souvent qu'avec les accents, et un motif accentué ne la verrait pas.
-VIGILANCE_ALTEREE = re.compile(
+# Patterns written without accents: reading happens on a normalised text, as in the triage
+# rule. A reception note writes "vigilance alteree" as often as the accented form, and an
+# accented pattern would not see it.
+ALTERED_CONSCIOUSNESS = re.compile(
     r"vigilance alteree|trouble de la (?:vigilance|conscience)|inconscient|non conscient"
     r"|pas conscient|desoriente|obnubile|somnolent|somnole|confus"
     r"|ne repond pas aux stimulations"
     r"|altered consciousness|unresponsive|drowsy|not rousable|not conscious",
     re.IGNORECASE,
 )
-VIGILANCE_NORMALE = re.compile(
+NORMAL_CONSCIOUSNESS = re.compile(
     r"vigilance normale|eveille et oriente|conscient et oriente|fully alert|\balert\b",
     re.IGNORECASE,
 )
 
-# Marqueurs de négation cherchés juste avant un état de vigilance.
-_NEGATION_VIGILANCE = re.compile(
+# Negation markers looked for just before a consciousness state.
+_NEGATION_BEFORE = re.compile(
     r"\b(?:sans|pas de|aucun|aucune|absence de|no|not|without|denies)\b[^.;:,]{0,20}$",
     re.IGNORECASE,
 )
 
 
-def _sans_accents(texte: str) -> str:
-    """Minuscules sans accents, comme le fait la règle de triage."""
-    decompose = unicodedata.normalize("NFKD", texte.lower())
-    return "".join(c for c in decompose if not unicodedata.combining(c))
+def _without_accents(text: str) -> str:
+    """Lower case without accents, as the triage rule does."""
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
-def _affirme(motif: re.Pattern[str], texte: str) -> bool:
-    """Dit si `motif` apparaît dans `texte` sans être nié juste avant.
+def _asserted(pattern: re.Pattern[str], text: str) -> bool:
+    """Say whether ``pattern`` appears in ``text`` without being negated just before.
 
-    La négation est prise en compte, comme l'annonce la règle de triage : sans
-    cette garde, « patient sans trouble de la conscience » rendrait
-    `conscious=False` et classerait un rhume banal en urgence vitale.
+    Negation is taken into account, as the triage rule announces: without this guard, "patient
+    sans trouble de la conscience" would yield ``conscious=False`` and file a common cold as
+    life-threatening.
     """
-    for trouve in motif.finditer(texte):
-        amont = texte[max(0, trouve.start() - 28) : trouve.start()]
-        if not _NEGATION_VIGILANCE.search(amont):
+    for found in pattern.finditer(text):
+        upstream = text[max(0, found.start() - 28) : found.start()]
+        if not _NEGATION_BEFORE.search(upstream):
             return True
     return False
 
 
 def parse(text: str) -> VitalSigns:
-    """Lit dans un texte libre les constantes qui y sont écrites.
+    """Read out of free text the vital signs written in it.
 
-    Les mesures absentes restent à `None`. Un relevé vide est un résultat
-    valide : beaucoup de descriptions n'en contiennent aucune.
+    Missing measurements stay at ``None``. An empty reading is a valid result: many descriptions
+    contain none.
     """
-    valeurs: dict[str, int | float | bool | None] = {}
-    for champ, motif in MESURES.items():
-        trouve = motif.search(text)
-        if trouve:
-            valeurs[champ] = int(trouve.group(1))
-    tension = TENSION.search(text)
-    if tension:
-        valeurs["systolic_bp"] = int(tension.group(1))
-        valeurs["diastolic_bp"] = int(tension.group(2))
+    values: dict[str, int | float | bool | None] = {}
+    for field, pattern in MEASURES.items():
+        found = pattern.search(text)
+        if found:
+            values[field] = int(found.group(1))
+    pressure = BLOOD_PRESSURE.search(text)
+    if pressure:
+        values["systolic_bp"] = int(pressure.group(1))
+        values["diastolic_bp"] = int(pressure.group(2))
     temperature = TEMPERATURE.search(text)
     if temperature:
-        # Le motif a deux alternatives : celle avec mot d'annonce (groupes 1 et
-        # 2, la décimale pouvant manquer) et celle sans (groupes 3 et 4).
-        entier = temperature.group(1) or temperature.group(3)
-        decimale = temperature.group(2) or temperature.group(4) or "0"
-        valeurs["temperature"] = float(f"{entier}.{decimale}")
-    plat = _sans_accents(text)
-    if _affirme(VIGILANCE_ALTEREE, plat):
-        valeurs["conscious"] = False
-    elif _affirme(VIGILANCE_NORMALE, plat):
-        valeurs["conscious"] = True
-    return VitalSigns(**valeurs)
+        # The pattern has two alternatives: the one with a cue word (groups 1 and 2, the decimal
+        # possibly missing) and the one without (groups 3 and 4).
+        whole = temperature.group(1) or temperature.group(3)
+        decimal = temperature.group(2) or temperature.group(4) or "0"
+        values["temperature"] = float(f"{whole}.{decimal}")
+    flat = _without_accents(text)
+    if _asserted(ALTERED_CONSCIOUSNESS, flat):
+        values["conscious"] = False
+    elif _asserted(NORMAL_CONSCIOUSNESS, flat):
+        values["conscious"] = True
+    return VitalSigns(**values)
 
 
-AGE_EN_ANNEES = re.compile(r"\b(\d{1,3})\s*(?:ans?\b|[- ]?(?:year|yr)[- ]?old\b)", re.IGNORECASE)
-AGE_EN_MOIS = re.compile(r"\b(\d{1,2})\s*(?:mois\b|[- ]?month[- ]?old\b)", re.IGNORECASE)
+AGE_IN_YEARS = re.compile(r"\b(\d{1,3})\s*(?:ans?\b|[- ]?(?:year|yr)[- ]?old\b)", re.IGNORECASE)
+AGE_IN_MONTHS = re.compile(r"\b(\d{1,2})\s*(?:mois\b|[- ]?month[- ]?old\b)", re.IGNORECASE)
 
-# Âge retenu lorsque le texte n'en donne aucun : les seuils adultes sont alors
-# appliqués, ce qui est le réglage le moins risqué pour un adulte inconnu.
-AGE_PAR_DEFAUT = 40
+# Age used when the text gives none: the adult thresholds then apply, which is the least risky
+# setting for an unknown adult.
+DEFAULT_AGE = 40
 
-# Ce qui, juste avant un nombre, en fait une durée et non un âge : « toux depuis
-# 3 mois », « enceinte de 8 mois », « asthme depuis 40 ans ». Une note d'accueil
-# mêle les deux dans la même phrase, et prendre l'ancienneté pour l'âge fait
-# basculer un adulte sur les seuils du nourrisson.
-DUREE_AVANT_UN_NOMBRE = re.compile(
+# What, just before a number, makes it a duration and not an age: "toux depuis 3 mois",
+# "enceinte de 8 mois", "asthme depuis 40 ans". A reception note mixes both in the same
+# sentence, and taking the duration for the age moves an adult onto infant thresholds.
+DURATION_BEFORE_A_NUMBER = re.compile(
     r"\b(?:depuis|il y a|pendant|apr[eè]s|enceinte de|for|since|over the (?:last|past))\s*$",
     re.IGNORECASE,
 )
 
 
-def _est_une_duree(text: str, debut: int) -> bool:
-    """Dit si le nombre trouvé à `debut` décrit une durée plutôt qu'un âge."""
-    return DUREE_AVANT_UN_NOMBRE.search(text[max(0, debut - 24) : debut]) is not None
+def _is_a_duration(text: str, start: int) -> bool:
+    """Say whether the number found at ``start`` describes a duration rather than an age."""
+    return DURATION_BEFORE_A_NUMBER.search(text[max(0, start - 24) : start]) is not None
 
 
 def parse_age(text: str) -> int:
-    """Lit l'âge du patient dans le texte, en années.
+    """Read the patient's age from the text, in years.
 
-    Les mois sont ramenés à des années entières, arrondies vers le bas : un
-    nourrisson de dix mois compte comme 0 an, ce qui applique bien les seuils de
-    la première bande pédiatrique.
+    Months are brought back to whole years, rounded down: a ten-month-old counts as 0, which
+    correctly applies the thresholds of the first paediatric band.
 
-    Les années sont cherchées **avant** les mois, et les durées sont écartées.
-    Sans ces deux précautions, « homme de 58 ans, toux depuis 3 mois » donnerait
-    0 an : le patient passerait sur les seuils du nourrisson, où une fréquence
-    cardiaque à 128 est normale, et ses anomalies deviendraient invisibles.
+    Years are looked for **before** months, and durations are discarded. Without those two
+    precautions, "homme de 58 ans, toux depuis 3 mois" would give 0: the patient would move onto
+    infant thresholds, where a heart rate of 128 is normal, and their abnormalities would become
+    invisible.
 
-    **Un texte sans âge rend l'âge adulte par défaut**, pas `None` : les seuils
-    doivent bien être choisis, et les bandes adultes sont les plus prudentes ici.
-    Une fréquence cardiaque de 130 est normale chez un nourrisson et alarmante
-    chez un adulte ; en l'absence d'information, mieux vaut alerter à tort que se
-    taire.
+    **A text with no age returns the default adult age**, not ``None``: the thresholds must be
+    chosen one way or another, and the adult bands are the most cautious here. A heart rate of
+    130 is normal in an infant and alarming in an adult; absent information, better to alert
+    wrongly than to stay silent.
     """
-    for motif, mois_par_unite in ((AGE_EN_ANNEES, 1), (AGE_EN_MOIS, 12)):
-        for trouve in motif.finditer(text):
-            if not _est_une_duree(text, trouve.start()):
-                return int(trouve.group(1)) // mois_par_unite
-    return AGE_PAR_DEFAUT
+    for pattern, months_per_unit in ((AGE_IN_YEARS, 1), (AGE_IN_MONTHS, 12)):
+        for found in pattern.finditer(text):
+            if not _is_a_duration(text, found.start()):
+                return int(found.group(1)) // months_per_unit
+    return DEFAULT_AGE
 
 
-# --- Génération de relevés pour les vignettes cliniques ---
+# --- Generating readings for the clinical vignettes ---
 
-# Profils de constantes associés aux trois degrés de gravité. Chaque valeur est
-# un intervalle dont on tire au hasard, autour des plages normales de l'âge.
-# Deux réglages méritent un mot.
+# Vital-sign profiles attached to the three degrees of severity. Each value is an interval drawn
+# from, around the normal ranges for the age. Two settings deserve a word.
 #
-# La tension s'exprime en **fraction de la borne basse normale de l'âge**, pas en
-# millimètres de mercure : un nourrisson en état de choc n'a pas la tension d'un
-# adulte en état de choc, et 72 mmHg est un chiffre d'adulte.
+# Blood pressure is expressed as a **fraction of the lower normal bound for the age**, not in
+# millimetres of mercury: an infant in shock does not have an adult's pressure, and 72 mmHg is
+# an adult figure.
 #
-# La température critique est **bimodale** : sans sa branche haute, les vignettes
-# de sepsis, dont le motif est « fièvre avec frissons », sortiraient apyrétiques.
-# Les deux branches sont cliniquement justes — un sepsis grave peut dériver dans
-# un sens comme dans l'autre — mais le récit doit pouvoir imposer la sienne.
+# The critical temperature is **bimodal**: without its high branch, sepsis vignettes — whose
+# complaint is "fever with chills" — would come out afebrile. Both branches are clinically
+# correct — severe sepsis can drift either way — but the narrative must be able to impose its
+# own.
 PROFILES = {
-    "critique": {
+    "critical": {
         "spo2": (84, 91),
-        "part_systolique": (0.72, 0.92),
-        "systolique_haute": (185, 220),
+        "systolic_share": (0.72, 0.92),
+        "systolic_high": (185, 220),
         "temperature": (34.2, 34.9),
-        "temperature_haute": (39.5, 41.5),
+        "temperature_high": (39.5, 41.5),
         "pain_score": (7, 10),
         "conscious_probability": 0.35,
         "heart_rate_offset": (35, 55),
         "resp_rate_offset": (9, 16),
     },
-    "intermediaire": {
+    "intermediate": {
         "spo2": (92, 94),
-        "part_systolique": (0.92, 0.99),
-        "systolique_haute": (162, 179),
+        "systolic_share": (0.92, 0.99),
+        "systolic_high": (162, 179),
         "temperature": (38.5, 39.8),
-        "temperature_haute": (38.5, 39.8),
+        "temperature_high": (38.5, 39.8),
         "pain_score": (5, 8),
         "conscious_probability": 1.0,
         "heart_rate_offset": (12, 28),
@@ -368,10 +362,10 @@ PROFILES = {
     },
     "normal": {
         "spo2": (96, 99),
-        "part_systolique": (1.0, 1.0),
-        "systolique_haute": None,
+        "systolic_share": (1.0, 1.0),
+        "systolic_high": None,
         "temperature": (36.3, 37.3),
-        "temperature_haute": (36.3, 37.3),
+        "temperature_high": (36.3, 37.3),
         "pain_score": (0, 3),
         "conscious_probability": 1.0,
         "heart_rate_offset": (-8, 8),
@@ -380,43 +374,40 @@ PROFILES = {
 }
 
 
-# Âge à partir duquel une douleur s'auto-évalue sur une échelle de 0 à 10.
+# Age from which pain is self-rated on a 0-to-10 scale.
 #
-# L'EVA demande au patient de situer sa douleur lui-même : elle est inutilisable
-# avant quatre à six ans, et en pédiatrie on emploie EVENDOL, FLACC ou l'échelle
-# des visages. En dessous de cet âge, la vignette ne porte aucun score : un
-# « douleur 9/10 » sur une bronchiolite du nourrisson est une mesure qui ne peut
-# pas exister, et ce score déclencherait en plus le signe « douleur intense ».
-AGE_MINIMUM_AUTO_EVALUATION = 6
+# The visual analogue scale asks the patient to place their own pain: it is unusable before four
+# to six years, and paediatrics uses EVENDOL, FLACC or the faces scale instead. Below this age
+# the vignette carries no score: a "pain 9/10" on an infant's bronchiolitis is a measurement
+# that cannot exist, and that score would additionally trigger the "severe pain" sign.
+MIN_AGE_FOR_SELF_REPORT = 6
 
 
-def _douleur_auto_evaluee(age: int, plage: tuple[int, int], rng: random.Random) -> int | None:
-    """Score de douleur, seulement quand le patient peut le donner lui-même."""
-    if age < AGE_MINIMUM_AUTO_EVALUATION:
+def _self_reported_pain(age: int, span: tuple[int, int], rng: random.Random) -> int | None:
+    """A pain score, only when the patient can give it themselves."""
+    if age < MIN_AGE_FOR_SELF_REPORT:
         return None
-    return rng.randint(*plage)
+    return rng.randint(*span)
 
 
 def generate(
     profile: str,
     age: int,
     rng: random.Random,
-    imposees: tuple[tuple[str, str], ...] = (),
-    vigilance_alteree_probable: float | None = None,
+    forced: tuple[tuple[str, str], ...] = (),
+    altered_consciousness_likely: float | None = None,
 ) -> VitalSigns:
-    """Tire un relevé de constantes cohérent avec un profil de gravité et un âge.
+    """Draw a set of readings consistent with a severity profile and an age.
 
-    Le profil `critique` ne dégrade pas toutes les constantes à la fois : on en
-    choisit une ou deux, comme dans la réalité, le reste restant dans les plages
-    normales. Sinon toutes les vignettes graves seraient reconnaissables à un
-    relevé uniformément catastrophique.
+    The ``critical`` profile does not degrade every reading at once: one or two are chosen, as
+    in reality, the rest staying inside the normal ranges. Otherwise every serious vignette
+    would be recognisable by a uniformly catastrophic reading.
 
-    `imposees` liste les constantes que le **récit nomme**, avec leur sens :
-    `(("temperature", "haute"),)` pour une présentation dont le motif est
-    « fièvre avec frissons ». Ces constantes-là sont toujours dégradées, et dans
-    le bon sens. Sans ce mécanisme, le tirage au sort laisserait sortir des sepsis
-    apyrétiques et des pré-éclampsies normotendues : la description dirait une
-    chose et le relevé la contredirait, dans le même exemple d'entraînement.
+    ``forced`` lists the readings the **narrative names**, with their direction:
+    ``(("temperature", "high"),)`` for a presentation whose complaint is "fever with chills".
+    Those readings are always degraded, and in the right direction. Without this mechanism the
+    random draw would let afebrile sepsis and normotensive pre-eclampsia out: the description
+    would say one thing and the reading contradict it, inside the same training example.
     """
     settings = PROFILES[profile]
     heart_rate_range, resp_rate_range, systolic_range = normal_ranges(age)
@@ -425,71 +416,66 @@ def generate(
     normal_systolic = rng.randint(*systolic_range)
 
     if profile == "normal":
-        # On borne aux plages normales de l'âge : un cas étiqueté « consultation
-        # différée » ne doit jamais sortir avec une constante en alerte.
+        # Bounded to the normal ranges for the age: a case labelled "deferred consultation" must
+        # never come out with a reading in the alert zone.
         jittered_heart_rate = normal_heart_rate + rng.randint(*settings["heart_rate_offset"])
         jittered_resp_rate = normal_resp_rate + rng.randint(*settings["resp_rate_offset"])
         return VitalSigns(
             heart_rate=min(max(jittered_heart_rate, heart_rate_range[0]), heart_rate_range[1]),
             systolic_bp=normal_systolic,
-            # La diastolique reste à distance de la systolique : une différentielle
-            # de quinze millimètres ne s'observe pas chez un patient qui va bien.
-            diastolic_bp=min(
-                rng.randint(*_diastolique_normale(systolic_range)), normal_systolic - 25
-            ),
+            # The diastolic stays at a distance from the systolic: a fifteen-millimetre pulse
+            # pressure is not observed in a patient who is doing well.
+            diastolic_bp=min(rng.randint(*_normal_diastolic(systolic_range)), normal_systolic - 25),
             resp_rate=min(max(jittered_resp_rate, resp_rate_range[0]), resp_rate_range[1]),
             spo2=rng.randint(*settings["spo2"]),
             temperature=round(rng.uniform(*settings["temperature"]), 1),
-            pain_score=_douleur_auto_evaluee(age, settings["pain_score"], rng),
+            pain_score=_self_reported_pain(age, settings["pain_score"], rng),
             conscious=True,
         )
 
-    # Constantes de départ normales, puis dégradation d'une ou deux d'entre elles.
+    # Start from normal readings, then degrade one or two of them.
     values = {
         "heart_rate": normal_heart_rate,
         "systolic_bp": normal_systolic,
-        "diastolic_bp": rng.randint(*_diastolique_normale(systolic_range)),
+        "diastolic_bp": rng.randint(*_normal_diastolic(systolic_range)),
         "resp_rate": normal_resp_rate,
         "spo2": rng.randint(96, 99),
         "temperature": round(rng.uniform(36.3, 37.3), 1),
-        "pain_score": _douleur_auto_evaluee(age, settings["pain_score"], rng),
-        # La vigilance dépend de la présentation, pas de la gravité : un
-        # infarctus laisse le patient parfaitement conscient. Faute d'indication,
-        # on retombe sur le profil.
+        "pain_score": _self_reported_pain(age, settings["pain_score"], rng),
+        # Consciousness depends on the presentation, not on severity: a heart attack leaves the
+        # patient perfectly conscious. Absent an indication, fall back on the profile.
         "conscious": not (
             rng.random()
             < (
-                vigilance_alteree_probable
-                if vigilance_alteree_probable is not None
+                altered_consciousness_likely
+                if altered_consciousness_likely is not None
                 else 1 - settings["conscious_probability"]
             )
         ),
     }
 
-    sens = dict(imposees)
+    directions = dict(forced)
     candidates = ["spo2", "systolic_bp", "temperature", "heart_rate", "resp_rate"]
-    libres = [nom for nom in candidates if nom not in sens]
-    tirees = rng.sample(libres, k=min(rng.randint(1, 2), len(libres)))
+    free = [name for name in candidates if name not in directions]
+    drawn = rng.sample(free, k=min(rng.randint(1, 2), len(free)))
 
-    for name in [*sens, *tirees]:
-        direction = sens.get(name, "basse")
+    for name in [*directions, *drawn]:
+        direction = directions.get(name, "low")
         if name == "heart_rate":
             values["heart_rate"] = normal_heart_rate + rng.randint(*settings["heart_rate_offset"])
         elif name == "resp_rate":
             values["resp_rate"] = normal_resp_rate + rng.randint(*settings["resp_rate_offset"])
         elif name == "temperature":
-            plage = (
-                settings["temperature_haute"] if direction == "haute" else settings["temperature"]
-            )
-            values["temperature"] = round(rng.uniform(*plage), 1)
+            span = settings["temperature_high"] if direction == "high" else settings["temperature"]
+            values["temperature"] = round(rng.uniform(*span), 1)
         elif name == "systolic_bp":
-            if direction == "haute" and settings["systolique_haute"]:
-                values["systolic_bp"] = rng.randint(*settings["systolique_haute"])
+            if direction == "high" and settings["systolic_high"]:
+                values["systolic_bp"] = rng.randint(*settings["systolic_high"])
                 values["diastolic_bp"] = rng.randint(102, 128)
             else:
-                basse, haute = settings["part_systolique"]
+                low, high = settings["systolic_share"]
                 values["systolic_bp"] = rng.randint(
-                    round(systolic_range[0] * basse), round(systolic_range[0] * haute)
+                    round(systolic_range[0] * low), round(systolic_range[0] * high)
                 )
         else:
             values[name] = rng.randint(*settings[name])
@@ -498,6 +484,6 @@ def generate(
     return VitalSigns(**values)
 
 
-def _diastolique_normale(systolic_range: tuple[int, int]) -> tuple[int, int]:
-    """Plage diastolique plausible pour une systolique donnée : environ deux tiers."""
+def _normal_diastolic(systolic_range: tuple[int, int]) -> tuple[int, int]:
+    """Plausible diastolic range for a given systolic: about two thirds."""
     return (round(systolic_range[0] * 0.62), round(systolic_range[1] * 0.66))

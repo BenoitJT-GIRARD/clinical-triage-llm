@@ -1,22 +1,22 @@
-"""Format de dialogue de l'agent de triage — source unique de vérité.
+"""The agent's dialogue format — single source of truth.
 
-Le même gabarit sert au fine-tuning supervisé, à l'alignement par préférences,
-à l'évaluation et au service. C'est volontaire : la moindre divergence entre le
-format appris et le format servi dégrade les réponses sans qu'aucune métrique
-d'entraînement ne le signale.
+The same template serves supervised fine-tuning, preference alignment, evaluation and the
+service. That is deliberate: the slightest divergence between the format learnt and the format
+served degrades the answers without any training metric reporting it.
 
-Deux précautions importantes :
+Two precautions matter:
 
-- On installe notre propre gabarit ChatML sur le tokenizer (`install_chat_template`)
-  et on le sauvegarde avec le modèle. Le gabarit natif de Qwen3 insère un bloc
-  `<think></think>` devant la réponse de l'assistant ; les bibliothèques
-  d'entraînement appliquent ce gabarit dès qu'un jeu de données expose une
-  colonne `messages`, ce qui ferait apprendre au modèle un format que l'inférence
-  ne reproduit jamais.
-- On déclare `<|im_end|>` comme jeton de fin de séquence
-  (`install_end_of_turn_token`). Le tokenizer de Qwen3-1.7B-Base sort d'usine
-  avec `<|endoftext|>` comme fin de séquence : sans cette correction, la
-  génération ne s'arrête jamais à la fin de la réponse de triage.
+- our own ChatML template is installed on the tokenizer (:func:`install_chat_template`) and
+  saved with the model. Qwen3's native template inserts a ``<think></think>`` block before the
+  assistant's answer; the training libraries apply that template as soon as a dataset exposes a
+  ``messages`` column, which would teach the model a format inference never reproduces;
+- ``<|im_end|>`` is declared as the end-of-sequence token
+  (:func:`install_end_of_turn_token`). The Qwen3-1.7B-Base tokenizer ships with
+  ``<|endoftext|>`` as end of sequence: without this correction, generation never stops at the
+  end of the triage answer.
+
+The prompt and the answer format are French because the model answers in French: they are the
+data the model was trained on, not prose about the project.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ import unicodedata
 
 from clinical_triage.config import TRIAGE
 
-# --- Consigne système : rôle, périmètre, format de sortie et garde-fous ---
+# --- System prompt: role, scope, output format and guard rails ---
 
 SYSTEM_PROMPT = (
     "Tu es l'assistant de triage médical du service des urgences. "
@@ -42,13 +42,13 @@ SYSTEM_PROMPT = (
     "- Rappelle de contacter le 15 (SAMU) devant tout signe vital engagé."
 )
 
-# --- Marqueurs ChatML (famille Qwen) ---
+# --- ChatML markers (Qwen family) ---
 
 IM_START = "<|im_start|>"
 IM_END = "<|im_end|>"
 
-# Gabarit Jinja équivalent à `format_chatml`, installé sur le tokenizer pour que
-# les bibliothèques d'entraînement produisent exactement le même texte.
+# Jinja template equivalent to `format_chatml`, installed on the tokenizer so that the training
+# libraries produce exactly the same text.
 CHAT_TEMPLATE = (
     "{% for message in messages %}"
     "{{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n' }}"
@@ -58,7 +58,7 @@ CHAT_TEMPLATE = (
 
 
 def build_messages(user_content: str, system: str = SYSTEM_PROMPT) -> list[dict[str, str]]:
-    """Construit la liste de messages (rôle/contenu) d'un échange de triage."""
+    """Build the role/content message list of one triage exchange."""
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user_content},
@@ -66,11 +66,10 @@ def build_messages(user_content: str, system: str = SYSTEM_PROMPT) -> list[dict[
 
 
 def format_chatml(messages: list[dict[str, str]], add_generation_prompt: bool = False) -> str:
-    """Sérialise des messages au format ChatML.
+    """Serialise messages in ChatML.
 
-    Avec `add_generation_prompt`, on ouvre le tour assistant pour déclencher la
-    génération (inférence). Sinon l'échange complet est sérialisé, réponse
-    comprise (cas de l'entraînement).
+    With ``add_generation_prompt``, the assistant turn is opened to trigger generation
+    (inference). Otherwise the whole exchange is serialised, answer included (training).
     """
     parts = [f"{IM_START}{m['role']}\n{m['content']}{IM_END}\n" for m in messages]
     if add_generation_prompt:
@@ -78,72 +77,67 @@ def format_chatml(messages: list[dict[str, str]], add_generation_prompt: bool = 
     return "".join(parts)
 
 
-def completion_payload(symptomes: str, modele: str) -> dict:
-    """Corps de requête pour l'API de complétion compatible OpenAI de vLLM.
+def completion_payload(symptoms: str, model: str) -> dict:
+    """Request body for vLLM's OpenAI-compatible completion API.
 
-    La passerelle et le banc de performance l'appellent tous les deux, et c'est
-    tout l'intérêt : assemblé de chaque côté, le corps de requête resterait
-    identique champ pour champ jusqu'au jour où l'un gagne un paramètre de
-    génération, et les latences publiées décriraient alors une requête que le
-    service n'émet plus, sans que rien ne le signale.
+    The gateway and the performance bench both call it, and that is the point: assembled on
+    each side, the body would stay identical field for field until the day one of them gains a
+    generation parameter — and the published latencies would then describe a request the
+    service no longer sends, with nothing to report it.
     """
     from clinical_triage.config import SERVING
 
     return {
-        "model": modele,
-        "prompt": format_chatml(build_messages(symptomes), add_generation_prompt=True),
+        "model": model,
+        "prompt": format_chatml(build_messages(symptoms), add_generation_prompt=True),
         "max_tokens": SERVING.max_new_tokens,
         "temperature": SERVING.temperature,
         "stop": [IM_END],
     }
 
 
-def budget_de_description(tokenizer, max_seq_length: int, max_new_tokens: int) -> int:
-    """Nombre de jetons laissés à la description du patient dans la fenêtre.
+def description_budget(tokenizer, max_seq_length: int, max_new_tokens: int) -> int:
+    """How many tokens the window leaves to the patient description.
 
-    La fenêtre doit loger trois choses : l'encadrement (consigne système et
-    marqueurs de dialogue), la description du patient, et la réponse à produire.
-    L'encadrement se mesure plutôt qu'il ne s'estime — on sérialise une invite
-    vide et on la compte.
+    The window must hold three things: the framing (system prompt and dialogue markers), the
+    patient description, and the answer to produce. The framing is measured rather than
+    estimated — an empty prompt is serialised and counted.
     """
-    encadrement = len(
+    framing = len(
         tokenizer(format_chatml(build_messages(""), add_generation_prompt=True))["input_ids"]
     )
-    return max(0, max_seq_length - max_new_tokens - encadrement)
+    return max(0, max_seq_length - max_new_tokens - framing)
 
 
-def borner_la_description(texte: str, tokenizer, budget: int) -> tuple[str, bool]:
-    """Ramène une description dans le budget de jetons, et dit si elle a été coupée.
+def bound_description(text: str, tokenizer, budget: int) -> tuple[str, bool]:
+    """Bring a description back inside the token budget, and say whether it was cut.
 
-    Sans cette borne, une description plus longue que la fenêtre du modèle ne
-    produit pas une réponse dégradée : elle **interrompt la génération** par une
-    erreur de dimension de tenseur, au moment précis où un soignant attend une
-    réponse. Le contrat d'API accepte jusqu'à quatre mille caractères, soit
-    largement de quoi dépasser la fenêtre.
+    Without this bound, a description longer than the model's window does not produce a
+    degraded answer: it **interrupts generation** with a tensor-dimension error, at the exact
+    moment a nurse is waiting for one. The API contract accepts up to four thousand characters,
+    which is more than enough to exceed the window.
 
-    La coupe porte sur la fin du texte, et jamais sur la consigne système ni sur
-    la question qui la suit : un triage dont la consigne a disparu ne répond plus
-    au format attendu. Le second élément du couple dit qu'une coupe a eu lieu —
-    il ne doit pas rester dans le code, il doit remonter jusqu'au soignant, qui
-    est seul à savoir si ce qui manque comptait.
+    The cut falls at the end of the text, never on the system prompt nor on the question that
+    follows it: a triage whose prompt has disappeared no longer answers in the expected format.
+    The second element of the pair says a cut happened — it must not stay in the code, it must
+    reach the nurse, who alone knows whether what is missing mattered.
     """
-    jetons = tokenizer(texte, add_special_tokens=False)["input_ids"]
-    if len(jetons) <= budget:
-        return texte, False
-    return tokenizer.decode(jetons[:budget], skip_special_tokens=True), True
+    tokens = tokenizer(text, add_special_tokens=False)["input_ids"]
+    if len(tokens) <= budget:
+        return text, False
+    return tokenizer.decode(tokens[:budget], skip_special_tokens=True), True
 
 
 def install_chat_template(tokenizer) -> None:
-    """Installe notre gabarit ChatML sur le tokenizer (remplace celui du modèle)."""
+    """Install our ChatML template on the tokenizer (replacing the model's)."""
     tokenizer.chat_template = CHAT_TEMPLATE
 
 
 def install_end_of_turn_token(tokenizer) -> int:
-    """Déclare `<|im_end|>` comme fin de séquence et renvoie son identifiant.
+    """Declare ``<|im_end|>`` as end of sequence and return its id.
 
-    Le tokenizer sert aussi de référence au modèle fusionné exporté vers vLLM :
-    corriger la fin de séquence ici suffit à faire s'arrêter la génération dans
-    tous les moteurs d'inférence.
+    The tokenizer is also the reference of the merged model exported to vLLM: fixing the end of
+    sequence here is enough to make generation stop in every inference engine.
     """
     end_id = tokenizer.convert_tokens_to_ids(IM_END)
     tokenizer.eos_token = IM_END
@@ -153,18 +147,18 @@ def install_end_of_turn_token(tokenizer) -> int:
 
 
 def prepare_tokenizer(tokenizer) -> int:
-    """Applique les deux corrections de format et renvoie l'identifiant de fin de tour."""
+    """Apply both format corrections and return the end-of-turn id."""
     install_chat_template(tokenizer)
     return install_end_of_turn_token(tokenizer)
 
 
-# --- Mise en forme et lecture de la réponse de triage ---
+# --- Formatting and reading a triage answer ---
 
 
 def build_target_response(level: str, justification: str, recommendation: str) -> str:
-    """Met en forme la réponse cible du modèle selon le format imposé."""
+    """Format the model's target answer in the expected layout."""
     if level not in TRIAGE.levels:
-        raise ValueError(f"Niveau de triage inconnu : {level!r}")
+        raise ValueError(f"Unknown triage level: {level!r}")
     return (
         f"Niveau de priorité : {level}\n"
         f"Justification : {justification}\n"
@@ -173,11 +167,11 @@ def build_target_response(level: str, justification: str, recommendation: str) -
 
 
 def strip_accents(text: str) -> str:
-    """Retire les accents pour rendre la lecture d'une réponse tolérante à l'orthographe.
+    """Drop accents so that reading an answer tolerates spelling.
 
-    Sert au **repérage**, jamais à la restitution : un texte passé par ici ne
-    doit pas ressortir vers un utilisateur. Le module de contrôle de sécurité
-    s'en sert pour comparer ses motifs à un texte normalisé comme eux.
+    Used for **detection**, never for display: text that goes through here must not come back
+    out to a user. The safety-check module uses it to compare its patterns against a text
+    normalised the same way.
     """
     decomposed = unicodedata.normalize("NFKD", text)
     return "".join(c for c in decomposed if not unicodedata.combining(c))
@@ -192,11 +186,11 @@ _RECOMMENDATION_LINE = re.compile(r"recommandation\s*:\s*(.+)", re.IGNORECASE)
 
 
 def extract_level(generated_text: str) -> str | None:
-    """Extrait le niveau de priorité annoncé par le modèle.
+    """Extract the priority level the model announced.
 
-    Renvoie `None` si aucun niveau valide n'est trouvé, ou si la réponse en
-    annonce plusieurs différents : dans les deux cas la réponse est inexploitable
-    par le système d'information hospitalier et doit compter comme hors format.
+    Returns ``None`` if no valid level is found, or if the answer announces several different
+    ones: in both cases the answer is unusable by the hospital information system and must
+    count as off-format.
     """
     found = {m.group(1).upper() for m in _LEVEL_LINE.finditer(strip_accents(generated_text))}
     if len(found) != 1:
@@ -205,14 +199,13 @@ def extract_level(generated_text: str) -> str | None:
 
 
 def parse_response(generated_text: str) -> dict[str, str | None]:
-    """Décompose une réponse générée en niveau, justification et recommandation.
+    """Split a generated answer into level, justification and recommendation.
 
-    Les deux textes sont rendus **tels que le modèle les a écrits**, accents
-    compris : ils s'affichent à l'écran du soignant, et « oedeme aigu du poumon »
-    y serait une faute visible. Seule la ligne de niveau se lit sur un texte
-    normalisé, parce que son étiquette porte un accent (« priorité ») que le
-    modèle peut omettre ; « Justification » et « Recommandation » n'en ont pas,
-    et se repèrent donc directement sur le texte d'origine.
+    Both texts are returned **as the model wrote them**, accents included: they are displayed
+    on the nurse's screen, and "oedeme aigu du poumon" would be a visible mistake there. Only
+    the level line is read on a normalised text, because its label carries an accent
+    ("priorité") that the model may omit; "Justification" and "Recommandation" carry none, and
+    are therefore matched directly on the original text.
     """
     justification = _JUSTIFICATION_LINE.search(generated_text)
     recommendation = _RECOMMENDATION_LINE.search(generated_text)
@@ -223,39 +216,38 @@ def parse_response(generated_text: str) -> dict[str, str | None]:
     }
 
 
-# Ce qui, en début de ligne, signale que la génération a quitté la réponse : un
-# nouveau tour de dialogue, un marqueur de gabarit, ou le premier mot de la
-# consigne système. Une consigne détournée produit exactement cela.
-_REPRISE_DE_DIALOGUE = re.compile(
+# What, at the start of a line, signals that generation has left the answer: a new dialogue
+# turn, a template marker, or the first words of the system prompt. A hijacked prompt produces
+# exactly that.
+_DIALOGUE_RESUMES = re.compile(
     r"^\s*(?:<\|im_(?:start|end)\|>|human\s*:|assistant\s*:|system\s*:|user\s*:"
     r"|tu es l'assistant|you are the)",
     re.IGNORECASE,
 )
 
-# Lignes conservées quand la réponse ne comporte pas de recommandation. Le
-# contrat en compte trois ; une de plus tolère une justification qui déborde.
-LIGNES_SANS_RECOMMANDATION = 4
+# Lines kept when the answer carries no recommendation. The contract has three; one more
+# tolerates a justification that spills over.
+LINES_WITHOUT_RECOMMENDATION = 4
 
 
 def truncate_to_answer(generated_text: str) -> str:
-    """Coupe tout ce que le modèle produit après la ligne de recommandation.
+    """Cut everything the model produces after the recommendation line.
 
-    Filet de sécurité du service : si la génération déborde (jeton de fin manqué,
-    répétition), le personnel soignant et le journal d'audit ne reçoivent que le
-    bloc de réponse attendu, jamais la consigne système ni un texte en roue libre.
+    The service's safety net: if generation overruns (missed end token, repetition), the nurse
+    and the audit log receive only the expected answer block, never the system prompt nor a
+    free-running text.
 
-    Le filet **échoue fermé**. S'arrêter à la seule ligne de recommandation
-    rendrait entière, consigne système comprise, une génération qui n'en produit
-    aucune — le cas même d'une consigne détournée. Deux garde-fous s'y ajoutent :
-    on coupe avant toute reprise de dialogue, et à défaut de recommandation on ne
-    garde que les premières lignes.
+    The net **fails closed**. Stopping at the recommendation line alone would return a
+    generation that produces none in full, system prompt included — precisely the case of a
+    hijacked prompt. Two guards are added: the cut happens before any resumed dialogue, and
+    failing a recommendation, only the first lines are kept.
     """
     text = generated_text.split(IM_END)[0].strip()
     kept: list[str] = []
     for line in text.splitlines():
-        if _REPRISE_DE_DIALOGUE.match(line):
+        if _DIALOGUE_RESUMES.match(line):
             break
         kept.append(line)
         if _RECOMMENDATION_LINE.match(strip_accents(line.strip())):
             return "\n".join(kept).strip()
-    return "\n".join(kept[:LIGNES_SANS_RECOMMANDATION]).strip()
+    return "\n".join(kept[:LINES_WITHOUT_RECOMMENDATION]).strip()

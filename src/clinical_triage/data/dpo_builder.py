@@ -1,28 +1,27 @@
-"""Construction des paires de préférences pour l'alignement DPO.
+"""Building the preference pairs for the DPO alignment.
 
-Le DPO apprend au modèle à préférer une réponse à une autre. Tout dépend donc de
-ce que les deux réponses ont de différent : le modèle apprend la différence qu'il
-trouve, pas celle qu'on avait en tête. Opposer une bonne réponse de trois lignes
-à une réponse rejetée évasive d'une demi-ligne ferait de la longueur la seule
-différence systématique du jeu : le modèle apprendrait « plus long vaut mieux »
-et cesserait d'émettre son jeton de fin.
+DPO teaches the model to prefer one answer over another. Everything therefore depends on what
+differs between the two: the model learns the difference it finds, not the one that was
+intended. Opposing a good three-line answer to an evasive half-line rejected answer would make
+length the only systematic difference in the set: the model would learn "longer is better" and
+stop emitting its end token.
 
-Trois règles encadrent donc la construction des paires :
+Three rules frame the construction of the pairs:
 
-1. **même format, même longueur.** La réponse rejetée respecte la structure en
-   trois lignes. Chaque défaut est décliné en plusieurs longueurs, et l'on retient
-   celle qui colle au plus près de la réponse préférée : la différence entre les
-   deux porte alors sur le fond, et sur rien d'autre.
-2. **jamais de surclassement en réponse rejetée.** La consigne système impose de
-   surclasser au moindre doute. Opposer une réponse « trop prudente » comme
-   mauvais exemple apprendrait exactement l'inverse. Les réponses rejetées sont
-   des sous-triages, des recommandations qui retardent la prise en charge, des
-   diagnostics affirmés ou des réponses hors contrat de langue.
-3. **les cas graves pèsent plus.** Le sous-triage d'une urgence vitale est la
-   faute la plus coûteuse : ces cas sont sur-représentés dans le jeu.
+1. **same format, same length.** The rejected answer respects the three-line structure. Each
+   defect comes in several lengths, and the one closest to the preferred answer is kept: the
+   difference between the two then lies in the substance, and in nothing else.
+2. **never an escalation as the rejected answer.** The system prompt requires escalating at the
+   slightest doubt. Opposing an "over-cautious" answer as a bad example would teach exactly the
+   opposite. Rejected answers are undertriages, recommendations that delay care, asserted
+   diagnoses, or answers outside the language contract.
+3. **serious cases weigh more.** Undertriaging a life-threatening case is the costliest
+   failure: those cases are over-represented in the set.
 
-Les paires sont construites à partir du **seul jeu d'entraînement** : un prompt
-du jeu de test ou du jeu d'évaluation clinique ne doit jamais apparaître ici.
+The pairs are built from the **training split only**: a prompt from the test split or from the
+clinical evaluation set must never appear here.
+
+The answer texts are French, as the model's output is: they are the data.
 """
 
 from __future__ import annotations
@@ -38,16 +37,15 @@ from clinical_triage.utils import get_logger
 
 logger = get_logger(__name__)
 
-# Niveau immédiatement inférieur, utilisé pour fabriquer un sous-triage.
-NIVEAU_INFERIEUR = {
+# The level immediately below, used to manufacture an undertriage.
+LOWER_LEVEL = {
     "URGENCE_VITALE": "URGENCE_MODEREE",
     "URGENCE_MODEREE": "CONSULTATION_DIFFEREE",
 }
 
-# Justifications minimisantes. Les longueurs sont volontairement variées, des
-# plus courtes aux plus longues que les vraies justifications : si toutes les
-# réponses rejetées étaient plus courtes, le DPO apprendrait la longueur.
-JUSTIFICATIONS_MINIMISANTES = (
+# Minimising justifications. The lengths are deliberately varied, from shorter to longer than
+# the real justifications: if every rejected answer were shorter, DPO would learn length.
+MINIMISING_JUSTIFICATIONS = (
     "Rien d'inquiétant dans ce qui est décrit.",
     (
         "Les éléments rapportés paraissent rester dans les limites de la normale et ne "
@@ -65,9 +63,9 @@ JUSTIFICATIONS_MINIMISANTES = (
     ),
 )
 
-# Recommandations qui retardent la prise en charge : le niveau annoncé est le bon,
-# mais la conduite à tenir contredit l'urgence.
-RECOMMANDATIONS_DANGEREUSES = (
+# Recommendations that delay care: the announced level is right, but the course of action
+# contradicts the urgency.
+UNSAFE_RECOMMENDATIONS = (
     "Faire patienter en salle d'attente.",
     (
         "Faire patienter le patient en salle d'attente et le réévaluer si son état se "
@@ -85,9 +83,8 @@ RECOMMANDATIONS_DANGEREUSES = (
     ),
 )
 
-# Diagnostics affirmés : l'agent doit fournir une aide à la décision, jamais un
-# diagnostic définitif.
-DIAGNOSTICS_AFFIRMES = (
+# Asserted diagnoses: the agent must provide decision support, never a definitive diagnosis.
+ASSERTED_DIAGNOSES = (
     "Le diagnostic est certain.",
     (
         "Il s'agit d'un infarctus du myocarde constitué ; le diagnostic est certain et ne "
@@ -105,9 +102,9 @@ DIAGNOSTICS_AFFIRMES = (
     ),
 )
 
-# Réponse hors contrat : bon fond, mais rédigée en anglais alors que la consigne
-# système impose le français. Deux longueurs, pour la sélection ci-dessous.
-REPONSES_EN_ANGLAIS = {
+# Answer outside the contract: acceptable substance, but written in English when the system
+# prompt requires French. Two lengths, for the selection below.
+ENGLISH_ANSWERS = {
     "URGENCE_VITALE": (
         (
             "Priority level: LIFE-THREATENING EMERGENCY\n"
@@ -158,94 +155,92 @@ REPONSES_EN_ANGLAIS = {
 
 @dataclass(frozen=True)
 class PreferencePairRecord:
-    """Paire de préférence prête pour l'entraînement DPO."""
+    """A preference pair ready for DPO training."""
 
     user_turn: str
     chosen: str
     rejected: str
     level: str
-    lang: str
+    strategy: str
     strategie: str
     source: str
 
 
-# Chaque constructeur renvoie plusieurs candidats de longueurs différentes. Le
-# constructeur de paires retient celui dont la longueur est la plus proche de la
-# réponse préférée.
+# Each builder returns several candidates of different lengths. The pair builder keeps the one
+# whose length is closest to the preferred answer.
 
 
-def _sous_triage(example: TriageExample, rng: random.Random) -> list[str]:
-    """Réponses à un niveau inférieur, avec une justification minimisante.
+def _undertriage(example: TriageExample, rng: random.Random) -> list[str]:
+    """Answers one level below, with a minimising justification.
 
-    Depuis une urgence vitale, on tire au sort entre la sous-évaluation d'un cran
-    et celle de deux crans : la seconde est la faute la plus grave, elle doit
-    aussi être présente dans le jeu de préférences.
+    From a life-threatening case, the draw picks between dropping one step and dropping two: the
+    second is the most serious failure, and it must be present in the preference set too.
     """
-    inferieur = NIVEAU_INFERIEUR.get(example.level)
-    if inferieur is None:
+    lower = LOWER_LEVEL.get(example.level)
+    if lower is None:
         return []
     if example.level == "URGENCE_VITALE" and rng.random() < 0.4:
-        inferieur = "CONSULTATION_DIFFEREE"
+        lower = "CONSULTATION_DIFFEREE"
     return [
-        build_target_response(inferieur, justification, recommendation_for(inferieur))
-        for justification in JUSTIFICATIONS_MINIMISANTES
+        build_target_response(lower, justification, recommendation_for(lower))
+        for justification in MINIMISING_JUSTIFICATIONS
     ]
 
 
-def _recommandation_dangereuse(example: TriageExample, rng: random.Random) -> list[str]:
-    """Bon niveau annoncé, mais conduite à tenir qui retarde la prise en charge."""
+def _unsafe_recommendation(example: TriageExample, rng: random.Random) -> list[str]:
+    """Right level announced, but a course of action that delays care."""
     justification = example.assistant_turn.split("\n")[1].replace("Justification : ", "")
     return [
-        build_target_response(example.level, justification, recommandation)
-        for recommandation in RECOMMANDATIONS_DANGEREUSES
+        build_target_response(example.level, justification, recommendation)
+        for recommendation in UNSAFE_RECOMMENDATIONS
     ]
 
 
-def _diagnostic_affirme(example: TriageExample, rng: random.Random) -> list[str]:
-    """Bon niveau, mais diagnostic présenté comme certain."""
+def _asserted_diagnosis(example: TriageExample, rng: random.Random) -> list[str]:
+    """Right level, but a diagnosis presented as certain."""
     return [
-        build_target_response(example.level, diagnostic, recommendation_for(example.level))
-        for diagnostic in DIAGNOSTICS_AFFIRMES
+        build_target_response(example.level, diagnosis, recommendation_for(example.level))
+        for diagnosis in ASSERTED_DIAGNOSES
     ]
 
 
-def _reponse_en_anglais(example: TriageExample, rng: random.Random) -> list[str]:
-    """Contenu acceptable, mais langue et libellés hors du contrat de sortie."""
-    return list(REPONSES_EN_ANGLAIS[example.level])
+def _answered_in_english(example: TriageExample, rng: random.Random) -> list[str]:
+    """Acceptable content, but a language and labels outside the output contract."""
+    return list(ENGLISH_ANSWERS[example.level])
 
 
-# Stratégies applicables selon le niveau. Le sous-triage n'existe pas pour le
-# niveau le plus bas, et le surclassement n'est jamais une réponse rejetée.
+# Strategies applicable per level. Undertriage does not exist for the lowest level, and
+# escalation is never a rejected answer.
 STRATEGIES = {
     "URGENCE_VITALE": (
-        "sous_triage",
-        "recommandation_dangereuse",
-        "diagnostic_affirme",
-        "reponse_en_anglais",
+        "undertriage",
+        "unsafe_recommendation",
+        "asserted_diagnosis",
+        "answered_in_english",
     ),
     "URGENCE_MODEREE": (
-        "sous_triage",
-        "recommandation_dangereuse",
-        "diagnostic_affirme",
-        "reponse_en_anglais",
+        "undertriage",
+        "unsafe_recommendation",
+        "asserted_diagnosis",
+        "answered_in_english",
     ),
     "CONSULTATION_DIFFEREE": (
-        "recommandation_dangereuse",
-        "diagnostic_affirme",
-        "reponse_en_anglais",
+        "unsafe_recommendation",
+        "asserted_diagnosis",
+        "answered_in_english",
     ),
 }
 
-CONSTRUCTEURS = {
-    "sous_triage": _sous_triage,
-    "recommandation_dangereuse": _recommandation_dangereuse,
-    "diagnostic_affirme": _diagnostic_affirme,
-    "reponse_en_anglais": _reponse_en_anglais,
+BUILDERS = {
+    "undertriage": _undertriage,
+    "unsafe_recommendation": _unsafe_recommendation,
+    "asserted_diagnosis": _asserted_diagnosis,
+    "answered_in_english": _answered_in_english,
 }
 
-# Poids de tirage par niveau : le sous-triage d'un cas grave est la faute la plus
-# coûteuse, ces cas sont donc sur-représentés.
-POIDS_PAR_NIVEAU = {"URGENCE_VITALE": 3, "URGENCE_MODEREE": 2, "CONSULTATION_DIFFEREE": 1}
+# Draw weight per level: undertriaging a serious case is the costliest failure, so those cases
+# are over-represented.
+WEIGHT_PER_LEVEL = {"URGENCE_VITALE": 3, "URGENCE_MODEREE": 2, "CONSULTATION_DIFFEREE": 1}
 
 
 def build_preference_pairs(
@@ -253,64 +248,63 @@ def build_preference_pairs(
     target_size: int,
     rng: random.Random,
 ) -> list[PreferencePairRecord]:
-    """Construit les paires de préférence de sécurité clinique."""
-    ponderes: list[TriageExample] = []
+    """Build the clinical-safety preference pairs."""
+    weighted: list[TriageExample] = []
     for example in train_examples:
-        ponderes.extend([example] * POIDS_PAR_NIVEAU[example.level])
-    rng.shuffle(ponderes)
+        weighted.extend([example] * WEIGHT_PER_LEVEL[example.level])
+    rng.shuffle(weighted)
 
-    paires: list[PreferencePairRecord] = []
-    tours_vus: set[str] = set()
-    for example in ponderes:
-        if len(paires) >= target_size:
+    pairs: list[PreferencePairRecord] = []
+    seen_turns: set[str] = set()
+    for example in weighted:
+        if len(pairs) >= target_size:
             break
-        if example.user_turn in tours_vus:
+        if example.user_turn in seen_turns:
             continue
-        strategie = rng.choice(STRATEGIES[example.level])
-        candidats = [
-            candidat
-            for candidat in CONSTRUCTEURS[strategie](example, rng)
-            if candidat != example.assistant_turn
+        strategy = rng.choice(STRATEGIES[example.level])
+        candidates = [
+            candidate
+            for candidate in BUILDERS[strategy](example, rng)
+            if candidate != example.assistant_turn
         ]
-        if not candidats:
+        if not candidates:
             continue
-        # On garde les deux candidats les plus proches en longueur, puis on tire
-        # entre les deux : retenir systématiquement le plus proche ferait pencher
-        # les réponses rejetées toujours du même côté de la réponse préférée.
-        candidats.sort(key=lambda c: abs(len(c) - len(example.assistant_turn)))
-        rejected = rng.choice(candidats[:2])
-        tours_vus.add(example.user_turn)
-        paires.append(
+        # Keep the two candidates closest in length, then draw between them: always keeping the
+        # closest would tilt the rejected answers to the same side of the preferred one.
+        candidates.sort(key=lambda c: abs(len(c) - len(example.assistant_turn)))
+        rejected = rng.choice(candidates[:2])
+        seen_turns.add(example.user_turn)
+        pairs.append(
             PreferencePairRecord(
                 user_turn=example.user_turn,
                 chosen=example.assistant_turn,
                 rejected=rejected,
                 level=example.level,
                 lang=example.lang,
-                strategie=strategie,
-                source="preference_securite",
+                strategy=strategy,
+                source="safety_preference",
             )
         )
 
-    repartition = {niveau: sum(1 for p in paires if p.level == niveau) for niveau in TRIAGE.levels}
-    logger.info("Paires de préférence : %d (%s)", len(paires), repartition)
-    return paires
+    distribution = {level: sum(1 for p in pairs if p.level == level) for level in TRIAGE.levels}
+    logger.info("Preference pairs: %d (%s)", len(pairs), distribution)
+    return pairs
 
 
 def length_balance(pairs: list[PreferencePairRecord]) -> dict[str, float]:
-    """Mesure l'écart de longueur entre réponses préférées et rejetées.
+    """Measure the length gap between preferred and rejected answers.
 
-    Un écart systématique serait le signal que le DPO risque d'apprendre la
-    longueur plutôt que le fond : cette mesure est publiée dans les métadonnées
-    du dataset pour que le contrôle soit vérifiable par un lecteur.
+    A systematic gap would be the signal that DPO risks learning length rather than substance:
+    this measurement is published in the dataset metadata so that the check is verifiable by a
+    reader.
     """
     if not pairs:
-        return {"chosen_moyenne": 0.0, "rejected_moyenne": 0.0, "part_chosen_plus_long": 0.0}
-    longueurs_chosen = [len(p.chosen) for p in pairs]
-    longueurs_rejected = [len(p.rejected) for p in pairs]
-    plus_longues = sum(c > r for c, r in zip(longueurs_chosen, longueurs_rejected, strict=True))
+        return {"chosen_mean_chars": 0.0, "rejected_mean_chars": 0.0, "chosen_longer_share": 0.0}
+    chosen_lengths = [len(p.chosen) for p in pairs]
+    rejected_lengths = [len(p.rejected) for p in pairs]
+    longer = sum(c > r for c, r in zip(chosen_lengths, rejected_lengths, strict=True))
     return {
-        "chosen_moyenne": round(sum(longueurs_chosen) / len(pairs), 1),
-        "rejected_moyenne": round(sum(longueurs_rejected) / len(pairs), 1),
-        "part_chosen_plus_long": round(plus_longues / len(pairs), 3),
+        "chosen_mean_chars": round(sum(chosen_lengths) / len(pairs), 1),
+        "rejected_mean_chars": round(sum(rejected_lengths) / len(pairs), 1),
+        "chosen_longer_share": round(longer / len(pairs), 3),
     }

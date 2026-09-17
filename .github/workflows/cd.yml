@@ -67,7 +67,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: deploy/Dockerfile.api
+          file: infra/Dockerfile.api
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -104,7 +104,7 @@ jobs:
       # L'exécuteur ne publie que ce dont il dispose réellement : les **cartes de
       # modèle**, qui sont versionnées. Ni les poids ni les jeux d'entraînement ne
       # sont dans le dépôt — les premiers pèsent des gigaoctets, les seconds sont
-      # reconstruits par `scripts/01` et publiés depuis la machine qui les a
+      # reconstruits par `scripts/build_dataset.py` et publiés depuis la machine qui les a
       # produits. Publier le dataset d'ici téléverserait deux fichiers sur six et
       # l'annoncerait comme un succès.
       #
@@ -116,7 +116,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_NAMESPACE: ${{ vars.HF_NAMESPACE }}
-        run: uv run --no-sync python scripts/08_publish_hf.py --what cartes --etiquette "$GITHUB_REF_NAME"
+        run: uv run --no-sync python scripts/publish_to_hub.py --what cartes --etiquette "$GITHUB_REF_NAME"
 
       - name: Récapituler la version publiée
         run: |
@@ -150,7 +150,7 @@ jobs:
       - name: Installer Python 3.12
         run: uv python install 3.12
 
-      # Le paquet lui-même, pas seulement l'outillage : `deploy/modal_app.py`
+      # Le paquet lui-même, pas seulement l'outillage : `infra/modal_app.py`
       # importe `clinical_triage` au moment du déploiement, pour que le conteneur
       # distant reçoive le code de service. Le groupe `train` reste dehors —
       # l'exécuteur n'entraîne rien — et le déploiement ci-dessous porte
@@ -160,13 +160,13 @@ jobs:
       - name: Synchroniser les dépendances
         run: uv sync --frozen --no-group train
 
-      # Modal reconstruit ses deux conteneurs à partir de `deploy/modal_app.py` :
+      # Modal reconstruit ses deux conteneurs à partir de `infra/modal_app.py` :
       # le moteur vLLM, qui lit les poids sur le Hub à la révision ci-dessous, et
       # la passerelle FastAPI. Hors étiquette de modèle, la révision vaut `main` :
       # seule la passerelle change, le modèle en place reste servi.
       #
       # L'image publiée sur GHCR par le job `image` n'est pas ce que Modal
-      # déploie — elle sert l'installation sur site, décrite dans `deploy/`. Les
+      # déploie — elle sert l'installation sur site, décrite dans `infra/`. Les
       # deux chemins partent du même code de service ; le job `image` reste donc
       # une condition du déploiement, puisqu'il le compile et l'éprouve.
       - name: Déployer sur Modal
@@ -178,7 +178,7 @@ jobs:
           # dépôt non définie arrive vide et donne « /qwen3-1.7b-clinical-triage ».
           HF_NAMESPACE: ${{ vars.HF_NAMESPACE }}
           TRIAGE_MODEL_REVISION: ${{ needs.modele.outputs.revision || 'main' }}
-        run: uv run --no-sync modal deploy deploy/modal_app.py
+        run: uv run --no-sync modal deploy infra/modal_app.py
 
       # Un déploiement qui ne vérifie pas son résultat n'est pas un déploiement.
       - name: Vérifier la santé de l'endpoint après déploiement
