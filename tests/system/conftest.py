@@ -190,7 +190,7 @@ def start_service(tmp_path_factory):
         stub.write_text(STUB_ENGINE, encoding="utf-8")
         engine_output = workspace / "engine.log"
         with engine_output.open("w", encoding="utf-8") as handle:
-            engine = subprocess.Popen(  # noqa: S603 - fixed argument list, no shell
+            engine = subprocess.Popen(  # fixed argument list, no shell
                 [sys.executable, str(stub)],
                 env=os.environ
                 | {
@@ -208,7 +208,7 @@ def start_service(tmp_path_factory):
 
         gateway_output = workspace / "gateway.log"
         with gateway_output.open("w", encoding="utf-8") as handle:
-            gateway = subprocess.Popen(  # noqa: S603 - fixed argument list, no shell
+            gateway = subprocess.Popen(  # fixed argument list, no shell
                 gateway_command(gateway_port),
                 cwd=str(PATHS.root),
                 env=os.environ

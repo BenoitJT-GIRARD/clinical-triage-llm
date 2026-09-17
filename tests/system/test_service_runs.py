@@ -135,7 +135,7 @@ def test_the_service_refuses_to_start_without_a_key(gateway_without_a_key):
     The integration tier reads the same requirement through the lifespan; here it is the exit
     code, which is what an orchestrator sees.
     """
-    refused = subprocess.run(  # noqa: S603 - the command line comes from the fixture, no shell
+    refused = subprocess.run(  # the command line comes from the fixture, no shell
         gateway_without_a_key.command,
         cwd=gateway_without_a_key.cwd,
         env=gateway_without_a_key.environment,

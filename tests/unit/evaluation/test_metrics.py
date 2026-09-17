@@ -186,7 +186,6 @@ def _separable_set(count: int) -> tuple[list[str], list[str]]:
 
 
 def test_the_classical_baseline_learns_and_predicts():
-    pytest.importorskip("sklearn")
     texts, levels = _separable_set(20)
     predictions, trace = classical_classifier(
         texts, levels, texts, levels, ["douleur thoracique sueurs cas 99"]
@@ -203,7 +202,6 @@ def test_the_classical_baseline_chooses_its_setting_on_the_validation_split():
     A baseline tuned on the set that judges it is no longer one. The trace therefore publishes
     the setting kept and the score that kept it, both from the validation split alone.
     """
-    pytest.importorskip("sklearn")
     texts, levels = _separable_set(20)
     _, trace = classical_classifier(texts, levels, texts, levels, texts[:1])
     assert trace["configuration"] in trace["candidates"]
@@ -298,7 +296,7 @@ def test_the_exact_interval_agrees_with_the_beta_law():
     dependency for two calls. This test verifies that the choice costs no precision, by
     comparing it with the closed form.
     """
-    stats = pytest.importorskip("scipy.stats")
+    from scipy import stats
     for successes, total in [(3, 3), (1, 7), (17, 40), (19, 20), (32, 32), (10, 10)]:
         low = 0.0 if successes == 0 else stats.beta.ppf(0.025, successes, total - successes + 1)
         high = 1.0 if successes == total else stats.beta.ppf(0.975, successes + 1, total - successes)

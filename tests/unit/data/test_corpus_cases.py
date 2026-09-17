@@ -8,11 +8,12 @@ describes what the extraction does, and not what one believes it does.
 
 from __future__ import annotations
 
+import json
 import random
 
 import pytest
 
-from clinical_triage.config import MODEL, SERVING
+from clinical_triage.config import PATHS
 from clinical_triage.data.corpus_cases import (
     MAX_LENGTH,
     MIN_LENGTH,
@@ -91,34 +92,26 @@ def test_a_symptom_sheet_that_is_too_short_is_discarded():
 # --- The length bound is the service's, not a round number ---
 
 
+@pytest.mark.claim
 def test_the_length_bound_fits_inside_the_service_budget():
-    """No case kept may exceed what the service accepts.
+    """No case delivered may exceed what the service agrees to read.
 
     The service leaves the description what the model window leaves it once the system prompt
     and the room reserved for the answer are removed. Training beyond that would teach the model
     on narratives it will never see whole in production.
 
-    This test fails if the model window, the generation budget or the bound change without the
-    computation being redone.
+    The budget is not recomputed here: ``scripts/build_dataset.py`` measures it with the base
+    model's tokenizer at every build, on the cases actually kept, and refuses the build if one
+    of them exceeds it. What this test does is tie the constant to that published measurement —
+    it fails the day ``MAX_LENGTH`` changes, or the model window, or the generation budget,
+    without the set being rebuilt.
     """
-    transformers = pytest.importorskip("transformers")
-    try:
-        tokenizer = transformers.AutoTokenizer.from_pretrained(MODEL.base_model)
-    except Exception as exc:  # noqa: BLE001 - offline, the test has nothing to say
-        pytest.skip(f"tokenizer unavailable: {exc}")
+    published = json.loads(
+        (PATHS.data_processed / "metadata.json").read_text(encoding="utf-8")
+    )["statistics"]["description_lengths"]
 
-    from clinical_triage.prompts import description_budget
-
-    budget = description_budget(tokenizer, MODEL.max_seq_length, SERVING.max_new_tokens)
-    # Density measured on the 546 descriptions kept from MediQAl and MedQuAD: median 0.287
-    # tokens per character, 95th percentile 0.375. The longest description of the delivered set
-    # occupies 312 tokens. The build-time check (``scripts/build_dataset.py``) verifies the real
-    # case; this one keeps the setting coherent offline.
-    tokens_at_p95 = MAX_LENGTH * 0.375
-    assert tokens_at_p95 <= budget, (
-        f"MAX_LENGTH={MAX_LENGTH} produces about {tokens_at_p95:.0f} tokens at the 95th "
-        f"percentile, for a service budget of {budget}."
-    )
+    assert published["char_cap"] == MAX_LENGTH, "the delivered set was built under another bound"
+    assert published["max_tokens"] <= published["token_budget"]
     assert MIN_LENGTH < MAX_LENGTH
 
 

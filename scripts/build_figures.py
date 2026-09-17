@@ -48,9 +48,9 @@ def _labelled(block: dict) -> dict:
     return {figures.SYSTEM_LABELS.get(name, name): values for name, values in block.items()}
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.parse_args()
+    parser.parse_args(argv)
 
     metadata = read_results(PATHS.data_processed / "metadata.json")
     evaluation = read_results(PATHS.reports / "evaluation_results.json")

@@ -16,6 +16,8 @@ from fastapi.testclient import TestClient
 from clinical_triage.serving import api as module_api
 from clinical_triage.serving.api import RateLimiter
 
+pytestmark = pytest.mark.integration
+
 KEY = "test-key"
 
 # The answer is in French because the service answers in French: it is the model's output, not

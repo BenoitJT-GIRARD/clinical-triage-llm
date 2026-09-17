@@ -185,8 +185,10 @@ def _evaluation_table(what: str) -> str:
             f"| Triage level accuracy | {measures['accuracy']:.3f} [{low:.2f} - {high:.2f}] |",
             f"| **Undertriage of urgent cases** | **{percent(measures['undertriage'])}** |",
             f"| Overtriage, all cases | {percent(measures['overtriage'])} |",
-            "| Answers the information system can parse | "
-            f"{percent(measures['format_compliance'])} |",
+            (
+                "| Answers the information system can parse | "
+                f"{percent(measures['format_compliance'])} |"
+            ),
         ]
     )
 
