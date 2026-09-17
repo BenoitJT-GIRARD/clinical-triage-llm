@@ -81,7 +81,7 @@
   },
   "build": {
     "seed": 42,
-    "git_revision": "7d5e5b2",
+    "git_revision": "ebf4ba1",
     "date_utc": "2026-08-25",
     "command": "uv run python scripts/build_dataset.py"
   },

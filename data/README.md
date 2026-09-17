@@ -265,6 +265,12 @@ level. Three decisions follow:
    looks, after masking, for what might have slipped through. Its results are published in
    `metadata.json`.
 
+The occurrences that check still reports under the "title followed by a name" pattern are all
+the same surname, "Mr Shoot", invented by the MediQAl examination corpus for a vignette of
+agitation after taking heroin or cocaine: no real patient name survives in the set. The masking
+is inconsistent all the same — in that very record, a later occurrence was indeed replaced by
+`<PERSON>`.
+
 **Auditability.** Every transformation is in the code, the seed is fixed, and the repository
 revision that produced the set is recorded in `metadata.json`.
 

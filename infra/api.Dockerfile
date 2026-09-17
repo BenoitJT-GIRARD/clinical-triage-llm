@@ -38,7 +38,10 @@ ENV TRIAGE_BACKEND=vllm \
 
 EXPOSE 8080
 
-# The probe leaves the service time to load the spaCy models before it starts counting failures.
+# The probe is green only when the inference engine answers: the gateway reports itself as
+# "degraded" for as long as vLLM is not serving, although it has started perfectly well.
+# The grace period covers exactly that — uvicorn starting, then the engine — without
+# counting a failure.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s \
     CMD python -c "import httpx,sys; sys.exit(0 if httpx.get('http://localhost:8080/health', timeout=4).json()['status']=='ok' else 1)"
 

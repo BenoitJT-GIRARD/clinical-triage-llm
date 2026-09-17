@@ -124,8 +124,11 @@ class Engine:
             str(VLLM_PORT),
             "--dtype",
             "bfloat16",
-            # The prompt fits in 550 tokens and the answer in 220: 1024 is enough, and a wider
-            # window would reserve attention cache for nothing.
+            # This is the window the gateway gives itself, and it splits it thus: about 224
+            # tokens of system prompt, at most 580 for the patient narrative — which
+            # `MAX_CHARACTERS`, in `serving/api.py`, bounds to 1,500 characters — and 220
+            # for the answer, that is 1024. A wider window would reserve attention cache
+            # for nothing.
             "--max-model-len",
             "1024",
             "--gpu-memory-utilization",
