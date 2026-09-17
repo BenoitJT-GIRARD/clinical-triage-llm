@@ -171,9 +171,16 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
+# Without this, the published XML report writes the absolute root of the measured sources: a
+# reader finds the directory tree of the machine that ran the suite, and two runs on two
+# machines produce two different files for the same numbers.
+relative_files = true
 # All the tracked Python, not the package alone: `scripts/` carries the chain end to
 # end and `infra/` the deployment descriptor, and both are covered by tests.
 source = ["src/clinical_triage", "scripts", "infra"]
+# Everything a run produces lives under `var/`, this file included: it is a working file of
+# the measurement, not a result.
+data_file = "var/.coverage"
 # These modules need a GPU: they are verified by real runs of the training pipeline,
 # not by unit tests. The files are named one by one rather than by a pattern over the
 # training/ group, which would also exempt experiment tracking and the warm-up step
