@@ -74,7 +74,12 @@ def main(argv: list[str] | None = None) -> None:
     if tuning:
         figures.hyperparameter_tuning(tuning, directory / "hyperparameter_tuning.png")
     if sft:
-        figures.sft_training(sft["history"], directory / "sft_training.png")
+        figures.sft_training(
+            sft["history"],
+            directory / "sft_training.png",
+            training_examples=metadata["statistics"]["sft_train"],
+            validation_examples=metadata["statistics"]["sft_validation"],
+        )
     if dpo:
         figures.dpo_alignment(
             dpo["history"],

@@ -98,6 +98,10 @@ COUNTED = "exhaustive counts, no estimation"
 #: disappears in a greyscale print.
 NOT_MEASURABLE = "///"
 
+#: Written where a bar would be, when the quantity was not measured at all. A bar at zero would
+#: be indistinguishable from a measurement that came out at zero.
+NOT_MEASURED = "n/a"
+
 
 def _bar_interval(values: list[float], intervals: list[tuple[float, float] | None]) -> np.ndarray:
     """Turn published confidence intervals into the asymmetric offsets a bar chart wants."""
@@ -236,23 +240,36 @@ def hyperparameter_tuning(comparison: dict, destination: Path) -> Path:
     left.set_xticklabels(names)
     left.set_ylim(0, 1.15)
 
-    right.bar(range(len(names)), losses, color=palette, width=0.62)
+    # A missing validation loss is not a loss of zero: the bar is left out and the marker takes
+    # its place, as it does for the proportions on the left panel. A bar at zero would read as
+    # "this setting has nothing left to learn", which is the opposite of what a missing
+    # measurement allows anyone to say.
+    measured = [index for index, loss in enumerate(losses) if loss is not None]
+    heights = [losses[index] for index in measured]
+    right.bar(
+        measured,
+        heights,
+        color=[palette[index] for index in measured],
+        width=0.62,
+    )
     right.set_title("Validation loss")
     right.set_ylabel("cross-entropy (nats per token)")
     right.set_xlabel("LoRA setting")
     right.set_xticks(range(len(names)))
     right.set_xticklabels(names)
+    ceiling = max(heights or [1.0])
     for index, loss in enumerate(losses):
         right.text(
             index,
-            loss + max(losses) * 0.03,
-            f"{loss:.3f}",
+            (loss + ceiling * 0.03) if loss is not None else 0.0,
+            f"{loss:.3f}" if loss is not None else NOT_MEASURED,
             ha="center",
             va="bottom",
             fontsize=9,
-            color=PALETTE["ink"],
+            style="normal" if loss is not None else "italic",
+            color=PALETTE["ink"] if loss is not None else PALETTE["muted"],
         )
-    right.set_ylim(0, max(losses) * 1.2)
+    right.set_ylim(0, ceiling * 1.2)
 
     fig.tight_layout()
     return save_figure(
@@ -265,8 +282,19 @@ def hyperparameter_tuning(comparison: dict, destination: Path) -> Path:
     )
 
 
-def sft_training(history: list[dict], destination: Path) -> Path:
-    """Loss against optimiser steps for the supervised run that produced the shipped model."""
+def sft_training(
+    history: list[dict],
+    destination: Path,
+    *,
+    training_examples: int = 0,
+    validation_examples: int = 0,
+) -> Path:
+    """Loss against optimiser steps for the supervised run that produced the shipped model.
+
+    The two effectives are those of the sets the losses are computed on. Without them the figure
+    shows two curves without saying on how many examples, and a gap between two validation
+    points does not read the same way on fifty examples as on five hundred.
+    """
 
     train = [(h["step"], h["loss"]) for h in history if "loss" in h and "step" in h]
     evaluation = [(h["step"], h["eval_loss"]) for h in history if "eval_loss" in h and "step" in h]
@@ -288,10 +316,16 @@ def sft_training(history: list[dict], destination: Path) -> Path:
     ax.set_yscale("log")
     ax.legend(loc="upper right")
     fig.tight_layout()
+    effective: dict[str, int] = {}
+    if training_examples or validation_examples:
+        effective = {
+            "training examples": training_examples,
+            "validation examples": validation_examples,
+        }
     return save_figure(
         fig,
         destination,
-        n={"logged steps": len(train)},
+        n=effective or {"logged steps": len(train)},
         source=SOURCE,
         note="one run, seed 42 — nothing here estimates run-to-run variation",
     )

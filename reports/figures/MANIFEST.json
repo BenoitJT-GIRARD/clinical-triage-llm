@@ -167,8 +167,8 @@
       ],
       "dispersion": null,
       "dpi": 200,
-      "n": "n(logged steps) = 50",
-      "sha256": "fc17d646301fd17253e632c6205c536bd532d6a8c1f1d9d95677516a7daab91e",
+      "n": "n(training examples) = 4000, n(validation examples) = 500",
+      "sha256": "53a91615c41f5fc0e49b16118039f575dfaa37f323b44ea8820f98152ffb7391",
       "source": "scripts/build_figures.py",
       "style_version": 1,
       "written": "2026-09-17"

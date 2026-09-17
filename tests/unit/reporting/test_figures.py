@@ -125,6 +125,40 @@ def test_the_hyperparameter_tuning_is_drawn(tmp_path):
     assert "Clopper-Pearson" in recorded["dispersion"]
 
 
+def test_a_validation_loss_that_was_not_measured_is_not_drawn_as_a_zero(tmp_path):
+    """A bar at zero would read as "this setting has nothing left to learn".
+
+    That is the opposite of what a missing measurement allows anyone to say. The bar is left
+    out and the marker takes its place.
+    """
+    comparison = {
+        "kept": "r16_lr2e-4",
+        "protocol": {"evaluated_cases": 60},
+        "variants": [
+            {"variant": "r16_lr2e-4", "triage_accuracy": 0.82, "eval_loss": 0.41},
+            {"variant": "r32_lr2e-4", "triage_accuracy": 0.79, "eval_loss": None},
+        ],
+    }
+    figures.hyperparameter_tuning(comparison, tmp_path / "tuning.png")
+    loss_panel = plt.gcf().axes[1]
+
+    assert len(loss_panel.patches) == 1, "only the measured setting carries a bar"
+    assert figures.NOT_MEASURED in [text.get_text() for text in loss_panel.texts]
+    assert "0.410" in [text.get_text() for text in loss_panel.texts]
+
+
+def test_the_training_curve_says_on_how_many_examples_it_was_measured(tmp_path):
+    """A gap between two validation points does not read the same on fifty as on five hundred."""
+    history = [{"step": 20, "loss": 1.2}, {"step": 40, "loss": 0.8, "eval_loss": 0.9}]
+    path = figures.sft_training(
+        history,
+        tmp_path / "sft.png",
+        training_examples=4000,
+        validation_examples=500,
+    )
+    assert _manifest(path)["n"] == "n(training examples) = 4000, n(validation examples) = 500"
+
+
 def test_the_endpoint_latency_is_drawn(tmp_path):
     bench = {
         "concurrency_1": {"p50_ms": 420.0, "p95_ms": 610.0, "requests_per_s": 2.3, "requests": 40},
