@@ -1,15 +1,15 @@
-# Fermeture complete des dependances de l'image de la passerelle, epinglee.
+# Full pinned closure of the gateway image's dependencies.
 #
-# FICHIER GENERE -- ne pas editer. Les contraintes sont dans
-# `requirements-api.in`, qui explique aussi comment regenerer celui-ci.
+# GENERATED FILE -- do not edit. The constraints live in `requirements-api.in`, which also
+# explains how to regenerate this one.
 #
-# Les versions transitives sont celles du verrou du projet, a une exception
-# pres : `setuptools`. Le verrou est une resolution unique pour tout le depot, et
-# `torch` y exige `setuptools<82` -- une version qui porte une faille non
-# corrigee. L'image ne contient pas torch : lui imposer ce plafond reviendrait a
-# embarquer une vulnerabilite pour satisfaire une contrainte qui ne la concerne
-# pas. Le reste de la fermeture suit le verrou, donc ce que l'integration
-# continue audite est ce que l'image installe.
+# The transitive versions are those of the project lock file, with one exception: `setuptools`.
+# The lock is a single resolution for the whole repository, and `torch` requires `setuptools<82`
+# there -- a version carrying an unfixed vulnerability. The image contains no torch: imposing
+# that ceiling on it would mean shipping a vulnerability to satisfy a constraint that does not
+# concern it. The rest of the closure follows the lock, so what continuous integration audits is
+# what the image installs.
+
 
 annotated-doc==0.0.4
     # via

@@ -1,39 +1,31 @@
-# Dependances directes de l'image de la passerelle API.
+# Direct dependencies of the API gateway image.
 #
-# Ce fichier porte les contraintes ; `requirements-api.txt`, genere a partir de
-# lui, porte la fermeture complete epinglee -- c'est celui que le Dockerfile
-# installe. Ne jamais editer le second a la main.
+# This file carries the constraints; `requirements-api.txt`, generated from it, carries the full
+# pinned closure -- that is the one the Dockerfile installs. Never edit the second by hand.
 #
-# L'image ne contient ni torch ni transformers : la generation est deleguee au
-# serveur vLLM. Elle embarque en revanche Presidio et les modeles spaCy, parce
-# que le journal d'audit doit etre anonymise cote service -- c'est le seul
-# endroit du systeme ou des donnees patient reelles se deposeraient durablement.
-# Ce choix coute environ 400 Mo d'image ; l'alternative, une anonymisation
-# degradee dans le conteneur et complete ailleurs, ferait diverger production et
-# developpement.
+# The image contains neither torch nor transformers: generation is delegated to the vLLM server.
+# It does carry Presidio and the spaCy models, because the audit log must be anonymised on the
+# service side -- it is the only place in the system where real patient data would settle
+# durably. That choice costs about 400 MB of image; the alternative, a degraded anonymisation in
+# the container and a complete one elsewhere, would make production and development diverge.
 #
-# Regenerer apres tout `uv lock` :
+# Regenerate after every `uv lock`:
 #
-#   uv export --frozen --no-emit-project --all-groups --no-hashes \
-#     --format requirements-txt | grep -E '^[a-zA-Z]' | sed -E 's/\+cu[0-9]+$//' \
-#     > /tmp/contraintes.txt
-#   uv pip compile infra/requirements-api.in --python-version 3.12 \
-#     --python-platform x86_64-unknown-linux-gnu --constraint /tmp/contraintes.txt \
-#     --no-header -o infra/requirements-api.txt
+#   uv export --frozen --no-emit-project --all-groups --no-hashes #     --format requirements-txt | grep -E '^[a-zA-Z]' | sed -E 's/\+cu[0-9]+$//' #     > /tmp/constraints.txt
+#   uv pip compile infra/requirements-api.in --python-version 3.12 #     --python-platform x86_64-unknown-linux-gnu --constraint /tmp/constraints.txt #     --no-header -o infra/requirements-api.txt
 #
-# La contrainte par le verrou du projet n'est pas un detail : sans elle, la
-# resolution de l'image derive de celle du depot, et l'image deployee ne contient
-# plus les versions auditees par l'integration continue.
+# Constraining by the project lock file is not a detail: without it, the image resolution drifts
+# from the repository's, and the deployed image no longer holds the versions continuous
+# integration audits.
 
 fastapi==0.138.2
 uvicorn[standard]==0.49.0
 httpx==0.28.1
 pydantic==2.13.4
 presidio-analyzer==2.2.363
-# 2.2.363 verrouille `cryptography` sous la version qui corrige CVE-2026 sur la
-# verification de chaines de certificats ; 2.2.362 laisse passer la mise a jour.
-# L'operateur de chiffrement de Presidio n'est pas utilise ici, mais une
-# dependance vulnerable dans l'image en est une quand meme.
+# 2.2.363 locks `cryptography` under the version that fixes the 2026 CVE on certificate
+# chain verification; 2.2.362 lets the update through. Presidio's encryption operator is not
+# used here, but a vulnerable dependency in the image is one all the same.
 presidio-anonymizer==2.2.362
 cryptography==50.0.1
 spacy==3.8.13
