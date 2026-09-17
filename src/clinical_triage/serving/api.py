@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 
+from clinical_triage import __version__
 from clinical_triage.config import PATHS, SERVING, TRIAGE
 from clinical_triage.data.triage_rules import classify, explain
 from clinical_triage.prompts import (
@@ -202,7 +203,10 @@ app = FastAPI(
         "Decision support for emergency triage. The level proposed does not replace a "
         "clinician's assessment; on any life-threatening sign, call the emergency services."
     ),
-    version="1.0.0",
+    # The version the OpenAPI contract announces is the package's. Written here, it would
+    # stay frozen at the next version bump, and an integrator would read a number that no
+    # longer designates the service answering them.
+    version=__version__,
     lifespan=lifespan,
 )
 
