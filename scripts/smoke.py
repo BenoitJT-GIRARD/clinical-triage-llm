@@ -28,7 +28,7 @@ from __future__ import annotations
 import json
 import platform
 import shutil
-import subprocess
+import subprocess  # nosec B404 - the three calls below run fixed commands, never input
 import sys
 import time
 from datetime import UTC, datetime
@@ -67,7 +67,7 @@ def steps() -> None:
     succeeded.
     """
     for script in ("build_figures.py",):
-        done = subprocess.run(
+        done = subprocess.run(  # nosec B603 - this interpreter, a script of this repository
             [sys.executable, f"scripts/{script}"],
             cwd=ROOT_DIR,
             capture_output=True,
@@ -86,7 +86,7 @@ def steps() -> None:
 
 
 def _git(*arguments: str) -> str:
-    done = subprocess.run(
+    done = subprocess.run(  # nosec B603 B607 - git, from the PATH, as everywhere else
         ["git", *arguments], cwd=ROOT_DIR, capture_output=True, text=True, check=False
     )
     return done.stdout.strip()
@@ -101,7 +101,10 @@ def tool_versions() -> dict[str, str]:
             versions[name] = "not installed"
     for binary, arguments in (("uv", ("--version",)), ("docker", ("--version",))):
         if shutil.which(binary):
-            done = subprocess.run([binary, *arguments], capture_output=True, text=True, check=False)
+            # nosec B603 - two names from a literal tuple, resolved by `shutil.which`
+            done = subprocess.run(  # nosec B603
+                [binary, *arguments], capture_output=True, text=True, check=False
+            )
             versions[binary] = done.stdout.strip() or "unknown"
     return versions
 
