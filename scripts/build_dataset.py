@@ -113,7 +113,11 @@ def _write_yield_into_the_card(corpus_yield: dict) -> None:
         measure = corpus_yield[key]
         read, kept = measure["entries_read"], measure["cases_kept"]
         lost = measure["funnel"]
-        share = f"{100 * kept / read:.1f}" if read else "0.0"
+        # The yield as a fraction of two counted numbers rather than as a rate. A rate is
+        # computed here and exists nowhere else: a reader who wants to check it has nothing to
+        # check it against, and the number would be the only one in this card that no artefact
+        # carries.
+        share = f"{kept:,} / {read:,}"
         # The best yield and the null yield are the two figures the surrounding text comments
         # on: they are set in bold.
         bold = "**" if kept == 0 or key == "mediqal" else ""
@@ -124,7 +128,7 @@ def _write_yield_into_the_card(corpus_yield: dict) -> None:
             f"| {lost['no_identified_sign']:,} "
             f"| {lost['duplicates']:,} "
             f"| {lost['kept']:,} "
-            f"| {bold}{kept:,}{bold} | {bold}{share}%{bold} |"
+            f"| {bold}{kept:,}{bold} | {bold}{share}{bold} |"
         )
     rows.append(closing)
 

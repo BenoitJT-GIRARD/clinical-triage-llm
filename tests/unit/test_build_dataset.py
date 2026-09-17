@@ -191,6 +191,6 @@ def test_the_card_publishes_the_counts_of_the_build_that_wrote_it(
     assert written.startswith("Before.")
     assert written.endswith("After.\n")
     assert "| MediQAl | 3,075 |" in written
-    assert "**313** | **10.2%**" in written  # the best yield is set in bold
-    assert "**0** | **0.0%**" in written  # and so is the corpus that gave nothing
-    assert "| 120 | 0.7% |" in written
+    assert "**313** | **313 / 3,075**" in written  # the best yield is set in bold
+    assert "**0** | **0 / 4,183**" in written  # and so is the corpus that gave nothing
+    assert "| 120 | 120 / 16,407 |" in written
