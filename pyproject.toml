@@ -98,6 +98,11 @@ dev = [
     # closed-form beta quantile. scipy arrives with scikit-learn anyway — a dependency
     # you use, you declare, transitive or not.
     "scipy>=1.14",
+    # Rendering of the chat template, which the tokenizer applies at training time. The
+    # test renders it directly and compares it with `format_chatml`, so that the two
+    # cannot drift. It arrives with the notebook tooling anyway; declared here because a
+    # test imports it by name.
+    "jinja2>=3.1",
     "pip-audit>=2.7",
     "pre-commit>=4.0",
     "ipykernel>=6.29",
@@ -197,25 +202,24 @@ exclude_dirs = [".venv", "tests"]
 # They remove nine findings in the package and six in the scripts; without them the
 # analysis exits in error in both cases.
 #
-# B615 signale tout téléchargement depuis le Hugging Face Hub sans révision
-# épinglée. Onze appels sont concernés, de trois natures :
-#   - `load_dataset("json", data_files=...)` dans `training/sft.py` et
-#     `training/dpo.py` ne touche pas au Hub : c'est le lecteur de fichiers
-#     locaux, appelé sur les JSONL que `scripts/build_dataset.py` vient d'écrire ;
-#   - les `from_pretrained` sur un chemin local — l'adaptateur et le modèle
-#     fusionné dans `scripts/04`, les poids servis dans `inference.py` —
-#     relisent ce que le dépôt a produit ;
-#   - les téléchargements réels, eux, nomment un dépôt public sans numéro de
-#     révision : le modèle de base `Qwen/Qwen3-1.7B-Base` dans `scripts/build_dataset.py` et
-#     `scripts/04`, et les cinq corpus médicaux de `DATA.corpora` dans
-#     `data/corpus_sources.py`. Les identifiants sont fixés dans `config.py`,
-#     mais une révision ne l'est pas. Ces appels n'ont lieu qu'à la construction
-#     du dataset et à l'entraînement, sur la machine de développement ; l'image
-#     de service ne les exécute pas, et ce qui part en production est une
-#     révision figée par étiquette (voir `.github/workflows/cd.yml`).
-# B311 signale l'usage de `random`. Les quatre appels concernés construisent un
-# `random.Random` initialisé par une graine explicite, pour mélanger et
-# échantillonner des jeux de données de manière reproductible, jamais pour
-# produire un secret. Les seuls secrets du projet sont comparés avec
+# B615 flags every download from the Hugging Face Hub without a pinned revision.
+# Eleven calls are concerned, of three kinds:
+#   - `load_dataset("json", data_files=...)` in `training/sft.py` and
+#     `training/dpo.py` does not touch the Hub: it is the local file reader,
+#     called on the JSONL that `scripts/build_dataset.py` has just written;
+#   - the `from_pretrained` calls on a local path -- the adapter and the merged
+#     model in `scripts/merge_adapter.py`, the served weights in `inference.py` --
+#     read back what the repository produced;
+#   - the real downloads do name a public repository without a revision number:
+#     the base model `Qwen/Qwen3-1.7B-Base` in `scripts/build_dataset.py` and
+#     `scripts/merge_adapter.py`, and the five medical corpora of `DATA.corpora`
+#     in `data/corpus_sources.py`. The identifiers are fixed in `config.py`, a
+#     revision is not. Those calls happen only when building the dataset and when
+#     training, on the development machine; the service image never runs them, and
+#     what goes to production is a revision frozen by tag (see
+#     `.github/workflows/cd.yml`).
+# B311 flags the use of `random`. The four calls concerned build a `random.Random`
+# seeded explicitly, to shuffle and sample datasets reproducibly, never to produce
+# a secret. The only secrets of this project are compared with
 # `secrets.compare_digest`.
 skips = ["B615", "B311"]

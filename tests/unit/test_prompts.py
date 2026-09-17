@@ -58,7 +58,8 @@ def test_the_installed_template_reproduces_format_chatml_exactly():
     That is the guarantee that training, which goes through the template, and serving, which
     goes through the function, see the same format.
     """
-    jinja2 = pytest.importorskip("jinja2")
+    import jinja2
+
     messages = build_messages("Vertiges depuis ce matin.") + [
         {"role": "assistant", "content": "Niveau de priorité : URGENCE_MODEREE"}
     ]
