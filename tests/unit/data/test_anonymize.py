@@ -1,12 +1,10 @@
-"""Tests de l'anonymisation RGPD et de son contrôle indépendant.
+"""Tests of the GDPR anonymisation and of its independent check.
 
-Le cahier des charges demande deux choses distinctes : masquer les données
-identifiantes, et **contrôler la qualité du masquage**. Ces tests couvrent les
-deux, et une troisième exigence que le projet s'est donnée — ne pas détruire le
-contenu clinique au passage, sans quoi le dataset ne vaut plus rien.
+Two distinct things are required: mask the identifying data, and **check the quality of the
+masking**. These tests cover both, and a third requirement the project set itself — not to
+destroy the clinical content along the way, without which the dataset is worth nothing.
 
-Les moteurs Presidio chargent deux modèles spaCy : ils sont initialisés une seule
-fois pour tout le module.
+The Presidio engines load two spaCy models: they are initialised once for the whole module.
 """
 
 from __future__ import annotations
@@ -14,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from clinical_triage.data.anonymize import (
-    ENTITES_ECARTEES,
+    ENTITIES_LEFT_OUT,
     RESIDUAL_PII_PATTERNS,
     SCORE_THRESHOLD,
     _engines,
@@ -25,46 +23,46 @@ from clinical_triage.data.anonymize import (
 
 
 @pytest.fixture(scope="module", autouse=True)
-def _moteurs_charges():
-    """Force le chargement des moteurs avant la première mesure."""
+def _engines_loaded():
+    """Force the engines to load before the first measurement."""
     analyze_and_anonymize("Texte de mise en route.", "fr")
 
 
-# --- Ce qui doit être masqué ---
+# --- What must be masked ---
 
 
 @pytest.mark.parametrize(
-    ("langue", "texte", "marqueur"),
+    ("language", "text", "marker"),
     [
         ("fr", "Mme Martine Dupont tousse depuis trois jours.", "<PERSON>"),
         ("fr", "Joindre au 06 11 22 33 44.", "<FR_TELEPHONE>"),
-        # La forme internationale désigne le même abonné que la forme nationale.
+        # The international form designates the same subscriber as the national one.
         ("fr", "Joindre au +33 6 11 22 33 44.", "<FR_TELEPHONE>"),
         ("fr", "Née le 12/04/1953.", "<DATE_NAISSANCE>"),
-        # Format ISO, employé par les corpus anglophones.
+        # ISO format, used by the English-language corpora.
         ("en", "Patient born 1953-04-12 with chest pain.", "<DATE_NAISSANCE_ISO>"),
         ("fr", "NIR 1 53 04 75 116 001 23.", "<FR_NIR>"),
         ("fr", "Écrire à jean.martin@chu-exemple.fr.", "<EMAIL_ADDRESS>"),
     ],
 )
-def test_une_donnee_identifiante_est_masquee(langue, texte, marqueur):
-    masque, nombre = analyze_and_anonymize(texte, langue)
-    assert marqueur in masque, masque
-    assert nombre >= 1
+def test_an_identifying_item_is_masked(language, text, marker):
+    masked, count = analyze_and_anonymize(text, language)
+    assert marker in masked, masked
+    assert count >= 1
 
 
-def test_plusieurs_entites_d_un_meme_texte_sont_toutes_masquees():
-    texte = "Mr John Smith, born 1953-04-12, phone +33 6 11 22 33 44, reports chest pain."
-    masque, nombre = analyze_and_anonymize(texte, "en")
-    assert nombre >= 3
-    assert not residual_pii(masque)
+def test_several_entities_in_one_text_are_all_masked():
+    text = "Mr John Smith, born 1953-04-12, phone +33 6 11 22 33 44, reports chest pain."
+    masked, count = analyze_and_anonymize(text, "en")
+    assert count >= 3
+    assert not residual_pii(masked)
 
 
-# --- Ce qui ne doit surtout pas l'être ---
+# --- What must on no account be masked ---
 
 
 @pytest.mark.parametrize(
-    "texte",
+    "text",
     [
         "Patient de 62 ans, douleur thoracique, FC 102, TA 148/92, SpO2 94 %.",
         "Traitement par inhibiteurs de recapture de la sérotonine depuis deux ans.",
@@ -72,94 +70,92 @@ def test_plusieurs_entites_d_un_meme_texte_sont_toutes_masquees():
         "Enfant de 6 mois, fièvre à 39,2 °C, FR 48/min, geignement.",
     ],
 )
-def test_le_contenu_clinique_survit_au_masquage(texte):
-    """Masquer un mot qui n'identifie personne ne protège personne.
+def test_the_clinical_content_survives_the_masking(text):
+    """Masking a word that identifies nobody protects nobody.
 
-    C'est le défaut du réglage par défaut de Presidio sur du texte médical : les
-    noms de molécules et d'organes y sont pris pour des noms de personnes.
+    That is the flaw of Presidio's default setting on medical text: the names of molecules and
+    of organs are taken there for names of people.
     """
-    masque, nombre = analyze_and_anonymize(texte, "fr")
-    assert masque == texte, f"{nombre} entité(s) masquée(s) à tort : {masque}"
+    masked, count = analyze_and_anonymize(text, "fr")
+    assert masked == text, f"{count} entity(ies) masked wrongly: {masked}"
 
 
-# --- Le contrôle indépendant ---
+# --- The independent check ---
 
 
-def test_le_controle_detecte_les_donnees_laissees_en_clair():
-    """Un contrôle incapable de signaler quoi que ce soit ne contrôle rien."""
-    texte = (
+def test_the_check_detects_data_left_in_the_clear():
+    """A check unable to report anything checks nothing."""
+    text = (
         "Mme Martine Dupont, née le 12/04/1953, tél. 06 11 22 33 44, "
         "jean.martin@chu-exemple.fr, NIR 1 53 04 75 116 001 23, born 1953-04-12."
     )
-    trouve = residual_pii(texte)
-    attendus = {
-        "civilité suivie d'un nom",
-        "date de naissance",
-        "date de naissance ISO",
-        "téléphone français",
-        "adresse e-mail",
-        "numéro de sécurité sociale",
+    found = residual_pii(text)
+    expected = {
+        "title followed by a name",
+        "date of birth",
+        "ISO date of birth",
+        "French phone number",
+        "email address",
+        "social security number",
     }
-    assert attendus <= set(trouve), f"non détecté : {attendus - set(trouve)}"
+    assert expected <= set(found), f"not detected: {expected - set(found)}"
 
 
-def test_le_controle_ne_signale_rien_sur_un_texte_masque():
-    texte = "Mme Martine Dupont, née le 12/04/1953, tél. 06 11 22 33 44, tousse."
-    masque, _ = analyze_and_anonymize(texte, "fr")
-    assert residual_pii(masque) == {}
+def test_the_check_reports_nothing_on_a_masked_text():
+    text = "Mme Martine Dupont, née le 12/04/1953, tél. 06 11 22 33 44, tousse."
+    masked, _ = analyze_and_anonymize(text, "fr")
+    assert residual_pii(masked) == {}
 
 
-def test_le_controle_est_independant_du_detecteur():
-    """Les motifs du contrôle ne réutilisent pas ceux du masquage.
+def test_the_check_is_independent_of_the_detector():
+    """The check's patterns do not reuse the masking ones.
 
-    Un contrôle qui interrogerait le même détecteur confirmerait ses propres
-    angles morts. Celui-ci est une batterie d'expressions régulières écrite à
-    part, et c'est elle qui a signalé que le téléphone international échappait au
-    masquage.
+    A check that queried the same detector would confirm its own blind spots. This one is a
+    battery of regular expressions written separately, and it is what reported that the
+    international phone number escaped the masking.
     """
     assert len(RESIDUAL_PII_PATTERNS) >= 8
-    assert "téléphone international" in RESIDUAL_PII_PATTERNS
+    assert "international phone number" in RESIDUAL_PII_PATTERNS
 
 
-def test_l_audit_d_un_corpus_agrege_les_occurrences():
+def test_auditing_a_corpus_aggregates_the_occurrences():
     corpus = [
         "Mme Dupont tousse.",
         "Mme Martin tousse aussi.",
         "Patient de 62 ans, FC 102.",
     ]
-    assert audit_corpus(corpus)["civilité suivie d'un nom"] == 2
+    assert audit_corpus(corpus)["title followed by a name"] == 2
 
 
-# --- Pourquoi trois entités sont écartées ---
+# --- Why three entities are left out ---
 
 
-def test_les_entites_ecartees_detruiraient_le_recit_clinique():
-    """La liste `ENTITES_ECARTEES` est une décision, pas une superstition.
+def test_the_entities_left_out_would_destroy_the_clinical_narrative():
+    """The ``ENTITIES_LEFT_OUT`` list is a decision, not a superstition.
 
-    Ce test la justifie sur des phrases fixes : avec ces entités actives,
-    Presidio masquerait l'abréviation de la tension artérielle en français,
-    et le délai d'évolution comme l'âge du patient en anglais. Trois critères
-    de triage sur trois.
+    This test justifies it on fixed sentences: with those entities active, Presidio would mask
+    the French abbreviation for blood pressure, and the onset delay as well as the patient's age
+    in English. Three triage criteria out of three.
     """
-    analyseur, _ = _engines()
+    analyzer, _ = _engines()
 
-    def detections(texte: str, langue: str) -> set[str]:
-        disponibles = set(analyseur.get_supported_entities(language=langue))
-        entites = [e for e in ENTITES_ECARTEES if e in disponibles]
-        trouvees = analyseur.analyze(
-            text=texte, language=langue, entities=entites, score_threshold=SCORE_THRESHOLD
+    def detections(text: str, language: str) -> set[str]:
+        available = set(analyzer.get_supported_entities(language=language))
+        entities = [e for e in ENTITIES_LEFT_OUT if e in available]
+        found = analyzer.analyze(
+            text=text, language=language, entities=entities, score_threshold=SCORE_THRESHOLD
         )
-        return {texte[t.start : t.end] for t in trouvees}
+        return {text[t.start : t.end] for t in found}
 
-    francais = "Homme de 62 ans, douleur thoracique depuis trois semaines. TA 148/92, FC 102."
-    anglais = "62-year-old man, chest pain for three weeks. BP 148/92, HR 102."
+    french = "Homme de 62 ans, douleur thoracique depuis trois semaines. TA 148/92, FC 102."
+    english = "62-year-old man, chest pain for three weeks. BP 148/92, HR 102."
 
-    assert "TA" in detections(francais, "fr")
-    assert {"62-year-old", "three weeks"} <= detections(anglais, "en")
+    assert "TA" in detections(french, "fr")
+    assert {"62-year-old", "three weeks"} <= detections(english, "en")
 
 
 @pytest.mark.parametrize(
-    ("langue", "texte", "survivants"),
+    ("language", "text", "survivors"),
     [
         (
             "fr",
@@ -173,8 +169,8 @@ def test_les_entites_ecartees_detruiraient_le_recit_clinique():
         ),
     ],
 )
-def test_la_configuration_retenue_laisse_intacts_delai_age_et_constantes(langue, texte, survivants):
-    """Ce sont les trois critères sur lesquels se décide un niveau de triage."""
-    masque, _ = analyze_and_anonymize(texte, langue)
-    for survivant in survivants:
-        assert survivant in masque
+def test_the_chosen_setting_leaves_onset_age_and_vitals_intact(language, text, survivors):
+    """Those are the three criteria a triage level is decided on."""
+    masked, _ = analyze_and_anonymize(text, language)
+    for survivor in survivors:
+        assert survivor in masked

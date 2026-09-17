@@ -1,14 +1,12 @@
-"""Le descripteur de déploiement Modal doit se charger, et lire sa révision.
+"""The Modal deployment descriptor must load, and read its revision.
 
-`modal deploy` commence par importer `infra/modal_app.py` : une erreur de
-décorateur, un mot-clé disparu de l'API ou un import manquant y échoue avant même
-d'atteindre le réseau. Ce fichier n'étant exécuté nulle part ailleurs, rien ne le
-vérifierait sans ces tests.
+``modal deploy`` starts by importing ``infra/modal_app.py``: a decorator error, a keyword gone
+from the API or a missing import fails there before ever reaching the network. That file being
+executed nowhere else, nothing would check it without these tests.
 
-Le déploiement continu passe la révision du modèle par l'environnement, au moment
-du `modal deploy`. Elle est ensuite gravée dans l'image du moteur, car le
-conteneur réimporte ce fichier dans un environnement qui ne contient rien de
-celui du déploiement.
+Continuous deployment passes the model revision through the environment, at ``modal deploy``
+time. It is then baked into the engine image, because the container reimports this file in an
+environment that holds nothing of the deployment's.
 """
 
 from __future__ import annotations
@@ -20,81 +18,81 @@ import pytest
 
 from clinical_triage.config import MODEL, PATHS
 
-CHEMIN = PATHS.root / "deploy" / "modal_app.py"
+PATH = PATHS.root / "infra" / "modal_app.py"
 
 
-def _charger():
-    """Importe le descripteur comme le ferait `modal deploy`."""
-    spec = importlib.util.spec_from_file_location("modal_app_teste", CHEMIN)
+def _load():
+    """Import the descriptor as ``modal deploy`` would."""
+    spec = importlib.util.spec_from_file_location("modal_app_under_test", PATH)
     module = importlib.util.module_from_spec(spec)
-    sys.modules["modal_app_teste"] = module
+    sys.modules["modal_app_under_test"] = module
     spec.loader.exec_module(module)
     return module
 
 
 @pytest.fixture
-def descripteur(monkeypatch):
+def descriptor(monkeypatch):
     monkeypatch.delenv("TRIAGE_MODEL_ID", raising=False)
     monkeypatch.delenv("TRIAGE_MODEL_REVISION", raising=False)
-    return _charger()
+    return _load()
 
 
-def test_le_descripteur_se_charge(descripteur):
-    """Première étape de `modal deploy` : si elle passe ici, elle passera là-bas."""
-    assert descripteur.app.name == "clinical-triage"
-    assert descripteur.Moteur is not None
-    assert descripteur.passerelle is not None
+def test_the_descriptor_loads(descriptor):
+    """First step of ``modal deploy``: if it passes here, it will pass there."""
+    assert descriptor.app.name == "clinical-triage"
+    assert descriptor.Engine is not None
+    assert descriptor.gateway is not None
 
 
-def test_le_moteur_sert_le_modele_final_du_projet(descripteur):
-    assert MODEL.hub_merged_model_id == descripteur.MODELE
+def test_the_engine_serves_the_projects_final_model(descriptor):
+    assert MODEL.hub_merged_model_id == descriptor.MODEL_ID
 
 
-def test_les_references_du_modele_sont_gravees_dans_l_image(descripteur):
-    """Le conteneur réimporte ce fichier sans l'environnement du déploiement.
+def test_the_model_references_are_baked_into_the_image(descriptor):
+    """The container reimports this file without the deployment's environment.
 
-    Ce qui n'est pas inscrit dans l'image au moment du déploiement est perdu.
+    What is not written into the image at deployment time is lost.
     """
-    variables = descripteur.ENVIRONNEMENT_MOTEUR
-    assert variables["TRIAGE_MODEL_ID"] == descripteur.MODELE
-    assert variables["TRIAGE_MODEL_REVISION"] == descripteur.REVISION
+    variables = descriptor.ENGINE_ENVIRONMENT
+    assert variables["TRIAGE_MODEL_ID"] == descriptor.MODEL_ID
+    assert variables["TRIAGE_MODEL_REVISION"] == descriptor.REVISION
 
 
-def test_la_revision_suit_la_variable_du_deploiement_continu(monkeypatch):
-    monkeypatch.setenv("TRIAGE_MODEL_ID", "un-autre-compte/un-modele")
-    monkeypatch.setenv("TRIAGE_MODEL_REVISION", "modele-v9.9.9")
-    descripteur = _charger()
-    assert descripteur.MODELE == "un-autre-compte/un-modele"
-    assert descripteur.REVISION == "modele-v9.9.9"
+def test_the_revision_follows_the_continuous_deployment_variable(monkeypatch):
+    monkeypatch.setenv("TRIAGE_MODEL_ID", "another-account/a-model")
+    monkeypatch.setenv("TRIAGE_MODEL_REVISION", "model-v9.9.9")
+    descriptor = _load()
+    assert descriptor.MODEL_ID == "another-account/a-model"
+    assert descriptor.REVISION == "model-v9.9.9"
 
 
-def test_une_variable_vide_retombe_sur_la_version_epinglee(monkeypatch):
-    """Une variable de dépôt GitHub non définie arrive vide, pas absente."""
+def test_an_empty_variable_falls_back_to_the_pinned_version(monkeypatch):
+    """An undefined GitHub repository variable arrives empty, not absent."""
     monkeypatch.setenv("TRIAGE_MODEL_ID", "")
     monkeypatch.setenv("TRIAGE_MODEL_REVISION", "")
-    descripteur = _charger()
-    assert MODEL.hub_merged_model_id == descripteur.MODELE
-    assert descripteur.REVISION.startswith("modele-v")
+    descriptor = _load()
+    assert MODEL.hub_merged_model_id == descriptor.MODEL_ID
+    assert descriptor.REVISION.startswith("model-v")
 
 
-def test_un_compte_vide_ne_produit_pas_un_identifiant_a_barre_oblique(monkeypatch):
-    """La chaîne de déploiement ne passe que le compte : vide, il doit se replier.
+def test_an_empty_account_does_not_produce_an_identifier_with_a_leading_slash(monkeypatch):
+    """The deployment chain passes only the account: empty, it must fall back.
 
-    Composé par interpolation, un compte non défini donnait
-    « /qwen3-1.7b-clinical-triage », que le Hub refuse.
+    Composed by interpolation, an undefined account gave "/qwen3-1.7b-clinical-triage", which the
+    Hub refuses.
     """
     monkeypatch.delenv("TRIAGE_MODEL_ID", raising=False)
     monkeypatch.setenv("HF_NAMESPACE", "")
-    descripteur = _charger()
+    descriptor = _load()
 
-    assert not descripteur.MODELE.startswith("/")
-    assert descripteur.MODELE == "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage"
+    assert not descriptor.MODEL_ID.startswith("/")
+    assert descriptor.MODEL_ID == "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage"
 
 
-def test_le_compte_du_deploiement_continu_est_repris(monkeypatch):
-    """Un autre compte publie sous son nom sans que le code change."""
+def test_the_continuous_deployment_account_is_used(monkeypatch):
+    """Another account publishes under its own name with no change to the code."""
     monkeypatch.delenv("TRIAGE_MODEL_ID", raising=False)
-    monkeypatch.setenv("HF_NAMESPACE", "un-autre-compte")
-    descripteur = _charger()
+    monkeypatch.setenv("HF_NAMESPACE", "another-account")
+    descriptor = _load()
 
-    assert descripteur.MODELE == "un-autre-compte/qwen3-1.7b-clinical-triage"
+    assert descriptor.MODEL_ID == "another-account/qwen3-1.7b-clinical-triage"

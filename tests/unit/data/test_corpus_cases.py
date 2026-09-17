@@ -1,10 +1,9 @@
-"""Tests des filtres d'extraction appliqués aux corpus publics.
+"""Tests of the extraction filters applied to the public corpora.
 
-Ils verrouillent des défauts qui ont réellement amputé le dataset livré : un
-marqueur aveugle à la syntaxe de MediQAl, une troncature en plein mot, et une
-borne de longueur posée au jugé plutôt que sur le budget du service. Les
-derniers vérifient que l'entonnoir publié dans la carte du dataset décrit bien
-ce que l'extraction fait, et non ce qu'on croit qu'elle fait.
+They lock down defects that really did truncate the delivered dataset: a marker blind to
+MediQAl's syntax, a truncation mid-word, and a length bound set by eye rather than on the
+service's budget. The last ones verify that the funnel published in the dataset card really
+describes what the extraction does, and not what one believes it does.
 """
 
 from __future__ import annotations
@@ -17,19 +16,19 @@ from clinical_triage.config import MODEL, SERVING
 from clinical_triage.data.corpus_cases import (
     MAX_LENGTH,
     MIN_LENGTH,
-    entonnoir,
-    est_une_question_d_examen,
     extract_cases,
     extract_symptom_description,
     extract_vignette,
+    funnel,
+    is_an_exam_question,
 )
 from clinical_triage.data.corpus_sources import CorpusEntry
 
-# --- Le marqueur doit reconnaître la syntaxe réellement employée par MediQAl ---
+# --- The marker must recognise the syntax MediQAl actually uses ---
 
 
 @pytest.mark.parametrize(
-    "ouverture",
+    "opening",
     [
         "Homme, 58 ans, majoration de dyspnée chez un BPCO connu depuis vingt ans.",
         "M. Dupont, 30 ans. Agitation à la sortie d'une boîte de nuit, amené par les pompiers.",
@@ -39,149 +38,146 @@ from clinical_triage.data.corpus_sources import CorpusEntry
         "Une patiente de 25 ans consulte pour une pâleur et une asthénie d'installation récente.",
     ],
 )
-def test_les_tournures_francaises_de_presentation_sont_reconnues(ouverture: str):
-    """MediQAl écrit « Homme, 58 ans », pas « homme de 58 ans ».
+def test_the_french_presentation_forms_are_recognised(opening: str):
+    """MediQAl writes "Homme, 58 ans", not "homme de 58 ans".
 
-    Le motif exigeait la préposition. 342 vignettes françaises authentiques
-    n'étaient donc pas même examinées, sur le seul corpus imposé qui décrive
-    des patients.
+    The pattern required the preposition. 342 authentic French vignettes were therefore not even
+    examined, in the only source corpus that describes patients.
     """
-    assert extract_vignette(ouverture) is not None
+    assert extract_vignette(opening) is not None
 
 
-def test_un_enonce_sans_patient_reste_ecarte():
-    """L'élargissement du marqueur ne doit pas ouvrir la porte aux questions d'examen."""
+def test_a_statement_with_no_patient_is_still_discarded():
+    """Widening the marker must not open the door to exam questions."""
     assert extract_vignette("Parmi les propositions suivantes, laquelle est exacte ?") is None
     assert extract_vignette("Levamisole is used as all except -") is None
 
 
-# --- Une cible d'entraînement se termine sur une phrase entière ---
+# --- A training target ends on a whole sentence ---
 
 
-def test_une_fiche_de_symptomes_trop_longue_est_coupee_a_la_phrase():
-    """La troncature se faisait à `[:MAX_LENGTH]`, donc en plein mot.
+def test_a_symptom_sheet_that_is_too_long_is_cut_at_a_sentence():
+    """The truncation used to happen at ``[:MAX_LENGTH]``, hence mid-word.
 
-    120 des 172 cas MedQuAD livrés se terminaient sur « Symptoms in Toddle » ou
-    « a transient is » : du texte coupé au milieu d'un mot, appris comme cible.
+    120 of the 172 MedQuAD cases delivered ended on "Symptoms in Toddle" or "a transient is":
+    text cut in the middle of a word, learnt as a target.
     """
-    phrase = "The patient reports abdominal cramping and persistent nausea after meals. "
-    entree = CorpusEntry(
+    sentence = "The patient reports abdominal cramping and persistent nausea after meals. "
+    entry = CorpusEntry(
         text="What are the symptoms of Gastroparesis ?",
-        answer=phrase * 30,
+        answer=sentence * 30,
         lang="en",
         source="medquad",
         topic="symptoms",
     )
-    description = extract_symptom_description(entree)
+    description = extract_symptom_description(entry)
     assert description is not None
     assert len(description) <= MAX_LENGTH + len("Patient reporting the following complaints, ")
-    # Le texte retenu se termine sur une ponctuation forte, jamais sur un mot coupé.
+    # The text kept ends on strong punctuation, never on a cut word.
     assert description.rstrip().endswith(".")
 
 
-def test_une_fiche_de_symptomes_trop_courte_est_ecartee():
-    entree = CorpusEntry(
+def test_a_symptom_sheet_that_is_too_short_is_discarded():
+    entry = CorpusEntry(
         text="What are the symptoms of X ?",
         answer="Rare.",
         lang="en",
         source="medquad",
         topic="symptoms",
     )
-    assert extract_symptom_description(entree) is None
+    assert extract_symptom_description(entry) is None
 
 
-# --- La borne de longueur est celle du service, pas un chiffre rond ---
+# --- The length bound is the service's, not a round number ---
 
 
-def test_la_borne_de_longueur_tient_dans_le_budget_du_service():
-    """Aucun cas retenu ne doit dépasser ce que le service accepte.
+def test_the_length_bound_fits_inside_the_service_budget():
+    """No case kept may exceed what the service accepts.
 
-    Le service laisse à la description ce que la fenêtre du modèle lui laisse une
-    fois retirées la consigne système et la place réservée à la réponse.
-    S'entraîner au-delà apprendrait le modèle sur des récits qu'il ne verra
-    jamais entiers en production.
+    The service leaves the description what the model window leaves it once the system prompt
+    and the room reserved for the answer are removed. Training beyond that would teach the model
+    on narratives it will never see whole in production.
 
-    Ce test échoue si la fenêtre du modèle, le budget de génération ou la borne
-    changent sans qu'on ait refait le calcul.
+    This test fails if the model window, the generation budget or the bound change without the
+    computation being redone.
     """
     transformers = pytest.importorskip("transformers")
     try:
         tokenizer = transformers.AutoTokenizer.from_pretrained(MODEL.base_model)
-    except Exception as exc:  # noqa: BLE001 - hors ligne, le test n'a rien à dire
-        pytest.skip(f"tokenizer indisponible : {exc}")
+    except Exception as exc:  # noqa: BLE001 - offline, the test has nothing to say
+        pytest.skip(f"tokenizer unavailable: {exc}")
 
     from clinical_triage.prompts import description_budget
 
     budget = description_budget(tokenizer, MODEL.max_seq_length, SERVING.max_new_tokens)
-    # Densité mesurée sur les 546 descriptions retenues de MediQAl et MedQuAD :
-    # médiane 0,287 jeton par caractère, 95e centile 0,375. La description la plus
-    # longue du jeu livré occupe 312 jetons. Le contrôle à la construction
-    # (`scripts/build_dataset.py`) vérifie le cas réel ; celui-ci garde la
-    # cohérence du réglage hors ligne.
-    jetons_au_95e_centile = MAX_LENGTH * 0.375
-    assert jetons_au_95e_centile <= budget, (
-        f"MAX_LENGTH={MAX_LENGTH} produit environ {jetons_au_95e_centile:.0f} jetons "
-        f"au 95e centile, pour un budget de service de {budget}."
+    # Density measured on the 546 descriptions kept from MediQAl and MedQuAD: median 0.287
+    # tokens per character, 95th percentile 0.375. The longest description of the delivered set
+    # occupies 312 tokens. The build-time check (``scripts/build_dataset.py``) verifies the real
+    # case; this one keeps the setting coherent offline.
+    tokens_at_p95 = MAX_LENGTH * 0.375
+    assert tokens_at_p95 <= budget, (
+        f"MAX_LENGTH={MAX_LENGTH} produces about {tokens_at_p95:.0f} tokens at the 95th "
+        f"percentile, for a service budget of {budget}."
     )
     assert MIN_LENGTH < MAX_LENGTH
 
 
-# --- L'entonnoir doit décrire exactement ce que fait l'extraction ---
+# --- The funnel must describe exactly what the extraction does ---
 
 
-def _entree(texte: str) -> CorpusEntry:
-    return CorpusEntry(text=texte, answer="", lang="en", source="medmcqa", topic="")
+def _entry(text: str) -> CorpusEntry:
+    return CorpusEntry(text=text, answer="", lang="en", source="medmcqa", topic="")
 
 
-def _corpus_temoin() -> list[CorpusEntry]:
-    """Un corpus miniature qui exerce chacune des quatre pertes, et un cas retenu."""
+def _control_corpus() -> list[CorpusEntry]:
+    """A miniature corpus exercising each of the four losses, plus one case kept."""
     return [
-        # Ni âge, ni verbe de présentation : ce n'est pas un patient.
-        _entree("Which vitamin is supplied from only animal source:"),
-        # Une présentation de patient, mais bien au-delà de la borne haute.
-        _entree("A 55-year-old man presents with chest pain. " + "Il décrit la douleur. " * 60),
-        # Une présentation de patient sans aucun signe repérable par la règle.
-        _entree("A 40-year-old man presents for a routine administrative certificate request."),
-        # Un cas conservable, présent deux fois : la seconde est un doublon.
-        _entree("A 55-year-old man presents with chest pain radiating to the left arm."),
-        _entree("A 55-year-old man presents with chest pain radiating to the left arm."),
+        # Neither an age nor a presenting verb: this is not a patient.
+        _entry("Which vitamin is supplied from only animal source:"),
+        # A patient presentation, but well beyond the upper bound.
+        _entry("A 55-year-old man presents with chest pain. " + "Il décrit la douleur. " * 60),
+        # A patient presentation with no sign the rule can spot.
+        _entry("A 40-year-old man presents for a routine administrative certificate request."),
+        # A keepable case, present twice: the second is a duplicate.
+        _entry("A 55-year-old man presents with chest pain radiating to the left arm."),
+        _entry("A 55-year-old man presents with chest pain radiating to the left arm."),
     ]
 
 
-def test_les_colonnes_de_l_entonnoir_s_additionnent_avec_les_entrees():
-    """C'est la propriété que le rapport publie : rien ne se perd hors des colonnes."""
-    entrees = _corpus_temoin()
-    compte = entonnoir(entrees)
-    somme = (
-        compte["sans_presentation_de_patient"]
-        + compte["hors_bornes_de_longueur"]
-        + compte["sans_signe_identifie"]
-        + compte["doublons"]
-        + compte["retenus"]
+def test_the_funnel_columns_add_up_to_the_entries():
+    """That is the property the dataset card publishes: nothing is lost outside the columns."""
+    entries = _control_corpus()
+    count = funnel(entries)
+    total = (
+        count["no_patient_presentation"]
+        + count["outside_length_bounds"]
+        + count["no_identified_sign"]
+        + count["duplicates"]
+        + count["kept"]
     )
-    assert somme == compte["entrees"] == len(entrees)
+    assert total == count["entries"] == len(entries)
 
 
-def test_l_entonnoir_retrouve_le_compte_de_l_extraction():
-    """Deux parcours, un seul résultat : sinon le tableau publié décrit autre chose."""
-    entrees = _corpus_temoin()
-    assert entonnoir(entrees)["retenus"] == len(extract_cases(entrees, random.Random(42)))
+def test_the_funnel_finds_the_same_count_as_the_extraction():
+    """Two paths, one result: otherwise the published table describes something else."""
+    entries = _control_corpus()
+    assert funnel(entries)["kept"] == len(extract_cases(entries, random.Random(42)))
 
 
-def test_chaque_perte_est_imputee_a_la_bonne_colonne():
-    compte = entonnoir(_corpus_temoin())
-    assert compte["sans_presentation_de_patient"] == 1
-    assert compte["hors_bornes_de_longueur"] == 1
-    assert compte["sans_signe_identifie"] == 1
-    assert compte["doublons"] == 1
-    assert compte["retenus"] == 1
+def test_each_loss_is_charged_to_the_right_column():
+    count = funnel(_control_corpus())
+    assert count["no_patient_presentation"] == 1
+    assert count["outside_length_bounds"] == 1
+    assert count["no_identified_sign"] == 1
+    assert count["duplicates"] == 1
+    assert count["kept"] == 1
 
 
-# --- Question d'examen contre pronom relatif ---
+# --- Exam question against relative pronoun ---
 
 
 @pytest.mark.parametrize(
-    "enonce",
+    "statement",
     [
         "All of the following are surgical options for morbid obesity except -",
         "Which of the following is the investigation of choice?",
@@ -193,12 +189,12 @@ def test_chaque_perte_est_imputee_a_la_bonne_colonne():
         "What is the next step in management?",
     ],
 )
-def test_un_enonce_d_examen_est_reconnu(enonce: str):
-    assert est_une_question_d_examen(enonce)
+def test_an_exam_statement_is_recognised(statement: str):
+    assert is_an_exam_question(statement)
 
 
 @pytest.mark.parametrize(
-    "recit",
+    "narrative",
     [
         "She had flu like symptoms 20 days ago which resolved spontaneously.",
         "There is circumoral cyanosis, which is not alleviated by nasal oxygen.",
@@ -207,16 +203,16 @@ def test_un_enonce_d_examen_est_reconnu(enonce: str):
         "Le patient ne sait plus quel traitement il prend.",
     ],
 )
-def test_une_phrase_de_recit_n_est_pas_prise_pour_une_question(recit: str):
-    """Le motif précédent supprimait la phrase entière sur un « which » relatif.
+def test_a_narrative_sentence_is_not_taken_for_a_question(narrative: str):
+    """The previous pattern deleted the whole sentence on a relative "which".
 
-    C'était du contenu clinique perdu : « symptômes grippaux il y a vingt jours »
-    disparaissait du récit parce que la phrase contenait un pronom relatif.
+    That was clinical content lost: "flu like symptoms 20 days ago" disappeared from the
+    narrative because the sentence contained a relative pronoun.
     """
-    assert not est_une_question_d_examen(recit)
+    assert not is_an_exam_question(narrative)
 
 
-def test_la_question_d_examen_est_retiree_mais_le_recit_reste():
+def test_the_exam_question_is_removed_but_the_narrative_stays():
     question = (
         "A 60 yr old chronic smoker presents with painless gross hematuria of 1 day duration, "
         "which started this morning. All of the following are possible causes except -"
@@ -224,5 +220,5 @@ def test_la_question_d_examen_est_retiree_mais_le_recit_reste():
     vignette = extract_vignette(question)
     assert vignette is not None
     assert "All of the following" not in vignette
-    # La phrase de récit porte un « which » relatif : elle doit survivre.
+    # The narrative sentence carries a relative "which": it must survive.
     assert "which started this morning" in vignette

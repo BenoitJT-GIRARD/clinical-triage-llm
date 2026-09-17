@@ -1,9 +1,8 @@
-"""Tests de l'API de triage.
+"""Tests of the triage API.
 
-Les tests n'ont besoin d'aucun modèle : le moteur vLLM est remplacé par une
-fonction de génération contrôlée. Ce qui est vérifié ici, ce n'est pas la
-qualité des réponses — c'est le contrat de service : authentification, limitation
-de débit, sonde de santé, traçabilité et forme de la réponse.
+These tests need no model: the vLLM engine is replaced by a controlled generation function.
+What is checked here is not the quality of the answers — it is the service contract:
+authentication, rate limiting, health probe, traceability and the shape of the reply.
 """
 
 from __future__ import annotations
@@ -17,9 +16,11 @@ from fastapi.testclient import TestClient
 from clinical_triage.serving import api as module_api
 from clinical_triage.serving.api import RateLimiter
 
-CLE = "cle-de-test"
+KEY = "test-key"
 
-REPONSE_MODELE = (
+# The answer is in French because the service answers in French: it is the model's output, not
+# prose about the project.
+MODEL_ANSWER = (
     "Niveau de priorité : URGENCE_VITALE\n"
     "Justification : Douleur thoracique avec sueurs chez un patient à risque.\n"
     "Recommandation : Prise en charge immédiate et appel du 15 (SAMU)."
@@ -28,22 +29,22 @@ REPONSE_MODELE = (
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
-    """Service configuré en mode vLLM, avec une génération simulée."""
+    """The service configured in vLLM mode, with a simulated generation."""
     monkeypatch.setenv("TRIAGE_BACKEND", "vllm")
-    monkeypatch.setenv("TRIAGE_API_KEY", CLE)
+    monkeypatch.setenv("TRIAGE_API_KEY", KEY)
     monkeypatch.setenv("TRIAGE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("TRIAGE_RATE_LIMIT", "5")
     monkeypatch.setattr(
         module_api,
-        "_generer_vllm",
-        lambda request, symptomes: (REPONSE_MODELE, "URGENCE_VITALE", 42.0, False),
+        "_generate_vllm",
+        lambda request, symptoms: (MODEL_ANSWER, "URGENCE_VITALE", 42.0, False),
     )
-    with TestClient(module_api.app) as testeur:
-        yield testeur
+    with TestClient(module_api.app) as tester:
+        yield tester
 
 
-def test_le_service_refuse_de_demarrer_sans_cle(monkeypatch):
-    """Une authentification qui se désactive quand une variable manque n'en est pas une."""
+def test_the_service_refuses_to_start_without_a_key(monkeypatch):
+    """An authentication that switches itself off when a variable is missing is not one."""
     monkeypatch.setenv("TRIAGE_BACKEND", "vllm")
     monkeypatch.delenv("TRIAGE_API_KEY", raising=False)
     monkeypatch.delenv("TRIAGE_ALLOW_ANONYMOUS", raising=False)
@@ -51,109 +52,109 @@ def test_le_service_refuse_de_demarrer_sans_cle(monkeypatch):
         pass
 
 
-def test_le_mode_ouvert_doit_etre_demande_explicitement(monkeypatch, tmp_path):
+def test_open_mode_has_to_be_asked_for_explicitly(monkeypatch, tmp_path):
     monkeypatch.setenv("TRIAGE_BACKEND", "vllm")
     monkeypatch.delenv("TRIAGE_API_KEY", raising=False)
     monkeypatch.setenv("TRIAGE_ALLOW_ANONYMOUS", "true")
     monkeypatch.setenv("TRIAGE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
-    with TestClient(module_api.app) as testeur:
+    with TestClient(module_api.app) as tester:
         assert (
-            testeur.post("/questionnaire/next", json={"chief_complaint": "toux"}).status_code == 200
+            tester.post("/questionnaire/next", json={"chief_complaint": "toux"}).status_code == 200
         )
 
 
-def test_la_sonde_signale_un_moteur_injoignable(client):
-    """Une sonde toujours verte ne déclenche aucun redémarrage le jour de la panne."""
-    reponse = client.get("/health")
-    assert reponse.status_code == 200
-    corps = reponse.json()
-    assert corps["backend"] == "vllm"
-    assert corps["status"] == "degraded"
-    assert corps["model_loaded"] is False
-    assert corps["detail"]
+def test_the_probe_reports_an_unreachable_engine(client):
+    """A probe that is always green triggers no restart on the day of the outage."""
+    reply = client.get("/health")
+    assert reply.status_code == 200
+    body = reply.json()
+    assert body["backend"] == "vllm"
+    assert body["status"] == "degraded"
+    assert body["model_loaded"] is False
+    assert body["detail"]
 
 
-def test_la_sonde_ne_publie_pas_l_adresse_du_moteur(client):
-    """La sonde n'exige ni clé ni quota : elle dit qu'il y a panne, jamais où.
+def test_the_probe_does_not_publish_the_engines_address(client):
+    """The probe asks for neither key nor quota: it says there is an outage, never where.
 
-    Le message d'httpx porte l'URL interrogée. Sur Modal, cette URL est
-    précisément ce qui protège le moteur, et la sonde la rendait publique.
+    The httpx message carries the URL it queried. On Modal that URL is precisely what protects
+    the engine, and the probe was making it public.
     """
     detail = client.get("/health").json()["detail"]
-    adresse = module_api.app.state.settings.vllm_url
-    assert adresse not in detail
+    address = module_api.app.state.settings.vllm_url
+    assert address not in detail
     assert "http" not in detail
 
 
-def test_le_triage_exige_une_cle(client):
+def test_triage_requires_a_key(client):
     assert client.post("/triage", json={"symptoms": "douleur thoracique"}).status_code == 401
     assert (
         client.post(
-            "/triage", json={"symptoms": "douleur thoracique"}, headers={"X-API-Key": "mauvaise"}
+            "/triage", json={"symptoms": "douleur thoracique"}, headers={"X-API-Key": "wrong"}
         ).status_code
         == 401
     )
 
 
-def test_le_triage_renvoie_une_reponse_structuree(client):
-    reponse = client.post(
+def test_triage_returns_a_structured_reply(client):
+    reply = client.post(
         "/triage",
         json={"symptoms": "Douleur thoracique et sueurs depuis 20 minutes.", "patient_age": 62},
-        headers={"X-API-Key": CLE},
+        headers={"X-API-Key": KEY},
     )
-    assert reponse.status_code == 200
-    corps = reponse.json()
-    assert corps["level"] == "URGENCE_VITALE"
-    assert corps["level_label"].startswith("Urgence maximale")
-    assert corps["justification"]
-    assert corps["recommendation"]
-    assert corps["request_id"]
-    assert corps["latency_ms"] == 42.0
+    assert reply.status_code == 200
+    body = reply.json()
+    assert body["level"] == "URGENCE_VITALE"
+    assert body["level_label"].startswith("Urgence maximale")
+    assert body["justification"]
+    assert body["recommendation"]
+    assert body["request_id"]
+    assert body["latency_ms"] == 42.0
 
 
-def test_la_reponse_expose_l_avis_de_la_regle(client):
-    """Quand le modèle et la règle divergent, l'accueil doit pouvoir le voir."""
-    reponse = client.post(
+def test_the_reply_exposes_what_the_rule_decided(client):
+    """When the model and the rule diverge, reception must be able to see it."""
+    reply = client.post(
         "/triage",
         json={"symptoms": "Douleur thoracique et sueurs depuis 20 minutes."},
-        headers={"X-API-Key": CLE},
+        headers={"X-API-Key": KEY},
     ).json()
-    assert reponse["rule_level"] == "URGENCE_VITALE"
-    assert reponse["rule_reasons"]
-    assert reponse["agreement"] is True
+    assert reply["rule_level"] == "URGENCE_VITALE"
+    assert reply["rule_reasons"]
+    assert reply["agreement"] is True
 
 
-def test_un_desaccord_entre_le_modele_et_la_regle_est_signale(client):
-    reponse = client.post(
+def test_a_disagreement_between_the_model_and_the_rule_is_flagged(client):
+    reply = client.post(
         "/triage",
         json={"symptoms": "Rhume banal depuis deux jours, pas de fièvre."},
-        headers={"X-API-Key": CLE},
+        headers={"X-API-Key": KEY},
     ).json()
-    assert reponse["level"] == "URGENCE_VITALE"  # réponse simulée
-    assert reponse["rule_level"] == "CONSULTATION_DIFFEREE"
-    assert reponse["agreement"] is False
+    assert reply["level"] == "URGENCE_VITALE"  # the simulated answer
+    assert reply["rule_level"] == "CONSULTATION_DIFFEREE"
+    assert reply["agreement"] is False
 
 
-def test_chaque_triage_est_trace(client, tmp_path):
-    client.post("/triage", json={"symptoms": "Douleur thoracique."}, headers={"X-API-Key": CLE})
-    lignes = (tmp_path / "audit.jsonl").read_text(encoding="utf-8").strip().splitlines()
-    assert len(lignes) == 1
-    trace = json.loads(lignes[0])
-    assert trace["niveau"] == "URGENCE_VITALE"
-    assert trace["moteur"] == "vllm"
-    assert trace["symptomes_anonymises"]
+def test_every_triage_leaves_a_trace(client, tmp_path):
+    client.post("/triage", json={"symptoms": "Douleur thoracique."}, headers={"X-API-Key": KEY})
+    rows = (tmp_path / "audit.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert len(rows) == 1
+    trace = json.loads(rows[0])
+    assert trace["level"] == "URGENCE_VITALE"
+    assert trace["engine"] == "vllm"
+    assert trace["anonymised_symptoms"]
 
 
-def test_une_description_vide_est_refusee(client):
-    reponse = client.post("/triage", json={"symptoms": "  "}, headers={"X-API-Key": CLE})
-    assert reponse.status_code == 422
+def test_an_empty_description_is_refused(client):
+    reply = client.post("/triage", json={"symptoms": "  "}, headers={"X-API-Key": KEY})
+    assert reply.status_code == 422
 
 
-def test_la_limitation_de_debit_protege_le_gpu(client):
-    """Chaque appel mobilise un GPU : un endpoint sans quota est saturable."""
+def test_the_rate_limit_protects_the_gpu(client):
+    """Every call takes a GPU: an endpoint without a quota can be saturated."""
     codes = [
         client.post(
-            "/triage", json={"symptoms": "Douleur thoracique."}, headers={"X-API-Key": CLE}
+            "/triage", json={"symptoms": "Douleur thoracique."}, headers={"X-API-Key": KEY}
         ).status_code
         for _ in range(7)
     ]
@@ -161,154 +162,151 @@ def test_la_limitation_de_debit_protege_le_gpu(client):
     assert codes[5] == 429
 
 
-def test_le_limiteur_oublie_les_appelants_silencieux():
-    """Un compteur qui protège le service ne doit pas grossir sans fin.
+def test_the_limiter_forgets_silent_callers():
+    """A counter that protects the service must not grow without end.
 
-    En mode ouvert la clé est l'adresse de l'appelant : sans oubli, le service
-    garderait une entrée par adresse vue depuis son démarrage.
+    In open mode the key is the caller's address: without forgetting, the service would keep one
+    entry per address seen since it started.
     """
-    limiteur = RateLimiter(requetes_par_minute=10)
-    for numero in range(50):
-        limiteur.autorise(f"10.0.0.{numero}")
-    assert len(limiteur._historique) == 50
+    limiter = RateLimiter(requests_per_minute=10)
+    for number in range(50):
+        limiter.allows(f"10.0.0.{number}")
+    assert len(limiter._history) == 50
 
-    # On se place une minute et une seconde plus tard, sans attendre : le
-    # limiteur lit l'horloge monotone, il suffit de la décaler.
-    plus_tard = time.monotonic() + 61
-    limiteur._oublier_les_appelants_silencieux(plus_tard)
-    assert limiteur._historique == {}
+    # Move a minute and a second ahead without waiting: the limiter reads the monotonic clock,
+    # so shifting it is enough.
+    later = time.monotonic() + 61
+    limiter._forget_silent_callers(later)
+    assert limiter._history == {}
 
 
-def test_le_questionnaire_adapte_ses_questions_au_motif(client):
-    reponse = client.post(
+def test_the_questionnaire_adapts_its_questions_to_the_complaint(client):
+    reply = client.post(
         "/questionnaire/next",
         json={
             "chief_complaint": "gêne dans la poitrine à l'effort",
             "answers": {"conscience": "oui", "respiration": "non", "saignement": "non"},
         },
-        headers={"X-API-Key": CLE},
+        headers={"X-API-Key": KEY},
     ).json()
-    assert reponse["theme"] == "douleur_thoracique"
-    assert reponse["next_question_id"] == "irradiation"
-    assert reponse["finished"] is False
+    assert reply["theme"] == "douleur_thoracique"
+    assert reply["next_question_id"] == "irradiation"
+    assert reply["finished"] is False
 
 
-def test_le_questionnaire_s_arrete_sur_un_signe_vital(client):
-    reponse = client.post(
+def test_the_questionnaire_stops_on_a_vital_sign(client):
+    reply = client.post(
         "/questionnaire/next",
         json={"chief_complaint": "douleur thoracique violente"},
-        headers={"X-API-Key": CLE},
+        headers={"X-API-Key": KEY},
     ).json()
-    assert reponse["finished"] is True
-    assert reponse["next_question_id"] is None
+    assert reply["finished"] is True
+    assert reply["next_question_id"] is None
 
 
-def test_le_contrat_openapi_est_publie(client):
+def test_the_openapi_contract_is_published(client):
     schema = client.get("/openapi.json").json()
     assert "/triage" in schema["paths"]
     assert "/questionnaire/next" in schema["paths"]
     assert "/health" in schema["paths"]
 
 
-def test_la_passerelle_presente_une_cle_au_moteur(monkeypatch):
-    """Sans elle, l'adresse du moteur suffit à obtenir une inférence GPU.
+def test_the_gateway_presents_a_key_to_the_engine(monkeypatch):
+    """Without it, the engine's address alone buys GPU inference.
 
-    Gratuite, sans quota, sans anonymisation et sans ligne au journal d'audit.
-    En local le moteur n'en demande pas et l'en-tête est ignoré ; chez un
-    hébergeur il la réclame, et la passerelle doit l'avoir.
+    Free, with no quota, no anonymisation and no line in the audit log. Locally the engine asks
+    for none and the header is ignored; at a host it demands one, and the gateway must have it.
     """
-    monkeypatch.setenv("TRIAGE_API_KEY", "cle-du-service")
+    monkeypatch.setenv("TRIAGE_API_KEY", "service-key")
     monkeypatch.delenv("TRIAGE_VLLM_API_KEY", raising=False)
     settings = module_api.Settings.from_env()
-    assert settings.entetes_vllm == {"Authorization": "Bearer cle-du-service"}
+    assert settings.vllm_headers == {"Authorization": "Bearer service-key"}
 
 
-def test_une_cle_propre_au_moteur_prime_sur_celle_du_service(monkeypatch):
-    monkeypatch.setenv("TRIAGE_API_KEY", "cle-du-service")
-    monkeypatch.setenv("TRIAGE_VLLM_API_KEY", "cle-du-moteur")
-    assert module_api.Settings.from_env().entetes_vllm["Authorization"] == "Bearer cle-du-moteur"
+def test_a_key_of_the_engines_own_wins_over_the_services(monkeypatch):
+    monkeypatch.setenv("TRIAGE_API_KEY", "service-key")
+    monkeypatch.setenv("TRIAGE_VLLM_API_KEY", "engine-key")
+    assert module_api.Settings.from_env().vllm_headers["Authorization"] == "Bearer engine-key"
 
 
-def test_sans_aucune_cle_aucun_entete_n_est_envoye(monkeypatch):
-    """Le mode ouvert de démonstration ne doit pas envoyer un « Bearer » vide."""
+def test_with_no_key_at_all_no_header_is_sent(monkeypatch):
+    """The open demonstration mode must not send an empty "Bearer"."""
     monkeypatch.delenv("TRIAGE_API_KEY", raising=False)
     monkeypatch.delenv("TRIAGE_VLLM_API_KEY", raising=False)
-    assert module_api.Settings.from_env().entetes_vllm == {}
+    assert module_api.Settings.from_env().vllm_headers == {}
 
 
-def test_en_mode_ouvert_le_quota_ne_se_contourne_pas_en_changeant_d_entete(monkeypatch, tmp_path):
-    """L'en-tête ne compte comme identité que lorsqu'il a été vérifié.
+def test_in_open_mode_the_quota_is_not_evaded_by_changing_header(monkeypatch, tmp_path):
+    """The header counts as an identity only once it has been verified.
 
-    En mode ouvert, personne ne le vérifie : il servait quand même de clé au
-    seau de comptage, si bien qu'un appelant qui en changeait à chaque requête
-    obtenait un seau neuf à chaque fois. Le quota est le dernier garde-fou de ce
-    mode, et il ne comptait plus rien.
+    In open mode nobody verifies it: it still served as the key of the counting bucket, so a
+    caller changing it on every request got a fresh bucket every time. The quota is the last
+    guard rail of that mode, and it was counting nothing.
     """
     monkeypatch.setenv("TRIAGE_BACKEND", "vllm")
     monkeypatch.delenv("TRIAGE_API_KEY", raising=False)
     monkeypatch.setenv("TRIAGE_ALLOW_ANONYMOUS", "true")
     monkeypatch.setenv("TRIAGE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("TRIAGE_RATE_LIMIT", "3")
-    with TestClient(module_api.app) as testeur:
+    with TestClient(module_api.app) as tester:
         codes = [
-            testeur.post(
+            tester.post(
                 "/questionnaire/next",
                 json={"chief_complaint": "toux"},
-                headers={"X-API-Key": f"forge-{numero}"},
+                headers={"X-API-Key": f"forged-{number}"},
             ).status_code
-            for numero in range(6)
+            for number in range(6)
         ]
     assert codes[:3] == [200, 200, 200]
     assert 429 in codes[3:]
 
 
-def test_le_questionnaire_refuse_un_corps_demesure(client):
-    """Le champ de réponses était le seul texte de l'API sans borne.
+def test_the_questionnaire_refuses_an_oversized_body(client):
+    """The answers field was the only text of the API without a bound.
 
-    Tout y est concaténé en une chaîne unique, relue par la règle de triage :
-    une requête portant quelques centaines de mégaoctets de JSON suffisait à
-    saturer le conteneur, qui n'a pas non plus de limite mémoire.
+    Everything in it is concatenated into a single string, read back by the triage rule: one
+    request carrying a few hundred megabytes of JSON was enough to saturate the container, which
+    has no memory limit either.
     """
-    demesure = {"chief_complaint": "toux", "answers": {f"q{i}": "oui" for i in range(64)}}
+    oversized = {"chief_complaint": "toux", "answers": {f"q{i}": "oui" for i in range(64)}}
     assert (
-        client.post("/questionnaire/next", json=demesure, headers={"X-API-Key": CLE}).status_code
+        client.post("/questionnaire/next", json=oversized, headers={"X-API-Key": KEY}).status_code
         == 422
     )
-    trop_long = {"chief_complaint": "toux", "answers": {"q1": "o" * 5000}}
+    too_long = {"chief_complaint": "toux", "answers": {"q1": "o" * 5000}}
     assert (
-        client.post("/questionnaire/next", json=trop_long, headers={"X-API-Key": CLE}).status_code
+        client.post("/questionnaire/next", json=too_long, headers={"X-API-Key": KEY}).status_code
         == 422
     )
 
 
-def test_une_description_trop_longue_est_bornee_et_annoncee(client, monkeypatch):
-    """Une description qui déborde la fenêtre du modèle interrompait la génération.
+def test_a_description_that_is_too_long_is_bounded_and_said_to_be(client, monkeypatch):
+    """A description overflowing the model window used to cut the generation short.
 
-    Le contrat acceptait quatre mille caractères, la fenêtre en tient bien
-    moins, et la sortie était une erreur de dimension de tenseur au moment
-    précis où un soignant attend une réponse. Elle est désormais bornée — et la
-    réponse le dit, parce qu'un récit clinique tronqué en silence est exactement
-    ce qu'un système d'aide à la décision ne doit pas produire.
+    The contract accepted four thousand characters, the window holds far fewer, and the outcome
+    was a tensor dimension error at the precise moment a clinician is waiting for an answer. It
+    is bounded now — and the reply says so, because a clinical narrative silently truncated is
+    exactly what a decision-support system must not produce.
     """
-    recues: list[str] = []
+    received: list[str] = []
 
-    def _generer(request, symptomes):
-        borne, tronquee = module_api.borner_en_caracteres(symptomes)
-        recues.append(borne)
-        return REPONSE_MODELE, "URGENCE_VITALE", 42.0, tronquee
+    def _generate(request, symptoms):
+        bounded, truncated = module_api.bound_in_characters(symptoms)
+        received.append(bounded)
+        return MODEL_ANSWER, "URGENCE_VITALE", 42.0, truncated
 
-    monkeypatch.setattr(module_api, "_generer_vllm", _generer)
-    longue = "Le patient décrit une gêne diffuse et variable depuis plusieurs jours. " * 40
-    reponse = client.post("/triage", json={"symptoms": longue}, headers={"X-API-Key": CLE})
-    assert reponse.status_code == 200
-    assert reponse.json()["description_truncated"] is True
-    assert len(recues[0]) == module_api.CARACTERES_MAXIMUM
+    monkeypatch.setattr(module_api, "_generate_vllm", _generate)
+    long_one = "Le patient décrit une gêne diffuse et variable depuis plusieurs jours. " * 40
+    reply = client.post("/triage", json={"symptoms": long_one}, headers={"X-API-Key": KEY})
+    assert reply.status_code == 200
+    assert reply.json()["description_truncated"] is True
+    assert len(received[0]) == module_api.MAX_CHARACTERS
 
 
-def test_une_description_normale_n_est_pas_signalee_comme_bornee(client):
-    reponse = client.post(
+def test_a_normal_description_is_not_flagged_as_bounded(client):
+    reply = client.post(
         "/triage",
         json={"symptoms": "Homme de 62 ans, douleur thoracique depuis 20 minutes."},
-        headers={"X-API-Key": CLE},
+        headers={"X-API-Key": KEY},
     )
-    assert reponse.json()["description_truncated"] is False
+    assert reply.json()["description_truncated"] is False

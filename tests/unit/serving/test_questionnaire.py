@@ -1,4 +1,8 @@
-"""Tests du questionnaire adaptatif."""
+"""Tests of the adaptive questionnaire.
+
+The complaints, the questions and the answers are French: they are what the service exchanges
+with the staff, and the triage rule reads them back.
+"""
 
 from __future__ import annotations
 
@@ -7,12 +11,12 @@ import pytest
 from clinical_triage.config import TRIAGE
 from clinical_triage.data.triage_rules import DEFERRED, classify, explain
 from clinical_triage.serving.questionnaire import (
-    QUESTIONS_DE_GRAVITE,
-    QUESTIONS_GENERALES,
-    QUESTIONS_PAR_THEME,
-    RAPPORTS,
-    REPONSE_ALARMANTE,
-    _reponse_binaire,
+    ALARMING_ANSWER,
+    GENERAL_QUESTIONS,
+    QUESTIONS_BY_THEME,
+    RED_FLAG_QUESTIONS,
+    STATEMENTS,
+    _binary_answer,
     compile_symptoms,
     detect_theme,
     has_red_flag,
@@ -22,7 +26,7 @@ from clinical_triage.serving.questionnaire import (
 
 
 @pytest.mark.parametrize(
-    ("motif", "theme"),
+    ("complaint", "theme"),
     [
         ("douleur dans la poitrine", "douleur_thoracique"),
         ("essoufflement depuis hier", "respiratoire"),
@@ -34,70 +38,69 @@ from clinical_triage.serving.questionnaire import (
         ("démarche administrative", "general"),
     ],
 )
-def test_le_motif_determine_le_theme(motif, theme):
-    assert detect_theme(motif) == theme
+def test_the_complaint_determines_the_theme(complaint, theme):
+    assert detect_theme(complaint) == theme
 
 
-def test_les_questions_dependent_du_motif():
-    """C'est ce qui rend le questionnaire adaptatif plutôt que fixe."""
-    thoracique = [identifiant for identifiant, _ in plan("douleur dans la poitrine")]
-    traumatisme = [identifiant for identifiant, _ in plan("entorse de la cheville")]
-    assert thoracique != traumatisme
-    assert "irradiation" in thoracique
-    assert "appui" in traumatisme
+def test_the_questions_depend_on_the_complaint():
+    """That is what makes the questionnaire adaptive rather than fixed."""
+    chest = [identifier for identifier, _ in plan("douleur dans la poitrine")]
+    trauma = [identifier for identifier, _ in plan("entorse de la cheville")]
+    assert chest != trauma
+    assert "irradiation" in chest
+    assert "appui" in trauma
 
 
-def test_les_questions_de_gravite_sont_posees_en_premier_quel_que_soit_le_motif():
-    for motif in ("mal de gorge", "douleur dans la poitrine", "chute de vélo"):
-        premieres = [identifiant for identifiant, _ in plan(motif)][: len(QUESTIONS_DE_GRAVITE)]
-        assert premieres == [identifiant for identifiant, _ in QUESTIONS_DE_GRAVITE]
+def test_the_red_flag_questions_come_first_whatever_the_complaint():
+    for complaint in ("mal de gorge", "douleur dans la poitrine", "chute de vélo"):
+        first = [identifier for identifier, _ in plan(complaint)][: len(RED_FLAG_QUESTIONS)]
+        assert first == [identifier for identifier, _ in RED_FLAG_QUESTIONS]
 
 
-def test_un_signe_vital_arrete_immediatement_la_collecte():
-    etape = next_question("douleur thoracique intense", {})
-    assert etape.termine is True
-    assert etape.identifiant is None
+def test_a_red_flag_stops_the_collection_immediately():
+    step = next_question("douleur thoracique intense", {})
+    assert step.finished is True
+    assert step.identifier is None
 
 
-def test_un_motif_benin_declenche_des_questions():
-    etape = next_question("mal de gorge léger", {})
-    assert etape.termine is False
-    assert etape.identifiant and etape.texte
+def test_a_benign_complaint_triggers_questions():
+    step = next_question("mal de gorge léger", {})
+    assert step.finished is False
+    assert step.identifier and step.text
 
 
-def test_la_collecte_se_termine_quand_tout_a_ete_repondu():
-    reponses = {identifiant: "non" for identifiant, _ in plan("fatigue")}
-    assert next_question("fatigue", reponses).termine is True
+def test_the_collection_ends_when_everything_has_been_answered():
+    answers = {identifier: "non" for identifier, _ in plan("fatigue")}
+    assert next_question("fatigue", answers).finished is True
 
 
-def test_un_signe_vital_apparu_en_cours_de_collecte_arrete_le_questionnaire():
-    etape = next_question("fatigue", {"conscience": "non, le patient est inconscient"})
-    assert etape.termine is True
+def test_a_red_flag_appearing_mid_collection_stops_the_questionnaire():
+    step = next_question("fatigue", {"conscience": "non, le patient est inconscient"})
+    assert step.finished is True
 
 
-def test_la_synthese_conserve_le_sens_de_chaque_reponse():
-    """Ne garder que les réponses produirait « non. non. oui », sans référent."""
-    synthese = compile_symptoms("toux", {"respiration": "non", "temperature": "38,5 depuis hier"})
-    assert "toux" in synthese
-    assert "Pas de difficulté à respirer" in synthese
-    assert "38,5 depuis hier" in synthese
+def test_the_summary_keeps_the_meaning_of_each_answer():
+    """Keeping only the answers would produce "non. non. oui", with no referent."""
+    summary = compile_symptoms("toux", {"respiration": "non", "temperature": "38,5 depuis hier"})
+    assert "toux" in summary
+    assert "Pas de difficulté à respirer" in summary
+    assert "38,5 depuis hier" in summary
 
 
-def test_une_reponse_negative_est_ecrite_comme_une_negation():
-    """Une négation post-posée serait relue comme le symptôme lui-même.
+def test_a_negative_answer_is_written_as_a_negation():
+    """A trailing negation would be read back as the symptom itself.
 
-    C'est le piège que ce module déjoue déjà pour l'arrêt anticipé, et qui
-    reparaissait ici : la description compilée est relue par la règle de triage
-    dans le service, et « Difficulté à respirer : non » y est lu comme une
-    difficulté à respirer.
+    That is the trap this module already avoids for the early stop, and which reappeared here:
+    the compiled description is read back by the triage rule in the service, and "Difficulté à
+    respirer : non" reads there as a breathing difficulty.
     """
-    synthese = compile_symptoms("toux", {"respiration": "non"})
-    assert "Difficulté à respirer :" not in synthese
-    assert synthese.endswith("Pas de difficulté à respirer ni d'essoufflement au repos.")
+    summary = compile_symptoms("toux", {"respiration": "non"})
+    assert "Difficulté à respirer :" not in summary
+    assert summary.endswith("Pas de difficulté à respirer ni d'essoufflement au repos.")
 
 
 @pytest.mark.parametrize(
-    "motif",
+    "complaint",
     [
         "gene dans la poitrine",
         "petite toux",
@@ -109,43 +112,42 @@ def test_une_reponse_negative_est_ecrite_comme_une_negation():
         "fatigue generale",
     ],
 )
-def test_des_reponses_rassurantes_n_aggravent_jamais_le_verdict_de_la_regle(motif):
-    """Un rhume dont tout est nié ne doit pas ressortir en urgence vitale.
+def test_reassuring_answers_never_worsen_the_rule_verdict(complaint):
+    """A cold with everything denied must not come out as life-threatening.
 
-    Un cas parcourt les huit thèmes : c'est le texte des questions qui, recopié
-    dans la description, faisait basculer la règle.
+    One case walks the eight themes: it was the text of the questions, copied into the
+    description, that tipped the rule over.
     """
-    # « non » n'est pas rassurant partout : à « le patient est-il conscient ? »,
-    # c'est la réponse alarmante. On répond donc l'inverse de ce que
-    # `REPONSE_ALARMANTE` déclare pour chaque question.
-    rassurantes = {
-        identifiant: "oui" if REPONSE_ALARMANTE.get(identifiant) == "non" else "non"
-        for identifiant, _ in plan(motif)
+    # "non" is not reassuring everywhere: to "is the patient conscious?" it is the alarming
+    # answer. So the opposite of what `ALARMING_ANSWER` declares is answered for each question.
+    reassuring = {
+        identifier: "oui" if ALARMING_ANSWER.get(identifier) == "non" else "non"
+        for identifier, _ in plan(complaint)
     }
-    description = compile_symptoms(motif, rassurantes)
-    assert TRIAGE.severity[classify(description)] <= TRIAGE.severity[classify(motif)]
+    description = compile_symptoms(complaint, reassuring)
+    assert TRIAGE.severity[classify(description)] <= TRIAGE.severity[classify(complaint)]
 
 
-def test_chaque_question_sait_comment_reporter_sa_reponse():
-    """Une question sans formulation retomberait sur son identifiant brut."""
-    posees = {identifiant for identifiant, _ in QUESTIONS_DE_GRAVITE}
-    for questions in QUESTIONS_PAR_THEME.values():
-        posees.update(identifiant for identifiant, _ in questions)
-    posees.update(identifiant for identifiant, _ in QUESTIONS_GENERALES)
-    assert posees <= set(RAPPORTS)
+def test_every_question_knows_how_to_report_its_answer():
+    """A question with no wording would fall back on its raw identifier."""
+    asked = {identifier for identifier, _ in RED_FLAG_QUESTIONS}
+    for questions in QUESTIONS_BY_THEME.values():
+        asked.update(identifier for identifier, _ in questions)
+    asked.update(identifier for identifier, _ in GENERAL_QUESTIONS)
+    assert asked <= set(STATEMENTS)
 
 
-def test_les_reponses_vides_sont_ignorees():
-    synthese = compile_symptoms("toux", {"respiration": "   ", "saignement": "non"})
-    assert "respirer" not in synthese
-    assert "saignement" in synthese.lower()
+def test_empty_answers_are_ignored():
+    summary = compile_symptoms("toux", {"respiration": "   ", "saignement": "non"})
+    assert "respirer" not in summary
+    assert "saignement" in summary.lower()
 
 
-# --- Lecture d'une réponse oui / non ---
+# --- Reading a yes / no answer ---
 
 
 @pytest.mark.parametrize(
-    "reponse",
+    "answer",
     [
         "Notre fille saigne du nez en abondance depuis 20 minutes",
         "Nous ne savons pas",
@@ -153,19 +155,18 @@ def test_les_reponses_vides_sont_ignorees():
         "Nouvelle crise depuis ce matin",
     ],
 )
-def test_un_mot_qui_commence_par_no_n_est_pas_une_negation(reponse):
-    """« no » est une négation en anglais, et le début de « Notre » en français.
+def test_a_word_starting_with_no_is_not_a_negation(answer):
+    """"no" is a negation in English, and the start of "Notre" in French.
 
-    La comparaison portait sur un préfixe : « Notre fille saigne du nez » était
-    lu comme un « non », et la synthèse transmise au modèle écrivait « Aucun
-    saignement actif » — l'exact contraire de ce que l'accompagnant venait de
-    déclarer.
+    The comparison used to be on a prefix: "Notre fille saigne du nez" was read as a "non", and
+    the summary handed to the model wrote "Aucun saignement actif" — the exact opposite of what
+    the relative had just declared.
     """
-    assert _reponse_binaire(reponse) is None
+    assert _binary_answer(answer) is None
 
 
 @pytest.mark.parametrize(
-    ("attendu", "reponse"),
+    ("expected", "answer"),
     [
         ("oui", "oui"),
         ("oui", "Oui"),
@@ -178,24 +179,24 @@ def test_un_mot_qui_commence_par_no_n_est_pas_une_negation(reponse):
         (None, "peut-etre"),
     ],
 )
-def test_seule_une_reponse_reduite_a_un_mot_est_binaire(attendu, reponse):
-    """Dès qu'il y a autre chose, le texte est repris tel quel : c'est plus sûr."""
-    assert _reponse_binaire(reponse) == attendu
+def test_only_an_answer_reduced_to_one_word_is_binary(expected, answer):
+    """As soon as there is anything else, the text is carried through: that is safer."""
+    assert _binary_answer(answer) == expected
 
 
-def test_une_reponse_libre_arrive_intacte_dans_la_synthese():
-    synthese = compile_symptoms(
+def test_a_free_text_answer_reaches_the_summary_intact():
+    summary = compile_symptoms(
         "Chute de velo", {"saignement": "Notre fille saigne du nez en abondance depuis 20 minutes"}
     )
-    assert "saigne du nez en abondance" in synthese
-    assert "Aucun saignement" not in synthese
+    assert "saigne du nez en abondance" in summary
+    assert "Aucun saignement" not in summary
 
 
-# --- Dépistage du signe vital ---
+# --- Red-flag screening ---
 
 
 @pytest.mark.parametrize(
-    ("motif", "reponses"),
+    ("complaint", "answers"),
     [
         ("mal de tete", {"deficit": "oui"}),
         ("mal de tete", {"cephalee": "oui"}),
@@ -206,18 +207,18 @@ def test_une_reponse_libre_arrive_intacte_dans_la_synthese():
         ("chute", {"saignement": "Notre fille saigne beaucoup du nez"}),
     ],
 )
-def test_une_reponse_alarmante_arrete_la_collecte(motif, reponses):
-    """Cinq questions sur huit ne déclenchaient rien, faute d'être répertoriées.
+def test_an_alarming_answer_stops_the_collection(complaint, answers):
+    """Five questions out of eight triggered nothing, for want of being listed.
 
-    Et la règle de triage n'était appliquée qu'aux réponses non binaires : tout
-    ce qui suivait un « oui » n'était jamais lu.
+    And the triage rule was applied to non-binary answers only: everything following a "oui"
+    was never read.
     """
-    assert has_red_flag(motif, reponses)
-    assert next_question(motif, reponses).termine
+    assert has_red_flag(complaint, answers)
+    assert next_question(complaint, answers).finished
 
 
 @pytest.mark.parametrize(
-    ("motif", "reponses"),
+    ("complaint", "answers"),
     [
         ("rhume", {"conscience": "oui", "respiration": "non", "saignement": "non"}),
         ("entorse", {"appui": "non", "deformation": "non"}),
@@ -226,54 +227,52 @@ def test_une_reponse_alarmante_arrete_la_collecte(motif, reponses):
         ("ventre", {"vomissements": "oui"}),
     ],
 )
-def test_une_collecte_rassurante_se_poursuit(motif, reponses):
-    assert not has_red_flag(motif, reponses)
+def test_a_reassuring_collection_carries_on(complaint, answers):
+    assert not has_red_flag(complaint, answers)
 
 
-def test_aucun_intitule_de_reponse_libre_ne_declenche_la_regle_a_lui_seul():
-    """L'intitulé est notre vocabulaire, pas celui du patient.
+def test_no_free_text_label_triggers_the_rule_on_its_own():
+    """A label is our vocabulary, not the patient's.
 
-    La synthèse compilée est relue par la règle de triage, et son avis s'affiche
-    à côté de celui du modèle. « Idées suicidaires : je ne sais pas » y faisait
-    apparaître « idees suicidaires » dans les raisons montrées au soignant, pour
-    un patient qui n'avait rien exprimé du tout : une justification fabriquée par
-    la formulation du questionnaire lui-même.
+    The compiled summary is read back by the triage rule, and its opinion is shown next to the
+    model's. "Idées suicidaires : je ne sais pas" made "idees suicidaires" appear among the
+    reasons shown to the nurse, for a patient who had expressed nothing at all: a justification
+    manufactured by the wording of the questionnaire itself.
     """
-    for identifiant, (intitule, _, _) in RAPPORTS.items():
-        phrase = f"{intitule} : je ne sais pas."
-        assert classify(phrase) == DEFERRED, (identifiant, intitule, explain(phrase))
+    for identifier, (label, _, _) in STATEMENTS.items():
+        sentence = f"{label} : je ne sais pas."
+        assert classify(sentence) == DEFERRED, (identifier, label, explain(sentence))
 
 
-def test_une_reponse_reellement_alarmante_reste_detectee():
-    """Les phrases canoniques, elles, rapportent ce que le patient a dit."""
-    for identifiant in ("intention", "frissons", "respiration"):
-        _, affirmatif, _ = RAPPORTS[identifiant]
-        assert classify(affirmatif) != DEFERRED, identifiant
+def test_a_genuinely_alarming_answer_is_still_detected():
+    """The canonical sentences, on the other hand, report what the patient said."""
+    for identifier in ("intention", "frissons", "respiration"):
+        _, affirmative, _ = STATEMENTS[identifier]
+        assert classify(affirmative) != DEFERRED, identifier
 
 
-def test_une_reponse_libre_a_une_question_non_binaire_n_alarme_pas():
-    """Toutes les questions n'attendent pas un oui ou un non.
+def test_a_free_text_answer_to_a_non_binary_question_does_not_alarm():
+    """Not every question expects a yes or a no.
 
-    Le mécanisme d'un traumatisme se raconte en toutes lettres. Comparé sans
-    garde, il valait `None` des deux côtés — réponse non binaire et question sans
-    réponse alarmante — et le questionnaire s'arrêtait sur une détresse vitale
-    qui n'avait pas été décrite.
+    The mechanism of a trauma is told in full sentences. Compared without a guard, it was
+    ``None`` on both sides — non-binary answer and question with no alarming answer — and the
+    questionnaire stopped on a life-threatening distress nobody had described.
     """
-    motif = "entorse de la cheville apres une chute"
-    reponses = {
+    complaint = "entorse de la cheville apres une chute"
+    answers = {
         "conscience": "oui",
         "respiration": "non",
         "saignement": "non",
         "mecanisme": "chute de sa hauteur dans l escalier",
     }
 
-    assert has_red_flag(motif, reponses) is False
-    assert next_question(motif, reponses).termine is False
+    assert has_red_flag(complaint, answers) is False
+    assert next_question(complaint, answers).finished is False
 
 
-def test_une_reponse_libre_qui_decrit_un_signe_grave_alarme_toujours():
-    """La garde ne doit pas rendre le questionnaire sourd au contenu."""
-    motif = "chute a domicile"
-    reponses = {"mecanisme": "chute de quatre metres, le patient est inconscient"}
+def test_a_free_text_answer_describing_a_serious_sign_still_alarms():
+    """The guard must not make the questionnaire deaf to content."""
+    complaint = "chute a domicile"
+    answers = {"mecanisme": "chute de quatre metres, le patient est inconscient"}
 
-    assert has_red_flag(motif, reponses) is True
+    assert has_red_flag(complaint, answers) is True

@@ -1,8 +1,10 @@
-"""Tests de la règle de triage explicite.
+"""Tests of the explicit triage rule.
 
-Ces tests couvrent les trois défauts qui rendraient la règle inutilisable comme
-référence : ne pas reconnaître les formes fléchies, ignorer les négations, et
-ne pas lire les constantes écrites dans le récit.
+They cover the three defects that would make the rule unusable as a baseline: failing to
+recognise inflected forms, ignoring negations, and not reading the vital signs written into the
+narrative.
+
+The cases are French and English clinical text: they are the data the rule matches against.
 """
 
 from __future__ import annotations
@@ -23,7 +25,7 @@ from clinical_triage.data.vital_signs import VitalSigns
 
 
 @pytest.mark.parametrize(
-    "texte",
+    "text",
     [
         "Le patient présente une douleur thoracique.",
         "Le patient a des convulsions répétées.",
@@ -34,77 +36,77 @@ from clinical_triage.data.vital_signs import VitalSigns
         "Seizures started ten minutes ago.",
     ],
 )
-def test_les_signes_vitaux_sont_reconnus_au_pluriel_et_au_feminin(texte):
-    assert classify(texte) == VITAL
+def test_red_flags_are_recognised_in_plural_and_feminine_forms(text):
+    assert classify(text) == VITAL
 
 
-def test_un_signe_vital_prime_sur_un_signe_modere():
+def test_a_red_flag_wins_over_a_warning_flag():
     assert classify("Fièvre élevée puis convulsion.") == VITAL
 
 
 @pytest.mark.parametrize(
-    "texte",
+    "text",
     [
         "Chute de sa hauteur, sans perte de connaissance, examen normal.",
         "Le patient n'a pas de douleur thoracique et ne présente aucun saignement abondant.",
         "No chest pain, no difficulty breathing, no loss of consciousness.",
     ],
 )
-def test_les_signes_nies_ne_declenchent_rien(texte):
-    assert classify(texte) == DEFERRED
+def test_negated_signs_trigger_nothing(text):
+    assert classify(text) == DEFERRED
 
 
-def test_signe_modere_reconnu():
+def test_a_warning_flag_is_recognised():
     assert classify("Vomissements répétés depuis ce matin, déshydratation.") == MODERATE
 
 
-def test_absence_de_signe():
+def test_no_sign_at_all():
     assert classify("Petit rhume et fatigue légère depuis deux jours.") == DEFERRED
 
 
-def test_les_signes_detectes_sont_restitues():
-    signes = matched_flags("chest pain and stroke symptoms", VITAL)
-    assert "chest pain" in signes
-    assert "stroke" in signes
+def test_the_detected_signs_are_returned():
+    signs = matched_flags("chest pain and stroke symptoms", VITAL)
+    assert "chest pain" in signs
+    assert "stroke" in signs
 
 
-def test_les_signes_nies_ne_sont_pas_restitues():
+def test_negated_signs_are_not_returned():
     assert matched_flags("pas de douleur thoracique", VITAL) == []
 
 
-def test_des_constantes_effondrees_classent_en_urgence_vitale():
-    constantes = VitalSigns(spo2=88, systolic_bp=86, heart_rate=118, conscious=True)
-    assert classify("Patient fatigué depuis ce matin.", constantes, age=55) == VITAL
+def test_collapsed_vital_signs_classify_as_life_threatening():
+    vitals = VitalSigns(spo2=88, systolic_bp=86, heart_rate=118, conscious=True)
+    assert classify("Patient fatigué depuis ce matin.", vitals, age=55) == VITAL
 
 
-def test_les_constantes_sont_lues_dans_le_texte():
-    """Sans cette lecture, la règle serait comparée au modèle à armes inégales."""
-    texte = "Homme de 29 ans venu pour une grosse fatigue. FC 38, TA 82/48, SpO2 97 %."
-    assert classify(texte) == VITAL
+def test_the_vital_signs_are_read_out_of_the_text():
+    """Without that reading, the rule would be compared to the model on unequal terms."""
+    text = "Homme de 29 ans venu pour une grosse fatigue. FC 38, TA 82/48, SpO2 97 %."
+    assert classify(text) == VITAL
 
 
-def test_les_seuils_pediatriques_sont_appliques():
-    """140 battements par minute est normal à deux ans, critique à quarante ans."""
-    constantes = VitalSigns(heart_rate=140)
-    assert classify("Enfant enrhumé.", constantes, age=2) == DEFERRED
-    assert classify("Adulte enrhumé.", constantes, age=40) == VITAL
+def test_the_paediatric_thresholds_are_applied():
+    """140 beats per minute is normal at two years old, critical at forty."""
+    vitals = VitalSigns(heart_rate=140)
+    assert classify("Enfant enrhumé.", vitals, age=2) == DEFERRED
+    assert classify("Adulte enrhumé.", vitals, age=40) == VITAL
 
 
-def test_la_decision_est_justifiee():
-    raisons = explain("Douleur thoracique avec sueurs.")
-    assert any("douleur thoracique" in raison for raison in raisons)
+def test_the_decision_is_justified():
+    reasons = explain("Douleur thoracique avec sueurs.")
+    assert any("douleur thoracique" in reason for reason in reasons)
 
 
-def test_les_raisons_citent_les_constantes_anormales():
-    raisons = explain("Patient calme.", VitalSigns(spo2=85), age=40)
-    assert any("saturation" in raison for raison in raisons)
+def test_the_reasons_quote_the_abnormal_vital_signs():
+    reasons = explain("Patient calme.", VitalSigns(spo2=85), age=40)
+    assert any("saturation" in reason for reason in reasons)
 
 
 @pytest.mark.parametrize(
-    ("texte", "attendu"),
+    ("text", "expected"),
     [
-        # Vocabulaire clinique français canonique : ce sont les mots qu'une
-        # infirmière d'accueil écrit, et les corpus francophones les emploient.
+        # Canonical French clinical vocabulary: these are the words a triage nurse writes, and
+        # the French-language corpora use them.
         ("Dyspnée au repos depuis ce matin.", "URGENCE_VITALE"),
         ("Marbrures des genoux, extrémités froides.", "URGENCE_VITALE"),
         ("Raideur de nuque fébrile.", "URGENCE_VITALE"),
@@ -113,29 +115,29 @@ def test_les_raisons_citent_les_constantes_anormales():
         ("Syncope brève, récupération complète.", "URGENCE_MODEREE"),
     ],
 )
-def test_le_lexique_couvre_le_vocabulaire_clinique_francais(texte, attendu):
-    assert classify(texte) == attendu
+def test_the_lexicon_covers_the_french_clinical_vocabulary(text, expected):
+    assert classify(text) == expected
 
 
 @pytest.mark.parametrize(
-    ("texte", "attendu"),
+    ("text", "expected"),
     [
-        # « Brûlure » désigne en français une lésion *et* une sensation. Seule la
-        # lésion relève du triage.
+        # "Brûlure" means both a lesion *and* a sensation in French. Only the lesion belongs to
+        # triage.
         ("Brûlures remontant derrière le sternum après les repas.", "CONSULTATION_DIFFEREE"),
         ("Brûlure chimique de l'avant-bras.", "URGENCE_MODEREE"),
         ("Brûlure par eau bouillante sur la main.", "URGENCE_MODEREE"),
     ],
 )
-def test_une_sensation_de_brulure_n_est_pas_une_brulure(texte, attendu):
-    assert classify(texte) == attendu
+def test_a_burning_sensation_is_not_a_burn(text, expected):
+    assert classify(text) == expected
 
 
-# --- Portée de la négation ---
+# --- Scope of a negation ---
 
 
 @pytest.mark.parametrize(
-    "texte",
+    "text",
     [
         "Homme de 55 ans, pas de fievre, douleur thoracique constrictive depuis 20 minutes.",
         "Sans perte de connaissance, mais convulsion en cours.",
@@ -143,18 +145,17 @@ def test_une_sensation_de_brulure_n_est_pas_une_brulure(texte, attendu):
         "Apyretique, cependant detresse respiratoire.",
     ],
 )
-def test_une_negation_ne_franchit_pas_la_ponctuation(texte):
-    """Une note d'accueil énumère : « pas de fièvre, douleur thoracique ».
+def test_a_negation_does_not_cross_punctuation(text):
+    """A reception note enumerates: "pas de fièvre, douleur thoracique".
 
-    La fenêtre de recherche remontait par-dessus la virgule, trouvait « pas de »
-    et annulait le signe qui suit — un infarctus classé en consultation
-    différée, sans rien afficher qui l'explique.
+    The search window reached back over the comma, found "pas de" and cancelled the sign that
+    follows — a heart attack filed as a deferred consultation, with nothing shown to explain it.
     """
-    assert classify(texte) == VITAL
+    assert classify(text) == VITAL
 
 
 @pytest.mark.parametrize(
-    "texte",
+    "text",
     [
         "Pas de douleur thoracique.",
         "Aucune convulsion.",
@@ -162,15 +163,15 @@ def test_une_negation_ne_franchit_pas_la_ponctuation(texte):
         "Sans perte de connaissance.",
     ],
 )
-def test_une_negation_de_la_meme_proposition_annule_toujours_le_signe(texte):
-    assert classify(texte) == DEFERRED
+def test_a_negation_in_the_same_clause_still_cancels_the_sign(text):
+    assert classify(text) == DEFERRED
 
 
-# --- Formes singulier et pluriel ---
+# --- Singular and plural forms ---
 
 
 @pytest.mark.parametrize(
-    ("singulier", "pluriel"),
+    ("singular", "plural"),
     [
         ("Le patient exprime une idee suicidaire.", "Le patient exprime des idees suicidaires."),
         ("Levre bleue.", "Levres bleues."),
@@ -178,21 +179,21 @@ def test_une_negation_de_la_meme_proposition_annule_toujours_le_signe(texte):
         ("Purple skin blotch on the leg.", "Purple skin blotches on the leg."),
     ],
 )
-def test_les_deux_nombres_declenchent_autant(singulier, pluriel):
-    """La flexion ajoute une terminaison, elle ne sait pas en retirer une.
+def test_both_numbers_fire_equally(singular, plural):
+    """Inflection adds an ending, it cannot remove one.
 
-    Un terme stocké au pluriel n'était donc reconnu qu'au pluriel : « idée
-    suicidaire » au singulier échappait au dépistage.
+    A term stored in the plural was therefore recognised in the plural only: "idée suicidaire"
+    in the singular escaped the screening.
     """
-    assert classify(singulier) == VITAL
-    assert classify(pluriel) == VITAL
+    assert classify(singular) == VITAL
+    assert classify(plural) == VITAL
 
 
-# --- Vocabulaire profane ---
+# --- Lay vocabulary ---
 
 
 @pytest.mark.parametrize(
-    "texte",
+    "text",
     [
         "Elle a du mal a respirer au repos.",
         "Il n'arrive pas a respirer.",
@@ -202,17 +203,17 @@ def test_les_deux_nombres_declenchent_autant(singulier, pluriel):
         "She is struggling to breathe.",
     ],
 )
-def test_les_mots_d_un_accompagnant_declenchent_aussi(texte):
-    """Le questionnaire recueille les phrases telles qu'elles sont dites.
+def test_the_words_of_a_relative_fire_too(text):
+    """The questionnaire collects sentences as they are said.
 
-    Une règle qui ne connaît que « détresse respiratoire » ne lit pas « elle a
-    du mal à respirer », qui est ce qu'un accompagnant écrit réellement.
+    A rule that only knows "détresse respiratoire" does not read "elle a du mal à respirer",
+    which is what a relative actually writes.
     """
-    assert classify(texte) == VITAL
+    assert classify(text) == VITAL
 
 
 @pytest.mark.parametrize(
-    "texte",
+    "text",
     [
         "Rhume, pas de mal a respirer.",
         "Petite coupure au doigt, saigne un peu.",
@@ -220,47 +221,46 @@ def test_les_mots_d_un_accompagnant_declenchent_aussi(texte):
         "Toux seche depuis deux jours.",
     ],
 )
-def test_ce_vocabulaire_ne_declenche_pas_a_tort(texte):
-    assert classify(texte) == DEFERRED
+def test_that_vocabulary_does_not_fire_wrongly(text):
+    assert classify(text) == DEFERRED
 
 
-def test_aucun_terme_n_est_liste_deux_fois():
-    """Un doublon est sans effet sur la détection, et signale une liste relue trop vite."""
-    for liste in (RED_FLAGS, WARNING_FLAGS):
-        doublons = sorted({t for t in liste if liste.count(t) > 1})
-        assert doublons == []
+def test_no_term_is_listed_twice():
+    """A duplicate has no effect on detection, and signals a list re-read too quickly."""
+    for listing in (RED_FLAGS, WARNING_FLAGS):
+        duplicates = sorted({t for t in listing if listing.count(t) > 1})
+        assert duplicates == []
 
 
-# --- Sur-déclenchements : deux tournures cliniques courantes ---
+# --- Over-firing: two common clinical turns of phrase ---
 
 
-def test_une_absence_de_reponse_au_traitement_n_est_pas_une_urgence_vitale():
-    """« Ne répond pas » était cherché sans contexte.
+def test_a_failure_to_respond_to_treatment_is_not_life_threatening():
+    """"Ne répond pas" used to be searched for without context.
 
-    C'est une tournure banale d'un compte rendu — « ne répond pas au traitement
-    antibiotique » — et elle classait le cas en urgence vitale. Effet concret :
-    le questionnaire s'arrêtait dès le motif, et le patient n'était plus
-    interrogé du tout.
+    It is an ordinary turn of phrase in a report — "ne répond pas au traitement antibiotique" —
+    and it classified the case as life-threatening. Concrete effect: the questionnaire stopped
+    at the complaint, and the patient was not questioned at all.
     """
-    texte = "Le patient ne répond pas au traitement antibiotique depuis trois jours."
-    assert classify(texte) == DEFERRED
-    assert explain(texte) == []
+    text = "Le patient ne répond pas au traitement antibiotique depuis trois jours."
+    assert classify(text) == DEFERRED
+    assert explain(text) == []
 
 
-def test_un_patient_areactif_reste_une_urgence_vitale():
+def test_an_unresponsive_patient_is_still_life_threatening():
     assert classify("Patient inconscient, ne répond pas aux stimulations.") == VITAL
     assert classify("Le patient ne réagit plus.") == VITAL
 
 
-def test_une_hemorragie_sous_conjonctivale_n_est_pas_une_urgence_vitale():
-    """Spectaculaire et bénigne : le faux positif quotidien d'un accueil."""
-    texte = "Hémorragie sous-conjonctivale isolée, indolore, vision normale."
-    assert classify(texte) == DEFERRED
-    assert explain(texte) == []
+def test_a_subconjunctival_haemorrhage_is_not_life_threatening():
+    """Spectacular and benign: the daily false positive of a reception desk."""
+    text = "Hémorragie sous-conjonctivale isolée, indolore, vision normale."
+    assert classify(text) == DEFERRED
+    assert explain(text) == []
 
 
 @pytest.mark.parametrize(
-    "texte",
+    "text",
     [
         "Hémorragie digestive avec méléna abondant.",
         "Hémorragie de la délivrance après accouchement.",
@@ -268,5 +268,5 @@ def test_une_hemorragie_sous_conjonctivale_n_est_pas_une_urgence_vitale():
         "Massive hemorrhage from the thigh wound.",
     ],
 )
-def test_les_hemorragies_graves_restent_detectees(texte):
-    assert classify(texte) == VITAL
+def test_serious_haemorrhages_are_still_detected(text):
+    assert classify(text) == VITAL

@@ -1,12 +1,11 @@
-"""Cohérence de ce qui est publié sur le Hugging Face Hub.
+"""Consistency of what is published on the Hugging Face Hub.
 
-Un adaptateur LoRA ne contient pas de modèle : il décrit une correction à
-appliquer à des poids précis, qu'il désigne par leur dépôt. Publier l'adaptateur
-sans ces poids produit un artefact que personne ne peut ouvrir — et l'erreur ne
-se voit qu'au premier téléchargement, c'est-à-dire trop tard.
+A LoRA adapter contains no model: it describes a correction to apply to specific weights, which
+it designates by their repository. Publishing the adapter without those weights produces an
+artefact nobody can open — and the mistake only shows at the first download, that is to say too
+late.
 
-Ces tests lisent la configuration de publication et les cartes de modèle : ils ne
-touchent pas au réseau.
+These tests read the publication configuration and the model cards: they touch no network.
 """
 
 from __future__ import annotations
@@ -22,78 +21,80 @@ from clinical_triage.config import MODEL, PATHS
 from clinical_triage.data import dataset_io
 
 
-def _script_de_publication():
-    """Charge `scripts/publish_to_hub.py`, dont le nom n'est pas importable tel quel."""
-    chemin = PATHS.root / "scripts" / "08_publish_hf.py"
-    spec = importlib.util.spec_from_file_location("publication_hf", chemin)
+def _publication_script():
+    """Load ``scripts/publish_to_hub.py``, which is not importable as a module."""
+    path = PATHS.root / "scripts" / "publish_to_hub.py"
+    spec = importlib.util.spec_from_file_location("publish_to_hub_under_test", path)
     module = importlib.util.module_from_spec(spec)
-    sys.modules["publication_hf"] = module
+    sys.modules["publish_to_hub_under_test"] = module
     spec.loader.exec_module(module)
     return module
 
 
 @pytest.fixture(scope="module")
 def publication():
-    return _script_de_publication()
+    return _publication_script()
 
 
-def _base_declaree(carte) -> str | None:
-    """Lit `base_model` dans l'en-tête YAML d'une carte de modèle."""
-    trouve = re.search(r"^base_model:\s*(\S+)\s*$", carte.read_text(encoding="utf-8"), re.MULTILINE)
-    return trouve.group(1) if trouve else None
+def _declared_base(card) -> str | None:
+    """Read ``base_model`` from the YAML header of a model card."""
+    found = re.search(r"^base_model:\s*(\S+)\s*$", card.read_text(encoding="utf-8"), re.MULTILINE)
+    return found.group(1) if found else None
 
 
-def test_chaque_modele_publie_a_sa_carte(publication):
-    manquantes = [
-        quoi
-        for quoi in publication.TOUT
-        if quoi != "dataset" and not publication._carte_du_modele(quoi).exists()
+def test_every_published_model_has_its_card(publication):
+    missing = [
+        what
+        for what in publication.EVERYTHING
+        if what != "dataset" and not publication._model_card(what).exists()
     ]
-    assert manquantes == []
+    assert missing == []
 
 
-def test_le_modele_de_base_de_chaque_adaptateur_est_publie(publication):
-    """Sans lui, `PeftModel.from_pretrained` irait chercher un dépôt inexistant."""
-    depots_publies = {
-        publication._depot_du_modele(quoi) for quoi in publication.TOUT if quoi != "dataset"
+def test_the_base_model_of_every_adapter_is_published(publication):
+    """Without it, ``PeftModel.from_pretrained`` would look for a repository that does not exist."""
+    published = {
+        publication._model_repository(what)
+        for what in publication.EVERYTHING
+        if what != "dataset"
     }
-    depots_publies.add(MODEL.base_model)  # le modèle de base vient de son éditeur
+    published.add(MODEL.base_model)  # the base model comes from its own publisher
 
-    for quoi in publication.TOUT:
-        if not quoi.startswith("adaptateur"):
+    for what in publication.EVERYTHING:
+        if not what.endswith("-adapter"):
             continue
-        base = _base_declaree(publication._carte_du_modele(quoi))
-        assert base is not None, f"{quoi} : la carte ne déclare pas son modèle de base"
-        assert base in depots_publies, f"{quoi} : son modèle de base {base} n'est pas publié"
+        base = _declared_base(publication._model_card(what))
+        assert base is not None, f"{what}: the card does not declare its base model"
+        assert base in published, f"{what}: its base model {base} is not published"
 
 
-def test_l_adaptateur_dpo_sur_le_disque_designe_le_depot_public(publication):
-    """Le chemin local écrit par la bibliothèque rendrait les poids inchargeables ailleurs."""
+def test_the_dpo_adapter_on_disk_designates_the_public_repository(publication):
+    """The local path written by the library would make the weights unloadable elsewhere."""
     configuration = PATHS.dpo_adapter / "adapter_config.json"
     if not configuration.exists():
-        pytest.skip("Adaptateur DPO absent : l'alignement n'a pas encore été joué.")
-    contenu = json.loads(configuration.read_text(encoding="utf-8"))
-    assert contenu["base_model_name_or_path"] == MODEL.hub_sft_merged_model_id
+        pytest.skip("DPO adapter absent: run `python scripts/train_dpo.py` to produce it.")
+    content = json.loads(configuration.read_text(encoding="utf-8"))
+    assert content["base_model_name_or_path"] == MODEL.hub_sft_merged_model_id
 
 
-def test_les_identifiants_de_depot_sont_tous_distincts():
-    """Deux artefacts qui partagent un dépôt s'écraseraient l'un l'autre."""
-    identifiants = [
+def test_the_repository_identifiers_are_all_distinct():
+    """Two artefacts sharing a repository would overwrite each other."""
+    identifiers = [
         MODEL.hub_dataset_id,
         MODEL.hub_sft_model_id,
         MODEL.hub_sft_merged_model_id,
         MODEL.hub_dpo_model_id,
         MODEL.hub_merged_model_id,
     ]
-    assert len(set(identifiants)) == len(identifiants)
+    assert len(set(identifiers)) == len(identifiers)
 
 
-def test_un_dataset_incomplet_ne_part_pas_sur_le_hub(publication, tmp_path, monkeypatch):
-    """Publier depuis un dépôt cloné téléverserait deux fichiers sur six.
+def test_an_incomplete_dataset_does_not_go_to_the_hub(publication, tmp_path, monkeypatch):
+    """Publishing from a cloned repository would upload two files out of six.
 
-    Les quatre jeux d'entraînement ne sont pas versionnés : ils se reconstruisent
-    par `scripts/build_dataset.py`. Sans ce garde-fou, la publication réussissait et
-    l'annonçait, en laissant sur le Hub un dataset amputé.
+    The four training sets are not versioned: they are rebuilt by ``scripts/build_dataset.py``.
+    Without this guard rail the publication succeeded and said so, leaving a truncated dataset on
+    the Hub.
     """
     import dataclasses
 
@@ -103,23 +104,22 @@ def test_un_dataset_incomplet_ne_part_pas_sur_le_hub(publication, tmp_path, monk
         publication, "PATHS", dataclasses.replace(publication.PATHS, data_processed=tmp_path)
     )
 
-    with pytest.raises(SystemExit) as refus:
-        publication.publier_dataset(api=None)
-    assert "sft_train.jsonl" in str(refus.value)
-    assert "clinical_eval.jsonl" not in str(refus.value)
+    with pytest.raises(SystemExit) as refusal:
+        publication.publish_dataset(api=None)
+    assert "sft_train.jsonl" in str(refusal.value)
+    assert "clinical_eval.jsonl" not in str(refusal.value)
 
 
-def test_les_six_fichiers_attendus_sont_ceux_que_produit_la_preparation(publication):
-    """La liste ne doit pas dériver de ce que `scripts/build_dataset.py` écrit réellement.
+def test_the_six_expected_files_are_the_ones_the_preparation_produces(publication):
+    """The list must not drift from what ``scripts/build_dataset.py`` actually writes.
 
-    Elle est écrite une seule fois, dans `dataset_io`, et le script de
-    préparation comme la publication la lisent de là. Le jeu d'entraînement
-    n'étant pas versionné — quatre fichiers sur six —, la comparer au contenu du
-    disque ferait passer le test sur la machine qui vient de construire le jeu et
-    échouer partout ailleurs : la liste attendue est donc écrite en clair ici.
+    It is written once, in ``dataset_io``, and both the preparation script and the publication
+    read it from there. The training set not being versioned — four files out of six — comparing
+    it with the contents of the disk would pass on the machine that just built the set and fail
+    everywhere else: the expected list is therefore written out here.
     """
-    assert publication.FICHIERS_DU_DATASET is dataset_io.FICHIERS_DU_DATASET
-    assert set(publication.FICHIERS_DU_DATASET) == {
+    assert publication.DATASET_FILES is dataset_io.DATASET_FILES
+    assert set(publication.DATASET_FILES) == {
         "sft_train.jsonl",
         "sft_validation.jsonl",
         "sft_test.jsonl",
@@ -129,47 +129,48 @@ def test_les_six_fichiers_attendus_sont_ceux_que_produit_la_preparation(publicat
     }
 
 
-def test_chaque_carte_porte_le_marqueur_de_ses_chiffres(publication):
-    """Une carte de modèle sans performance mesurable n'est pas une carte.
+def test_every_card_carries_the_marker_for_its_figures(publication):
+    """A model card with no measurable performance is not a card.
 
-    C'est la première page que voit quiconque ouvre le dépôt sur le Hub ;
-    elle renvoyait vers un rapport hébergé ailleurs.
+    It is the first page anyone opening the repository on the Hub sees.
     """
-    for quoi in publication.MODELES:
-        carte = publication._carte_du_modele(quoi)
-        assert "{{EVALUATION}}" in carte.read_text(encoding="utf-8"), quoi
+    for what in publication.MODELS:
+        card = publication._model_card(what)
+        assert "{{EVALUATION}}" in card.read_text(encoding="utf-8"), what
 
 
-def test_chaque_carte_sait_de_quel_modele_evalue_elle_parle(publication):
-    assert set(publication.EVALUATION_DE_LA_CARTE) == set(publication.MODELES)
+def test_every_card_knows_which_evaluated_model_it_describes(publication):
+    assert set(publication.CARD_EVALUATION) == set(publication.MODELS)
 
 
-def test_une_carte_sans_evaluation_n_est_pas_publiable(publication, tmp_path, monkeypatch):
+def test_a_card_without_an_evaluation_cannot_be_published(publication, tmp_path, monkeypatch):
     import dataclasses
 
     monkeypatch.setattr(
         publication, "PATHS", dataclasses.replace(publication.PATHS, reports=tmp_path)
     )
-    with pytest.raises(SystemExit, match="Évaluation introuvable"):
-        publication._tableau_d_evaluation("modele-final")
+    with pytest.raises(SystemExit, match="Evaluation not found"):
+        publication._evaluation_table("final-model")
 
 
-def test_le_tableau_de_la_carte_est_ecrit_a_la_francaise(publication, tmp_path, monkeypatch):
+def test_the_card_table_carries_the_figures_of_the_model_it_describes(
+    publication, tmp_path, monkeypatch
+):
     import dataclasses
     import json as json_
 
     (tmp_path / "evaluation_results.json").write_text(
         json_.dumps(
             {
-                "jeu_clinique": {
+                "clinical_set": {
                     "n": 60,
-                    "modeles": {
-                        "dpo-fusionne": {
-                            "exactitude": 0.917,
-                            "exactitude_ic95": [0.82, 0.96],
-                            "sous_triage": 0.048,
-                            "surclassement": 0.117,
-                            "respect_format": 1.0,
+                    "models": {
+                        "dpo-merged": {
+                            "accuracy": 0.917,
+                            "accuracy_ci95": [0.82, 0.96],
+                            "undertriage": 0.048,
+                            "overtriage": 0.117,
+                            "format_compliance": 1.0,
                         }
                     },
                 }
@@ -180,35 +181,34 @@ def test_le_tableau_de_la_carte_est_ecrit_a_la_francaise(publication, tmp_path, 
     monkeypatch.setattr(
         publication, "PATHS", dataclasses.replace(publication.PATHS, reports=tmp_path)
     )
-    tableau = publication._tableau_d_evaluation("modele-final")
-    assert "0,917 [0,82 – 0,96]" in tableau
-    assert "4,8 %" in tableau
-    assert "100 %" in tableau
-    assert "." not in tableau.replace("|", "")
+    table = publication._evaluation_table("final-model")
+    assert "0.917 [0.82 - 0.96]" in table
+    assert "4.8%" in table
+    assert "100%" in table
+    assert "on 60 cases" in table
 
 
-def test_aucune_carte_ne_fige_une_revision_dans_sa_commande_de_service(publication):
-    """La commande de service doit épingler la version publiée, pas la première.
+def test_no_card_freezes_a_revision_in_its_serving_command(publication):
+    """The serving command must pin the published version, not the first one.
 
-    Écrite en dur, elle continuait de désigner `modele-v1.0.0` après chaque
-    nouvelle publication : la carte décrivait des poids et en faisait servir
-    d'autres.
+    Hard-coded, it went on designating ``model-v1.0.0`` after every new publication: the card
+    described one set of weights and had another served.
     """
-    for quoi in publication.MODELES:
-        texte = publication._carte_du_modele(quoi).read_text(encoding="utf-8")
-        assert "--revision modele-v" not in texte, quoi
-        if "--revision" in texte:
-            assert "{{REVISION}}" in texte, quoi
+    for what in publication.MODELS:
+        text = publication._model_card(what).read_text(encoding="utf-8")
+        assert "--revision model-v" not in text, what
+        if "--revision" in text:
+            assert "{{REVISION}}" in text, what
 
 
-def test_la_carte_ecrite_par_la_bibliotheque_n_est_pas_publiee(publication):
-    """Elle porte le chemin local du modèle de base, que le Hub rejette.
+def test_the_card_written_by_the_library_is_not_published(publication):
+    """It carries the local path of the base model, which the Hub rejects.
 
-    L'envoi du dossier entier échouait dessus, avant même d'avoir commencé.
+    Uploading the whole folder failed on it, before even starting.
     """
     assert "README.md" in publication.EXCLUSIONS
 
-    dossier = PATHS.dpo_adapter
-    carte = dossier / "README.md"
-    if carte.exists():
-        assert "base_model: " in carte.read_text(encoding="utf-8")
+    folder = PATHS.dpo_adapter
+    card = folder / "README.md"
+    if card.exists():
+        assert "base_model: " in card.read_text(encoding="utf-8")

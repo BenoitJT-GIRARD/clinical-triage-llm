@@ -1,4 +1,8 @@
-"""Tests du format de dialogue et de la lecture des réponses."""
+"""Tests of the dialogue format and of reading an answer back.
+
+The prompt and the answers are French: they are the model's contract, and the assertions below
+match them character for character.
+"""
 
 from __future__ import annotations
 
@@ -9,9 +13,9 @@ from clinical_triage.prompts import (
     IM_END,
     LINES_WITHOUT_RECOMMENDATION,
     bound_description,
-    description_budget,
     build_messages,
     build_target_response,
+    description_budget,
     extract_level,
     format_chatml,
     parse_response,
@@ -19,11 +23,11 @@ from clinical_triage.prompts import (
 )
 
 
-class TokenizerFictif:
-    """Tokenizer minimal, suffisant pour vérifier l'installation du gabarit."""
+class FakeTokenizer:
+    """A minimal tokenizer, enough to check the template installation."""
 
     def __init__(self) -> None:
-        self.chat_template = "gabarit natif du modèle"
+        self.chat_template = "the model's native template"
         self.eos_token = "<|endoftext|>"
         self.pad_token = None
 
@@ -31,57 +35,59 @@ class TokenizerFictif:
         return {"<|im_end|>": 151645, "<|endoftext|>": 151643}[token]
 
 
-def test_messages_commencent_par_la_consigne_systeme():
+def test_messages_start_with_the_system_prompt():
     messages = build_messages("Douleur thoracique depuis une heure.")
     assert messages[0]["role"] == "system"
     assert messages[1]["role"] == "user"
     assert "thoracique" in messages[1]["content"]
 
 
-def test_invite_de_generation_ouvre_le_tour_assistant():
-    invite = format_chatml(build_messages("Mal de tête léger."), add_generation_prompt=True)
-    assert invite.endswith("<|im_start|>assistant\n")
+def test_a_generation_prompt_opens_the_assistant_turn():
+    prompt = format_chatml(build_messages("Mal de tête léger."), add_generation_prompt=True)
+    assert prompt.endswith("<|im_start|>assistant\n")
 
 
-def test_echange_complet_se_termine_par_le_jeton_de_fin():
+def test_a_complete_exchange_ends_with_the_end_token():
     messages = build_messages("Toux sèche.") + [{"role": "assistant", "content": "Réponse."}]
     assert format_chatml(messages).rstrip("\n").endswith(IM_END)
 
 
-def test_le_gabarit_installe_reproduit_exactement_format_chatml():
-    """Le gabarit Jinja et la fonction Python doivent produire le même texte.
+def test_the_installed_template_reproduces_format_chatml_exactly():
+    """The Jinja template and the Python function must produce the same text.
 
-    C'est la garantie que l'entraînement, qui passe par le gabarit, et le service,
-    qui passe par la fonction, voient bien le même format.
+    That is the guarantee that training, which goes through the template, and serving, which
+    goes through the function, see the same format.
     """
     jinja2 = pytest.importorskip("jinja2")
     messages = build_messages("Vertiges depuis ce matin.") + [
         {"role": "assistant", "content": "Niveau de priorité : URGENCE_MODEREE"}
     ]
-    gabarit = jinja2.Template(CHAT_TEMPLATE)
-    assert gabarit.render(messages=messages, add_generation_prompt=False) == format_chatml(messages)
-    assert gabarit.render(messages=messages[:2], add_generation_prompt=True) == format_chatml(
+    template = jinja2.Template(CHAT_TEMPLATE)
+    assert template.render(messages=messages, add_generation_prompt=False) == format_chatml(
+        messages
+    )
+    assert template.render(messages=messages[:2], add_generation_prompt=True) == format_chatml(
         messages[:2], add_generation_prompt=True
     )
 
 
-def test_prepare_tokenizer_corrige_le_jeton_de_fin():
+def test_prepare_tokenizer_fixes_the_end_token():
     from clinical_triage.prompts import prepare_tokenizer
 
-    tokenizer = TokenizerFictif()
-    identifiant = prepare_tokenizer(tokenizer)
-    assert identifiant == 151645
+    tokenizer = FakeTokenizer()
+    identifier = prepare_tokenizer(tokenizer)
+    assert identifier == 151645
     assert tokenizer.eos_token == IM_END
     assert tokenizer.pad_token == IM_END
     assert tokenizer.chat_template == CHAT_TEMPLATE
 
 
-def test_reponse_cible_refuse_un_niveau_inconnu():
+def test_a_target_answer_refuses_an_unknown_level():
     with pytest.raises(ValueError):
         build_target_response("URGENCE_INCONNUE", "x", "y")
 
 
-def test_extraction_du_niveau_tolere_les_accents():
+def test_level_extraction_tolerates_missing_accents():
     assert (
         extract_level("Niveau de priorité : URGENCE_VITALE\nJustification : ...")
         == "URGENCE_VITALE"
@@ -89,152 +95,149 @@ def test_extraction_du_niveau_tolere_les_accents():
     assert extract_level("Niveau de priorite : URGENCE_MODEREE") == "URGENCE_MODEREE"
 
 
-def test_extraction_du_niveau_refuse_une_reponse_ambigue():
-    """Deux niveaux différents dans une réponse la rendent inexploitable."""
-    reponse = "Niveau de priorité : URGENCE_VITALE\n...\nNiveau de priorité : CONSULTATION_DIFFEREE"
-    assert extract_level(reponse) is None
+def test_level_extraction_refuses_an_ambiguous_answer():
+    """Two different levels in one answer make it unusable."""
+    answer = "Niveau de priorité : URGENCE_VITALE\n...\nNiveau de priorité : CONSULTATION_DIFFEREE"
+    assert extract_level(answer) is None
 
 
-def test_extraction_du_niveau_accepte_une_repetition_identique():
-    reponse = "Niveau de priorité : URGENCE_VITALE\n...\nNiveau de priorité : URGENCE_VITALE"
-    assert extract_level(reponse) == "URGENCE_VITALE"
+def test_level_extraction_accepts_an_identical_repetition():
+    answer = "Niveau de priorité : URGENCE_VITALE\n...\nNiveau de priorité : URGENCE_VITALE"
+    assert extract_level(answer) == "URGENCE_VITALE"
 
 
-def test_extraction_du_niveau_absente():
+def test_an_answer_with_no_level_extracts_none():
     assert extract_level("Réponse hors format, sans niveau.") is None
 
 
-def test_lecture_des_trois_parties():
-    """Les deux textes rendus sont ceux du modèle, accents compris.
+def test_the_three_parts_are_read_back():
+    """Both texts are returned as the model wrote them, accents included.
 
-    Ils s'affichent à l'écran du soignant : « Fievre elevee » y serait une faute
-    visible. Seule la ligne de niveau se lit sur un texte normalisé, parce que
-    son étiquette porte un accent que le modèle peut omettre.
+    They appear on the nurse's screen: "Fievre elevee" would be a visible mistake there. Only
+    the level line is read on a normalised text, because its label carries an accent the model
+    may omit.
     """
-    reponse = build_target_response(
-        "URGENCE_MODEREE", "Fièvre élevée.", "Évaluation sous 4 heures."
-    )
-    parties = parse_response(reponse)
-    assert parties["level"] == "URGENCE_MODEREE"
-    assert parties["justification"] == "Fièvre élevée."
-    assert parties["recommendation"] == "Évaluation sous 4 heures."
+    answer = build_target_response("URGENCE_MODEREE", "Fièvre élevée.", "Évaluation sous 4 heures.")
+    parts = parse_response(answer)
+    assert parts["level"] == "URGENCE_MODEREE"
+    assert parts["justification"] == "Fièvre élevée."
+    assert parts["recommendation"] == "Évaluation sous 4 heures."
 
 
-def test_le_niveau_se_lit_meme_si_le_modele_oublie_l_accent_de_priorite():
-    sans_accent = (
+def test_the_level_is_read_even_when_the_model_drops_the_accent():
+    without_accent = (
         "Niveau de priorite : URGENCE_VITALE\n"
         "Justification : détresse respiratoire.\n"
         "Recommandation : déchocage."
     )
-    parties = parse_response(sans_accent)
-    assert parties["level"] == "URGENCE_VITALE"
-    assert parties["justification"] == "détresse respiratoire."
+    parts = parse_response(without_accent)
+    assert parts["level"] == "URGENCE_VITALE"
+    assert parts["justification"] == "détresse respiratoire."
 
 
-def test_troncature_coupe_apres_la_recommandation():
-    """Le filet de sécurité du service : rien ne passe après la recommendation."""
-    genere = (
+def test_truncation_cuts_after_the_recommendation():
+    """The service's safety net: nothing gets through after the recommendation."""
+    generated = (
         "Niveau de priorité : URGENCE_VITALE\n"
         "Justification : Signes de détresse.\n"
         "Recommandation : Appeler le 15.\n"
-        "Human: Tu es l'assistant de triage médical du Centre Hospitalier..."
+        "Human: Tu es l'assistant de triage médical du service des urgences..."
     )
-    tronque = truncate_to_answer(genere)
-    assert tronque.endswith("Appeler le 15.")
-    assert "assistant de triage" not in tronque
+    truncated = truncate_to_answer(generated)
+    assert truncated.endswith("Appeler le 15.")
+    assert "assistant de triage" not in truncated
 
 
-def test_troncature_coupe_au_jeton_de_fin():
+def test_truncation_cuts_at_the_end_token():
     assert truncate_to_answer(f"Réponse.{IM_END}suite parasite") == "Réponse."
 
 
-def test_troncature_laisse_intacte_une_reponse_conforme():
-    reponse = build_target_response("CONSULTATION_DIFFEREE", "Rien de grave.", "Médecin traitant.")
-    assert truncate_to_answer(reponse) == reponse
+def test_truncation_leaves_a_compliant_answer_intact():
+    answer = build_target_response("CONSULTATION_DIFFEREE", "Rien de grave.", "Médecin traitant.")
+    assert truncate_to_answer(answer) == answer
 
 
-# --- Le filet de troncature doit échouer fermé ---
+# --- The truncation net must fail closed ---
 
 
-def test_une_generation_sans_recommandation_ne_rend_pas_tout():
-    """Le filet ne s'arrêtait qu'à la ligne de recommendation.
+def test_a_generation_without_a_recommendation_is_not_returned_whole():
+    """The net used to stop at the recommendation line alone.
 
-    Une génération qui n'en produit aucune — le cas même d'une consigne
-    détournée — était donc rendue entière, consigne système comprise, affichée
-    au soignant et écrite au journal d'audit comme étant la réponse de triage.
+    A generation producing none — precisely the case of a hijacked prompt — was therefore
+    returned whole, system prompt included, shown to the nurse and written to the audit log as
+    the triage answer.
     """
-    fuite = (
+    leak = (
         "Tu es l'assistant de triage médical du service des urgences.\n"
         "Tu aides le personnel soignant à évaluer le degré d'urgence.\n"
         "Bonjour."
     )
-    assert truncate_to_answer(fuite) == ""
+    assert truncate_to_answer(leak) == ""
 
 
-def test_la_troncature_coupe_a_la_reprise_d_un_tour_de_dialogue():
-    genere = (
+def test_truncation_cuts_when_a_dialogue_turn_resumes():
+    generated = (
         "Niveau de priorité : URGENCE_VITALE\n"
         "<|im_start|>system\n"
         "Tu es l'assistant de triage médical du service."
     )
-    assert truncate_to_answer(genere) == "Niveau de priorité : URGENCE_VITALE"
+    assert truncate_to_answer(generated) == "Niveau de priorité : URGENCE_VITALE"
 
 
-def test_une_reponse_sans_recommandation_est_bornee_a_quelques_lignes():
-    genere = "Niveau de priorité : URGENCE_MODEREE\nJustification : fièvre.\n" + "Blabla.\n" * 20
-    assert len(truncate_to_answer(genere).splitlines()) <= LINES_WITHOUT_RECOMMENDATION
+def test_an_answer_without_a_recommendation_is_bounded_to_a_few_lines():
+    generated = "Niveau de priorité : URGENCE_MODEREE\nJustification : fièvre.\n" + "Blabla.\n" * 20
+    assert len(truncate_to_answer(generated).splitlines()) <= LINES_WITHOUT_RECOMMENDATION
 
 
-def test_une_justification_sur_deux_lignes_survit_a_la_troncature():
-    """Le filet ne doit pas se refermer sur une réponse conforme qui déborde d'une ligne."""
-    genere = (
+def test_a_justification_spanning_two_lines_survives_truncation():
+    """The net must not close on a compliant answer that spills over by one line."""
+    generated = (
         "Niveau de priorité : URGENCE_VITALE\n"
         "Justification : douleur thoracique constrictive\n"
         "avec sueurs profuses.\n"
         "Recommandation : déchocage immédiat."
     )
-    assert truncate_to_answer(genere).endswith("Recommandation : déchocage immédiat.")
+    assert truncate_to_answer(generated).endswith("Recommandation : déchocage immédiat.")
 
 
-# --- La fenêtre du modèle est une contrainte, pas une suggestion ---
+# --- The model window is a constraint, not a suggestion ---
 
 
-class TokenizerBorne:
-    """Tokenizer minimal : un jeton par mot, suffisant pour éprouver la borne."""
+class BoundedTokenizer:
+    """A minimal tokenizer: one token per word, enough to exercise the bound."""
 
-    def __call__(self, texte, add_special_tokens=True):
-        return {"input_ids": texte.split()}
+    def __call__(self, text, add_special_tokens=True):
+        return {"input_ids": text.split()}
 
-    def decode(self, jetons, skip_special_tokens=True):
-        return " ".join(jetons)
-
-
-def test_une_description_dans_le_budget_n_est_pas_touchee():
-    texte = "Douleur thoracique depuis vingt minutes"
-    borne, coupee = bound_description(texte, TokenizerBorne(), budget=10)
-    assert borne == texte
-    assert coupee is False
+    def decode(self, tokens, skip_special_tokens=True):
+        return " ".join(tokens)
 
 
-def test_une_description_trop_longue_est_coupee_et_signalee():
-    """Sans cette borne, la génération s'interrompt sur une erreur de dimension.
+def test_a_description_within_budget_is_left_alone():
+    text = "Douleur thoracique depuis vingt minutes"
+    bounded, cut = bound_description(text, BoundedTokenizer(), budget=10)
+    assert bounded == text
+    assert cut is False
 
-    C'est le contrôle de robustesse « copier-coller de deux pages » qui l'a
-    trouvé : 825 jetons d'invite pour une fenêtre de 768, et le service tombe au
-    lieu de rendre une réponse dégradée.
+
+def test_a_description_that_is_too_long_is_cut_and_reported():
+    """Without this bound, generation stops on a dimension error.
+
+    The "two-page paste" robustness check found it: 825 prompt tokens for a 768 window, and the
+    service falls over instead of returning a degraded answer.
     """
-    texte = " ".join(["mot"] * 50)
-    borne, coupee = bound_description(texte, TokenizerBorne(), budget=10)
-    assert coupee is True
-    assert len(borne.split()) == 10
+    text = " ".join(["mot"] * 50)
+    bounded, cut = bound_description(text, BoundedTokenizer(), budget=10)
+    assert cut is True
+    assert len(bounded.split()) == 10
 
 
-def test_le_budget_se_mesure_plutot_qu_il_ne_s_estime():
-    """L'encadrement — consigne système et marqueurs — se compte, il ne se devine pas."""
-    budget = description_budget(TokenizerBorne(), max_seq_length=1000, max_new_tokens=200)
-    encadrement = len(format_chatml(build_messages(""), add_generation_prompt=True).split())
-    assert budget == 1000 - 200 - encadrement
+def test_the_budget_is_measured_rather_than_estimated():
+    """The framing — system prompt and markers — is counted, not guessed."""
+    budget = description_budget(BoundedTokenizer(), max_seq_length=1000, max_new_tokens=200)
+    framing = len(format_chatml(build_messages(""), add_generation_prompt=True).split())
+    assert budget == 1000 - 200 - framing
 
 
-def test_un_budget_negatif_est_ramene_a_zero():
-    assert description_budget(TokenizerBorne(), max_seq_length=10, max_new_tokens=200) == 0
+def test_a_negative_budget_is_brought_back_to_zero():
+    assert description_budget(BoundedTokenizer(), max_seq_length=10, max_new_tokens=200) == 0

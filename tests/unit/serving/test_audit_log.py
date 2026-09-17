@@ -1,8 +1,8 @@
-"""Tests du journal d'audit.
+"""Tests of the audit log.
 
-Le journal porte l'exigence métier de traçabilité. Deux propriétés comptent
-autant que son contenu : il anonymise ce qu'il écrit, et il enregistre le modèle
-réellement utilisé plutôt qu'une valeur de configuration.
+The log carries the traceability requirement. Two properties matter as much as its content: it
+anonymises what it writes, and it records the model actually used rather than a configuration
+value.
 """
 
 from __future__ import annotations
@@ -12,197 +12,196 @@ import json
 import pytest
 
 from clinical_triage.serving.audit import (
-    RETENTION_JOURS,
+    RETENTION_DAYS,
+    check_log_is_writable,
     new_request_id,
     read_entries,
     record_interaction,
-    check_log_is_writable,
 )
 
 
-def test_les_identifiants_sont_uniques():
-    identifiants = {new_request_id() for _ in range(500)}
-    assert len(identifiants) == 500
+def test_the_identifiers_are_unique():
+    identifiers = {new_request_id() for _ in range(500)}
+    assert len(identifiers) == 500
 
 
-def test_une_interaction_est_ecrite_avec_tous_ses_champs(tmp_path):
-    journal = tmp_path / "audit.jsonl"
-    entree = record_interaction(
+def test_an_interaction_is_written_with_every_field(tmp_path):
+    log = tmp_path / "audit.jsonl"
+    entry = record_interaction(
         request_id="abc123",
-        symptomes="Homme de 62 ans, douleur thoracique.",
-        niveau="URGENCE_VITALE",
-        reponse="Niveau de priorité : URGENCE_VITALE",
-        latence_ms=421.37,
-        modele="qwen3-1.7b-clinical-triage",
-        moteur="vllm",
-        niveau_regle="URGENCE_VITALE",
-        raisons_regle=["douleur thoracique"],
-        log_path=journal,
+        symptoms="Homme de 62 ans, douleur thoracique.",
+        level="URGENCE_VITALE",
+        answer="Niveau de priorité : URGENCE_VITALE",
+        latency_ms=421.37,
+        model="qwen3-1.7b-clinical-triage",
+        engine="vllm",
+        rule_level="URGENCE_VITALE",
+        rule_reasons=["douleur thoracique"],
+        log_path=log,
     )
-    ligne = json.loads(journal.read_text(encoding="utf-8").strip())
-    assert ligne["request_id"] == "abc123"
-    assert ligne["niveau"] == "URGENCE_VITALE"
-    assert ligne["niveau_regle"] == "URGENCE_VITALE"
-    assert ligne["raisons_regle"] == ["douleur thoracique"]
-    assert ligne["latence_ms"] == 421.4
-    assert ligne["modele"] == "qwen3-1.7b-clinical-triage"
-    assert ligne["moteur"] == "vllm"
-    assert ligne["retention_jours"] == RETENTION_JOURS
-    assert ligne["timestamp"].endswith("+00:00")
-    assert entree.request_id == "abc123"
+    row = json.loads(log.read_text(encoding="utf-8").strip())
+    assert row["request_id"] == "abc123"
+    assert row["level"] == "URGENCE_VITALE"
+    assert row["rule_level"] == "URGENCE_VITALE"
+    assert row["rule_reasons"] == ["douleur thoracique"]
+    assert row["latency_ms"] == 421.4
+    assert row["model"] == "qwen3-1.7b-clinical-triage"
+    assert row["engine"] == "vllm"
+    assert row["retention_days"] == RETENTION_DAYS
+    assert row["timestamp"].endswith("+00:00")
+    assert entry.request_id == "abc123"
 
 
-def test_les_interactions_s_ajoutent_sans_ecraser(tmp_path):
-    journal = tmp_path / "audit.jsonl"
+def test_interactions_append_without_overwriting(tmp_path):
+    log = tmp_path / "audit.jsonl"
     for index in range(3):
         record_interaction(
             request_id=f"id{index}",
-            symptomes="Rhume banal.",
-            niveau="CONSULTATION_DIFFEREE",
-            reponse="Niveau de priorité : CONSULTATION_DIFFEREE",
-            latence_ms=10.0,
-            modele="modele",
-            moteur="vllm",
-            log_path=journal,
+            symptoms="Rhume banal.",
+            level="CONSULTATION_DIFFEREE",
+            answer="Niveau de priorité : CONSULTATION_DIFFEREE",
+            latency_ms=10.0,
+            model="model",
+            engine="vllm",
+            log_path=log,
         )
-    lignes = read_entries(journal)
-    assert [ligne["request_id"] for ligne in lignes] == ["id0", "id1", "id2"]
-    assert read_entries(journal, limit=1)[0]["request_id"] == "id2"
+    rows = read_entries(log)
+    assert [row["request_id"] for row in rows] == ["id0", "id1", "id2"]
+    assert read_entries(log, limit=1)[0]["request_id"] == "id2"
 
 
-def test_un_journal_absent_se_lit_comme_vide(tmp_path):
-    assert read_entries(tmp_path / "inexistant.jsonl") == []
+def test_an_absent_log_reads_as_empty(tmp_path):
+    assert read_entries(tmp_path / "nonexistent.jsonl") == []
 
 
-def test_le_nom_du_patient_est_masque_avant_ecriture(tmp_path):
-    """Le module qui prétend écrire des données anonymisées doit les anonymiser
-    lui-même, sans faire confiance à son appelant."""
-    journal = tmp_path / "audit.jsonl"
+def test_the_patient_name_is_masked_before_writing(tmp_path):
+    """A module that claims to write anonymised data must anonymise it itself, without
+    trusting its caller."""
+    log = tmp_path / "audit.jsonl"
     record_interaction(
         request_id="pii1",
-        symptomes="Madame Dupont, 72 ans, joignable au 06 12 34 56 78, douleur thoracique.",
-        niveau="URGENCE_VITALE",
-        reponse="Niveau de priorité : URGENCE_VITALE",
-        latence_ms=12.0,
-        modele="modele",
-        moteur="vllm",
-        log_path=journal,
+        symptoms="Madame Dupont, 72 ans, joignable au 06 12 34 56 78, douleur thoracique.",
+        level="URGENCE_VITALE",
+        answer="Niveau de priorité : URGENCE_VITALE",
+        latency_ms=12.0,
+        model="model",
+        engine="vllm",
+        log_path=log,
     )
-    ecrit = json.loads(journal.read_text(encoding="utf-8").strip())["symptomes_anonymises"]
-    assert "Dupont" not in ecrit
-    assert "06 12 34 56 78" not in ecrit
-    # L'information clinique, elle, doit survivre au masquage.
-    assert "douleur thoracique" in ecrit
+    written = json.loads(log.read_text(encoding="utf-8").strip())["anonymised_symptoms"]
+    assert "Dupont" not in written
+    assert "06 12 34 56 78" not in written
+    # The clinical information, on the other hand, must survive the masking.
+    assert "douleur thoracique" in written
 
 
-def test_la_reponse_du_modele_est_masquee_elle_aussi(tmp_path):
-    """La justification reprend le récit du soignant, nom compris.
+def test_the_model_answer_is_masked_too(tmp_path):
+    """The justification echoes the nurse's narrative, name included.
 
-    Masquer la description et laisser passer la réponse reviendrait à faire
-    rentrer par la porte ce qu'on a chassé par la fenêtre.
+    Masking the description and letting the answer through would bring back through the door
+    what was chased out of the window.
     """
-    journal = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit.jsonl"
     record_interaction(
         request_id="pii2",
-        symptomes="Madame Dupont, 72 ans, douleur thoracique.",
-        niveau="URGENCE_VITALE",
-        reponse=(
+        symptoms="Madame Dupont, 72 ans, douleur thoracique.",
+        level="URGENCE_VITALE",
+        answer=(
             "Niveau de priorité : URGENCE_VITALE\n"
             "Justification : Madame Dupont présente une douleur thoracique.\n"
             "Recommandation : orientation immédiate."
         ),
-        latence_ms=12.0,
-        modele="modele",
-        moteur="vllm",
-        log_path=journal,
+        latency_ms=12.0,
+        model="model",
+        engine="vllm",
+        log_path=log,
     )
-    ligne = json.loads(journal.read_text(encoding="utf-8").strip())
-    assert "Dupont" not in ligne["reponse_anonymisee"]
-    assert "URGENCE_VITALE" in ligne["reponse_anonymisee"]
-    assert "douleur thoracique" in ligne["reponse_anonymisee"]
+    row = json.loads(log.read_text(encoding="utf-8").strip())
+    assert "Dupont" not in row["anonymised_answer"]
+    assert "URGENCE_VITALE" in row["anonymised_answer"]
+    assert "douleur thoracique" in row["anonymised_answer"]
 
 
-def test_un_texte_en_anglais_est_masque_comme_un_texte_en_francais(tmp_path):
-    """Le service reçoit du texte libre, et le modèle est bilingue.
+def test_an_english_text_is_masked_like_a_french_one(tmp_path):
+    """The service receives free text, and the model is bilingual.
 
-    Le masquage partait toujours du moteur français, qui ne repère pas un nom
-    dans une syntaxe anglaise : « Mr Jenkins » restait en clair dans le seul
-    fichier du système qui conserve des données personnelles, et pour un an.
+    Masking always started from the French engine, which does not spot a name in English
+    syntax: "Mr Jenkins" stayed in the clear in the only file of the system that keeps personal
+    data, and for a year.
     """
-    journal = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit.jsonl"
     record_interaction(
         request_id="pii3",
-        symptomes="Mr Jenkins, 72, reachable at +33 6 12 34 56 78, reports chest pain.",
-        niveau="URGENCE_VITALE",
-        reponse="Priority level: URGENCE_VITALE — Mr Jenkins needs immediate care.",
-        latence_ms=12.0,
-        modele="modele",
-        moteur="vllm",
-        log_path=journal,
+        symptoms="Mr Jenkins, 72, reachable at +33 6 12 34 56 78, reports chest pain.",
+        level="URGENCE_VITALE",
+        answer="Priority level: URGENCE_VITALE — Mr Jenkins needs immediate care.",
+        latency_ms=12.0,
+        model="model",
+        engine="vllm",
+        log_path=log,
     )
-    ligne = json.loads(journal.read_text(encoding="utf-8").strip())
-    assert "Jenkins" not in ligne["symptomes_anonymises"]
-    assert "Jenkins" not in ligne["reponse_anonymisee"]
-    assert "chest pain" in ligne["symptomes_anonymises"]
+    row = json.loads(log.read_text(encoding="utf-8").strip())
+    assert "Jenkins" not in row["anonymised_symptoms"]
+    assert "Jenkins" not in row["anonymised_answer"]
+    assert "chest pain" in row["anonymised_symptoms"]
 
 
-def test_une_decision_prise_sur_un_recit_tronque_laisse_une_trace(tmp_path):
-    """C'est le sens même de ce journal.
+def test_a_decision_taken_on_a_truncated_narrative_leaves_a_trace(tmp_path):
+    """That is the very purpose of this log.
 
-    Une description plus longue que la fenêtre du modèle est bornée avant
-    l'inférence — sans quoi la génération s'interrompt. Le triage est alors rendu
-    sur un récit incomplet, et l'audit doit pouvoir le retrouver des mois plus
-    tard.
+    A description longer than the model window is bounded before inference — without which
+    generation stops. The triage is then given on an incomplete narrative, and an audit must be
+    able to find that out months later.
     """
-    journal = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit.jsonl"
     record_interaction(
         request_id="trq1",
-        symptomes="Description très longue " * 200,
-        niveau="URGENCE_MODEREE",
-        reponse="Niveau de priorité : URGENCE_MODEREE",
-        latence_ms=12.0,
-        modele="modele",
-        moteur="vllm",
-        description_tronquee=True,
-        log_path=journal,
+        symptoms="Description très longue " * 200,
+        level="URGENCE_MODEREE",
+        answer="Niveau de priorité : URGENCE_MODEREE",
+        latency_ms=12.0,
+        model="model",
+        engine="vllm",
+        description_truncated=True,
+        log_path=log,
     )
-    ligne = json.loads(journal.read_text(encoding="utf-8").strip())
-    assert ligne["description_tronquee"] is True
+    row = json.loads(log.read_text(encoding="utf-8").strip())
+    assert row["description_truncated"] is True
 
 
-def test_une_interaction_normale_n_est_pas_marquee_tronquee(tmp_path):
-    journal = tmp_path / "audit.jsonl"
+def test_a_normal_interaction_is_not_marked_truncated(tmp_path):
+    log = tmp_path / "audit.jsonl"
     record_interaction(
         request_id="trq2",
-        symptomes="Homme de 62 ans, douleur thoracique.",
-        niveau="URGENCE_VITALE",
-        reponse="Niveau de priorité : URGENCE_VITALE",
-        latence_ms=12.0,
-        modele="modele",
-        moteur="vllm",
-        log_path=journal,
+        symptoms="Homme de 62 ans, douleur thoracique.",
+        level="URGENCE_VITALE",
+        answer="Niveau de priorité : URGENCE_VITALE",
+        latency_ms=12.0,
+        model="model",
+        engine="vllm",
+        log_path=log,
     )
-    assert json.loads(journal.read_text(encoding="utf-8").strip())["description_tronquee"] is False
+    assert json.loads(log.read_text(encoding="utf-8").strip())["description_truncated"] is False
 
 
-def test_un_journal_ecrivable_est_cree_a_vide(tmp_path):
-    """Le contrôle de démarrage prépare le fichier sans y écrire de ligne."""
-    journal = tmp_path / "traces" / "audit_triage.jsonl"
+def test_a_writable_log_is_created_empty(tmp_path):
+    """The startup check prepares the file without writing a line into it."""
+    log = tmp_path / "traces" / "audit_triage.jsonl"
 
-    assert check_log_is_writable(journal) == journal
-    assert journal.exists()
-    assert journal.read_text(encoding="utf-8") == ""
+    assert check_log_is_writable(log) == log
+    assert log.exists()
+    assert log.read_text(encoding="utf-8") == ""
 
 
-def test_un_journal_inaccessible_arrete_le_demarrage(tmp_path):
-    """Un chemin impossible échoue au démarrage, pas à la première requête.
+def test_an_unreachable_log_stops_the_startup(tmp_path):
+    """An impossible path fails at startup, not at the first request.
 
-    Le dossier parent est ici un fichier : le cas se produit en conteneur quand
-    le volume monté appartient à un autre utilisateur, avec la même conséquence
-    — impossible d'écrire — et c'est le démarrage qui doit s'arrêter.
+    The parent folder here is a file: the case occurs in a container when the mounted volume
+    belongs to another user, with the same consequence — impossible to write — and it is the
+    startup that must stop.
     """
     obstacle = tmp_path / "logs"
-    obstacle.write_text("ceci n'est pas un dossier", encoding="utf-8")
+    obstacle.write_text("this is not a folder", encoding="utf-8")
 
-    with pytest.raises(RuntimeError, match="Journal d'audit inaccessible"):
+    with pytest.raises(RuntimeError, match="Audit log not writable"):
         check_log_is_writable(obstacle / "audit_triage.jsonl")

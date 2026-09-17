@@ -1,12 +1,11 @@
-"""Réglages communs à toute la suite de tests.
+"""Settings shared by the whole test suite.
 
-Sous Windows, importer `torch` avant `pyarrow` provoque un conflit de
-bibliothèques dynamiques qui termine le processus par une violation d'accès.
-L'ordre d'import dépend ici de l'ordre des tests, donc du hasard. On force donc
-le bon ordre au démarrage de la session, comme le fait `clinical_triage.bootstrap`
-pour les scripts.
+On Windows, importing ``torch`` before ``pyarrow`` causes a dynamic-library conflict that ends
+the process with an access violation. The import order here depends on the order of the tests,
+hence on chance. The right order is therefore forced at session start, as
+``clinical_triage.bootstrap`` does for the scripts.
 """
 
 from __future__ import annotations
 
-import pyarrow  # noqa: F401  (import volontaire : il doit précéder celui de torch)
+import pyarrow  # noqa: F401  (deliberate import: it must precede torch)

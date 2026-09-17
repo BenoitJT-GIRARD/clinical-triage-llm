@@ -1,12 +1,11 @@
-"""Cohérence des dépendances de l'image de service.
+"""Consistency of the service image's dependencies.
 
-`requirements-api.txt` est généré depuis `requirements-api.in` : le premier porte
-la fermeture complète épinglée, le second les contraintes. Les deux fichiers se
-modifient séparément, et rien n'empêche d'éditer le généré à la main — auquel cas
-l'image installerait autre chose que ce qui a été résolu et audité.
+``requirements-api.txt`` is generated from ``requirements-api.in``: the first carries the full
+pinned closure, the second the constraints. The two files are edited separately, and nothing
+stops the generated one being edited by hand — in which case the image would install something
+other than what was resolved and audited.
 
-Ces tests sont statiques : ils comparent les deux fichiers, sans résoudre quoi
-que ce soit ni toucher au réseau.
+These tests are static: they compare the two files, resolving nothing and touching no network.
 """
 
 from __future__ import annotations
@@ -17,60 +16,60 @@ import pytest
 
 from clinical_triage.config import PATHS
 
-CONTRAINTES = PATHS.root / "deploy" / "requirements-api.in"
-FERMETURE = PATHS.root / "deploy" / "requirements-api.txt"
+CONSTRAINTS = PATHS.root / "infra" / "requirements-api.in"
+CLOSURE = PATHS.root / "infra" / "requirements-api.txt"
 
 
-def _epingles(chemin) -> dict[str, str]:
-    """Paquets épinglés d'un fichier de dépendances, nom normalisé."""
-    trouves = {}
-    for ligne in chemin.read_text(encoding="utf-8").splitlines():
-        correspondance = re.match(r"^([a-zA-Z0-9._-]+)(?:\[[^\]]+\])?==(\S+)", ligne)
-        if correspondance:
-            trouves[correspondance.group(1).lower().replace("_", "-")] = correspondance.group(2)
-    return trouves
-
-
-@pytest.fixture(scope="module")
-def contraintes() -> dict[str, str]:
-    return _epingles(CONTRAINTES)
+def _pinned(path) -> dict[str, str]:
+    """Pinned packages of a dependency file, names normalised."""
+    found = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"^([a-zA-Z0-9._-]+)(?:\[[^\]]+\])?==(\S+)", line)
+        if match:
+            found[match.group(1).lower().replace("_", "-")] = match.group(2)
+    return found
 
 
 @pytest.fixture(scope="module")
-def fermeture() -> dict[str, str]:
-    return _epingles(FERMETURE)
+def constraints() -> dict[str, str]:
+    return _pinned(CONSTRAINTS)
 
 
-def test_la_fermeture_est_bien_plus_large_que_les_contraintes(contraintes, fermeture):
-    """Garde-fou du test : une lecture cassée le rendrait toujours vert."""
-    assert len(contraintes) >= 7
-    assert len(fermeture) > 3 * len(contraintes)
+@pytest.fixture(scope="module")
+def closure() -> dict[str, str]:
+    return _pinned(CLOSURE)
 
 
-def test_chaque_contrainte_se_retrouve_a_la_meme_version(contraintes, fermeture):
-    """Le fichier généré ne doit pas dériver de ce qui a été demandé."""
-    ecarts = {
-        nom: (version, fermeture.get(nom))
-        for nom, version in contraintes.items()
-        if fermeture.get(nom) != version
+def test_the_closure_is_much_wider_than_the_constraints(constraints, closure):
+    """Guard rail of the test itself: a broken read would leave it always green."""
+    assert len(constraints) >= 7
+    assert len(closure) > 3 * len(constraints)
+
+
+def test_every_constraint_appears_at_the_same_version(constraints, closure):
+    """The generated file must not drift from what was asked for."""
+    gaps = {
+        name: (version, closure.get(name))
+        for name, version in constraints.items()
+        if closure.get(name) != version
     }
-    assert ecarts == {}
+    assert gaps == {}
 
 
-def test_les_deux_modeles_spacy_sont_dans_la_fermeture(fermeture):
-    """Presidio ne masque rien sans eux, et l'anonymisation du journal tombe."""
-    texte = FERMETURE.read_text(encoding="utf-8")
-    assert "fr_core_news_md-3.8.0" in texte
-    assert "en_core_web_sm-3.8.0" in texte
+def test_both_spacy_models_are_in_the_closure(closure):
+    """Presidio masks nothing without them, and the log anonymisation falls over."""
+    text = CLOSURE.read_text(encoding="utf-8")
+    assert "fr_core_news_md-3.8.0" in text
+    assert "en_core_web_sm-3.8.0" in text
 
 
-def test_l_image_n_embarque_ni_torch_ni_transformers(fermeture):
-    """La génération est déléguée à vLLM : l'image n'a pas à peser trois gigaoctets."""
-    assert "torch" not in fermeture
-    assert "transformers" not in fermeture
-    assert "datasets" not in fermeture
+def test_the_image_carries_neither_torch_nor_transformers(closure):
+    """Generation is delegated to vLLM: the image has no business weighing three gigabytes."""
+    assert "torch" not in closure
+    assert "transformers" not in closure
+    assert "datasets" not in closure
 
 
-def test_le_fichier_genere_se_declare_comme_tel():
-    """Sans cet avertissement, la prochaine correction se ferait dans le mauvais fichier."""
-    assert "FICHIER GENERE" in FERMETURE.read_text(encoding="utf-8")
+def test_the_generated_file_declares_itself_as_such():
+    """Without that warning, the next fix would be made in the wrong file."""
+    assert "GENERATED FILE" in CLOSURE.read_text(encoding="utf-8")

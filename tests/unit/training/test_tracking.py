@@ -1,9 +1,8 @@
-"""Le suivi d'expériences ne doit jamais faire échouer un entraînement.
+"""Experiment tracking must never fail a training run.
 
-Un entraînement coûte des heures de GPU ; le suivi coûte quelques kilo-octets de
-JSON. Si le second tombe, le premier continue. Ces tests forcent les pannes que
-`tracking` prétend absorber, parce qu'une promesse écrite dans une docstring et
-jamais éprouvée n'est qu'une intention.
+Training costs hours of GPU; tracking costs a few kilobytes of JSON. If the second falls over,
+the first carries on. These tests force the failures ``tracking`` claims to absorb, because a
+promise written in a docstring and never exercised is only an intention.
 """
 
 from __future__ import annotations
@@ -19,89 +18,105 @@ from clinical_triage.training import tracking
 
 
 @pytest.fixture
-def rapports(tmp_path, monkeypatch):
-    """Redirige les résumés JSON vers un dossier jetable.
+def reports(tmp_path, monkeypatch):
+    """Redirect the JSON summaries to a disposable folder.
 
-    `PATHS` est un dataclass gelé : on remplace l'objet entier plutôt qu'un champ.
+    ``PATHS`` is a frozen dataclass: the whole object is replaced rather than one field.
     """
     monkeypatch.setattr(tracking, "PATHS", dataclasses.replace(tracking.PATHS, reports=tmp_path))
     return tmp_path
 
 
-def _mlflow_en_panne(message: str) -> types.ModuleType:
-    """Un faux module MLflow qui échoue dès l'ouverture, comme un magasin verrouillé."""
-    faux = types.ModuleType("mlflow")
+def _broken_mlflow(message: str) -> types.ModuleType:
+    """A fake MLflow module that fails on opening, like a locked store."""
+    fake = types.ModuleType("mlflow")
 
-    def echouer(*_args, **_kwargs):
+    def fail(*_args, **_kwargs):
         raise RuntimeError(message)
 
-    faux.set_tracking_uri = echouer
-    faux.set_experiment = echouer
-    faux.start_run = echouer
-    faux.log_params = echouer
-    faux.log_metric = echouer
-    faux.end_run = echouer
-    return faux
+    fake.set_tracking_uri = fail
+    fake.set_experiment = fail
+    fake.start_run = fail
+    fake.log_params = fail
+    fake.log_metric = fail
+    fake.end_run = fail
+    return fake
 
 
-def test_un_magasin_verrouille_laisse_l_entrainement_continuer(rapports, monkeypatch):
-    """C'est la panne observée quand le dépôt est posé sur un dossier synchronisé."""
-    monkeypatch.setitem(sys.modules, "mlflow", _mlflow_en_panne("database is locked"))
+def test_a_locked_store_lets_training_carry_on(reports, monkeypatch):
+    """This is the failure observed when the repository sits on a synchronised folder."""
+    monkeypatch.setitem(sys.modules, "mlflow", _broken_mlflow("database is locked"))
 
-    with tracking.track("essai", {"lr": 2e-4}) as resume:
-        resume.metriques["exactitude"] = 0.9
+    with tracking.track("trial", {"lr": 2e-4}) as summary:
+        summary.metrics["accuracy"] = 0.9
 
-    ecrit = json.loads((rapports / "training" / "essai.json").read_text(encoding="utf-8"))
-    assert ecrit["metriques"]["exactitude"] == 0.9
+    written = json.loads((reports / "training" / "trial.json").read_text(encoding="utf-8"))
+    assert written["metrics"]["accuracy"] == 0.9
 
 
-def test_mlflow_absent_laisse_l_entrainement_continuer(rapports, monkeypatch):
-    """Une entrée à `None` dans `sys.modules` fait lever `ImportError` à l'import."""
+def test_an_absent_mlflow_lets_training_carry_on(reports, monkeypatch):
+    """A ``None`` entry in ``sys.modules`` makes the import raise ``ImportError``."""
     monkeypatch.setitem(sys.modules, "mlflow", None)
 
-    with tracking.track("sans_mlflow", {}) as resume:
-        resume.metriques["exactitude"] = 0.5
+    with tracking.track("without_mlflow", {}) as summary:
+        summary.metrics["accuracy"] = 0.5
 
-    ecrit = json.loads((rapports / "training" / "sans_mlflow.json").read_text(encoding="utf-8"))
-    assert ecrit["metriques"]["exactitude"] == 0.5
+    written = json.loads((reports / "training" / "without_mlflow.json").read_text(encoding="utf-8"))
+    assert written["metrics"]["accuracy"] == 0.5
 
 
-def test_un_entrainement_qui_echoue_laisse_quand_meme_son_resume(rapports, monkeypatch):
-    """Ce qui a été mesuré avant l'erreur est la première pièce du diagnostic."""
-    monkeypatch.setitem(sys.modules, "mlflow", _mlflow_en_panne("database is locked"))
+def test_a_failing_run_still_leaves_its_summary(reports, monkeypatch):
+    """What was measured before the error is the first piece of the diagnosis."""
+    monkeypatch.setitem(sys.modules, "mlflow", _broken_mlflow("database is locked"))
 
     with (
-        pytest.raises(ValueError, match="perte divergente"),
-        tracking.track("interrompu", {}) as resume,
+        pytest.raises(ValueError, match="diverging loss"),
+        tracking.track("interrupted", {}) as summary,
     ):
-        resume.metriques["derniere_perte"] = 42.0
-        raise ValueError("perte divergente")
+        summary.metrics["last_loss"] = 42.0
+        raise ValueError("diverging loss")
 
-    ecrit = json.loads((rapports / "training" / "interrompu.json").read_text(encoding="utf-8"))
-    assert ecrit["metriques"]["derniere_perte"] == 42.0
+    written = json.loads((reports / "training" / "interrupted.json").read_text(encoding="utf-8"))
+    assert written["metrics"]["last_loss"] == 42.0
 
 
-def test_une_execution_interrompue_est_marquee_en_echec(rapports, monkeypatch):
-    """Sinon l'interface MLflow mélangerait entraînements aboutis et interrompus."""
-    statuts = []
-    faux = types.ModuleType("mlflow")
-    faux.set_tracking_uri = lambda *_a, **_k: None
-    faux.set_experiment = lambda *_a, **_k: None
-    faux.start_run = lambda *_a, **_k: None
-    faux.log_params = lambda *_a, **_k: None
-    faux.log_metric = lambda *_a, **_k: None
-    faux.end_run = lambda status="FINISHED": statuts.append(status)
-    monkeypatch.setitem(sys.modules, "mlflow", faux)
+def test_an_interrupted_run_is_marked_as_failed(reports, monkeypatch):
+    """Otherwise the MLflow interface would mix completed and interrupted runs."""
+    statuses = []
+    fake = types.ModuleType("mlflow")
+    fake.set_tracking_uri = lambda *_a, **_k: None
+    fake.set_experiment = lambda *_a, **_k: None
+    fake.start_run = lambda *_a, **_k: None
+    fake.log_params = lambda *_a, **_k: None
+    fake.log_metric = lambda *_a, **_k: None
+    fake.end_run = lambda status="FINISHED": statuses.append(status)
+    monkeypatch.setitem(sys.modules, "mlflow", fake)
 
-    with tracking.track("abouti", {}):
+    with tracking.track("completed", {}):
         pass
-    with pytest.raises(ValueError, match="boum"), tracking.track("interrompu", {}):
-        raise ValueError("boum")
+    with pytest.raises(ValueError, match="boom"), tracking.track("interrupted", {}):
+        raise ValueError("boom")
 
-    assert statuts == ["FINISHED", "FAILED"]
+    assert statuses == ["FINISHED", "FAILED"]
 
 
-def test_l_adresse_du_magasin_suit_la_variable_de_mlflow(monkeypatch):
-    """Sur un poste dont le dépôt est synchronisé, c'est la seule échappatoire."""
-    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:///ailleurs/mlflow.db")
-    assert tracking.tracking_uri() == "sqlite:///ailleurs/mlflow.db"
+def test_the_store_address_follows_the_mlflow_variable(monkeypatch):
+    """On a machine whose repository is synchronised, that is the only way out."""
+    monkeypatch.setenv("MLFLOW_TRACKING_URI", "sqlite:///elsewhere/mlflow.db")
+    assert tracking.tracking_uri() == "sqlite:///elsewhere/mlflow.db"
+
+
+def test_the_environment_description_degrades_rather_than_raising(monkeypatch):
+    """Continuous integration installs the project without torch: a summary must still exist.
+
+    These very tests run in that environment. A description that raised there would take down
+    the four tests above, which exist to prove that tracking never fails a run.
+    """
+    monkeypatch.setitem(sys.modules, "torch", None)
+    monkeypatch.setitem(sys.modules, "transformers", None)
+    monkeypatch.setitem(sys.modules, "trl", None)
+
+    described = tracking.describe_environment()
+
+    assert described["torch"] == tracking.UNAVAILABLE
+    assert described["gpu"] == "none"
