@@ -34,7 +34,8 @@ from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.security import APIKeyHeader
 
 from clinical_triage import __version__
 from clinical_triage.config import PATHS, SERVING, TRIAGE
@@ -211,7 +212,19 @@ app = FastAPI(
 )
 
 
-def require_api_key(request: Request, x_api_key: str | None = Header(default=None)) -> None:
+#: The authentication, declared where the contract can carry it. Read as a plain header, the
+#: key was enforced by the service and absent from the published OpenAPI document: an
+#: integrator opening the page saw three routes and no mention of the header without which two
+#: of them answer 401. `auto_error=False` leaves the decision here rather than to the library,
+#: because open mode exists and because the refusal names the header it wants.
+API_KEY_HEADER = APIKeyHeader(
+    name="X-API-Key",
+    auto_error=False,
+    description="Service key. Required unless the service was started in open mode.",
+)
+
+
+def require_api_key(request: Request, x_api_key: str | None = Security(API_KEY_HEADER)) -> None:
     """Check the API key in constant time, then apply the rate limit."""
     settings: Settings = request.app.state.settings
     if settings.api_key:

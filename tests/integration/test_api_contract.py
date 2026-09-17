@@ -213,6 +213,21 @@ def test_the_openapi_contract_is_published(client):
     assert "/health" in schema["paths"]
 
 
+def test_the_contract_names_the_header_without_which_it_answers_401(client):
+    """Enforced and undocumented, the key was a 401 an integrator met by trial and error."""
+    schema = client.get("/openapi.json").json()
+
+    schemes = schema["components"]["securitySchemes"]
+    assert any(
+        definition["type"] == "apiKey" and definition["name"] == "X-API-Key"
+        for definition in schemes.values()
+    ), schemes
+
+    for route in ("/triage", "/questionnaire/next"):
+        assert schema["paths"][route]["post"]["security"], route
+    assert "security" not in schema["paths"]["/health"]["get"]
+
+
 def test_the_gateway_presents_a_key_to_the_engine(monkeypatch):
     """Without it, the engine's address alone buys GPU inference.
 
