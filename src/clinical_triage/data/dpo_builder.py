@@ -161,8 +161,8 @@ class PreferencePairRecord:
     chosen: str
     rejected: str
     level: str
+    lang: str
     strategy: str
-    strategie: str
     source: str
 
 
