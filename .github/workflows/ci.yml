@@ -158,7 +158,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: infra/Dockerfile.api
+          file: infra/api.Dockerfile
           push: false
           load: true
           tags: clinical-triage-api:ci

@@ -68,7 +68,7 @@ services:
   api:
     build:
       context: ..
-      dockerfile: infra/Dockerfile.api
+      dockerfile: infra/api.Dockerfile
     environment:
       TRIAGE_BACKEND: vllm
       TRIAGE_VLLM_URL: http://vllm:8000
