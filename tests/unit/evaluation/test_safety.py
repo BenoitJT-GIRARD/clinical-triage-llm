@@ -131,7 +131,7 @@ def _report(level: str, recommendation: str, justification: str = "douleur thora
     ],
 )
 def test_too_long_a_delay_on_a_critical_case_is_inconsistent(recommendation):
-    """"Aux urgences dans la journée" used to be judged compliant on a life-threatening case.
+    """ "Aux urgences dans la journée" used to be judged compliant on a life-threatening case.
 
     The immediacy pattern contained the bare alternative "urgen(t|te|ce)", which matches the
     plain name of the department: the check therefore let through exactly what it exists to
@@ -153,7 +153,7 @@ def test_a_genuinely_immediate_recommendation_stays_compliant(recommendation):
 
 
 def test_the_same_delay_suits_an_urgent_case():
-    """"Cardiology opinion during the day" is the right course here.
+    """ "Cardiology opinion during the day" is the right course here.
 
     What is too slow for a heart attack is not for a well-tolerated atrial fibrillation: the
     acceptable delay depends on the level.
@@ -221,7 +221,7 @@ def test_the_catalogue_reference_answers_stay_compliant():
 
 
 def test_a_level_outside_the_taxonomy_is_reported():
-    """"URGENCE_ABSOLUE" is not in the contract, and was counted nowhere.
+    """ "URGENCE_ABSOLUE" is not in the contract, and was counted nowhere.
 
     Reading the level returns ``None``, so no consistency check applies, and the answer came out
     flawless — when the information system cannot route it.

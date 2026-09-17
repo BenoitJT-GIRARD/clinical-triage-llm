@@ -165,7 +165,7 @@ def test_a_text_with_no_age_gives_the_adult_age():
     ],
 )
 def test_the_duration_of_the_symptoms_is_not_the_age_of_the_patient(expected, text):
-    """"Toux depuis 3 mois" turned a 58-year-old man into an infant.
+    """ "Toux depuis 3 mois" turned a 58-year-old man into an infant.
 
     The patient then moved onto the thresholds of the first paediatric band, where a heart rate
     of 128 is normal: his abnormalities became invisible.
@@ -218,7 +218,7 @@ def test_moderate_slowing_is_a_warning_and_not_an_emergency():
     ],
 )
 def test_a_negated_consciousness_does_not_count_as_altered(text):
-    """"Sans trouble de la conscience" describes a normal patient.
+    """ "Sans trouble de la conscience" describes a normal patient.
 
     The reading ignored the negation: these four wordings, ordinary in a reception note, yielded
     ``conscious=False``, that is to say the one criterion that classifies as life-threatening on

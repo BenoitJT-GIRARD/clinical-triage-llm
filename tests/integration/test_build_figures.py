@@ -104,7 +104,9 @@ def test_the_two_forms_of_the_aligned_model_are_not_drawn_twice(build_figures):
     assert set(build_figures._progression({"sft": 1, "dpo": 2})) == {"sft", "dpo"}
 
 
-def test_a_repository_without_results_says_which_script_to_run(build_figures, monkeypatch, tmp_path):
+def test_a_repository_without_results_says_which_script_to_run(
+    build_figures, monkeypatch, tmp_path
+):
     """A clone carries the artefacts; a fresh pipeline does not yet."""
     monkeypatch.setattr(
         build_figures, "PATHS", dataclasses.replace(build_figures.PATHS, reports=tmp_path)

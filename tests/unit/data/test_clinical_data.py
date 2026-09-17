@@ -177,9 +177,7 @@ def test_the_split_leaves_no_leak():
 def test_the_leak_check_detects_a_duplicate():
     """The check must fail when there really is a leak, otherwise it serves no purpose."""
     generator = random.Random(10)
-    examples = assemble(
-        generate_cases(10, "URGENCE_VITALE", "fr", generator), [], set(), generator
-    )
+    examples = assemble(generate_cases(10, "URGENCE_VITALE", "fr", generator), [], set(), generator)
     splits = {"train": examples[:6], "test": examples[5:]}
     assert check_no_leakage(splits)["test∩train"] == 1
 
@@ -218,9 +216,9 @@ def test_the_supervised_record_exposes_prompt_and_completion():
     """The ``messages`` column is deliberately absent: it would make the set be re-serialised
     with the model's native template, hence teach another format."""
     generator = random.Random(11)
-    example = assemble(
-        generate_cases(1, "URGENCE_VITALE", "fr", generator), [], set(), generator
-    )[0]
+    example = assemble(generate_cases(1, "URGENCE_VITALE", "fr", generator), [], set(), generator)[
+        0
+    ]
     record = sft_record(example)
     assert set(record) >= {"prompt", "completion", "level", "lang", "source", "confidence"}
     assert "messages" not in record

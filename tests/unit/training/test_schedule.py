@@ -29,16 +29,12 @@ def test_the_warmup_follows_the_corpus_and_the_effective_batch():
 
 def test_a_partial_batch_still_counts_as_a_whole_step():
     """The last batch, incomplete, is a step like any other."""
-    assert (
-        warmup_steps(example_count=17, effective_batch=8, epochs=1, max_steps=0, ratio=1.0) == 3
-    )
+    assert warmup_steps(example_count=17, effective_batch=8, epochs=1, max_steps=0, ratio=1.0) == 3
 
 
 def test_the_warmup_never_drops_to_zero():
     """Zero warm-up steps exposes the first update to the full rate."""
-    assert (
-        warmup_steps(example_count=10, effective_batch=8, epochs=1, max_steps=0, ratio=0.01) == 1
-    )
+    assert warmup_steps(example_count=10, effective_batch=8, epochs=1, max_steps=0, ratio=0.01) == 1
 
 
 def test_a_null_batch_or_epoch_count_does_not_divide_by_zero():

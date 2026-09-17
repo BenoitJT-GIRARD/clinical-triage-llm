@@ -171,9 +171,7 @@ def _baselines(
     there.
     """
     baselines = {
-        "majority_class": evaluate_predictions(
-            cases, majority_class(training_levels, len(cases))
-        ),
+        "majority_class": evaluate_predictions(cases, majority_class(training_levels, len(cases))),
         "always_critical": evaluate_predictions(cases, always_critical(len(cases))),
     }
     if with_rule:
@@ -475,9 +473,7 @@ def main() -> None:
         print("\n=== Robustness on degraded inputs ===")
         for name, measures in results["robustness"].items():
             failures = ", ".join(measures["non_compliant_cases"]) or "none"
-            print(
-                f"{name:24s} | compliant {measures['compliant_share']:.3f} | failing: {failures}"
-            )
+            print(f"{name:24s} | compliant {measures['compliant_share']:.3f} | failing: {failures}")
 
     if results["external_preferences"]:
         print("\n=== External preferences (UltraMedical, outside training) ===")

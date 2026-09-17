@@ -475,9 +475,7 @@ def main() -> None:
         "by_language": _distribution(examples, lambda e: e.lang),
         "by_source": by_source,
         "by_confidence": _distribution(examples, lambda e: e.confidence),
-        "share_with_vitals": round(
-            sum(1 for e in examples if e.vitals) / max(1, len(examples)), 3
-        ),
+        "share_with_vitals": round(sum(1 for e in examples if e.vitals) / max(1, len(examples)), 3),
         "dpo_by_strategy": _distribution(pairs, lambda p: p.strategy),
         "dpo_length_balance": length_gap,
         "evaluation_by_level": _distribution(evaluation_cases, lambda c: c.level),

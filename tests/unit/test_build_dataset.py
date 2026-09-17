@@ -116,7 +116,11 @@ def test_the_selection_is_reproducible_under_the_same_seed(build_dataset):
 def test_a_distribution_is_sorted_by_decreasing_frequency(build_dataset):
     """It is read as a ranking in the composition figure; alphabetical order would say nothing."""
     counted = build_dataset._distribution(
-        [Case("URGENCE_VITALE", "en"), Case("CONSULTATION_DIFFEREE", "fr"), Case("URGENCE_VITALE", "fr")],
+        [
+            Case("URGENCE_VITALE", "en"),
+            Case("CONSULTATION_DIFFEREE", "fr"),
+            Case("URGENCE_VITALE", "fr"),
+        ],
         lambda case: case.level,
     )
     assert list(counted) == ["URGENCE_VITALE", "CONSULTATION_DIFFEREE"]

@@ -82,9 +82,7 @@ def test_the_confusion_matrices_are_drawn(tmp_path):
         "rows": levels,
         "columns": [*levels, "HORS_FORMAT"],
         "matrix": {
-            "URGENCE_VITALE": dict(
-                zip([*levels, "HORS_FORMAT"], [15, 3, 1, 1], strict=True)
-            ),
+            "URGENCE_VITALE": dict(zip([*levels, "HORS_FORMAT"], [15, 3, 1, 1], strict=True)),
             "URGENCE_MODEREE": dict(zip([*levels, "HORS_FORMAT"], [2, 16, 2, 0], strict=True)),
             "CONSULTATION_DIFFEREE": dict(
                 zip([*levels, "HORS_FORMAT"], [1, 2, 17, 0], strict=True)

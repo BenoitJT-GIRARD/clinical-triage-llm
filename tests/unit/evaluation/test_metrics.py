@@ -297,9 +297,12 @@ def test_the_exact_interval_agrees_with_the_beta_law():
     comparing it with the closed form.
     """
     from scipy import stats
+
     for successes, total in [(3, 3), (1, 7), (17, 40), (19, 20), (32, 32), (10, 10)]:
         low = 0.0 if successes == 0 else stats.beta.ppf(0.025, successes, total - successes + 1)
-        high = 1.0 if successes == total else stats.beta.ppf(0.975, successes + 1, total - successes)
+        high = (
+            1.0 if successes == total else stats.beta.ppf(0.975, successes + 1, total - successes)
+        )
         obtained = clopper_pearson(successes, total)
         assert abs(obtained[0] - low) < 1e-4, (successes, total)
         assert abs(obtained[1] - high) < 1e-4, (successes, total)

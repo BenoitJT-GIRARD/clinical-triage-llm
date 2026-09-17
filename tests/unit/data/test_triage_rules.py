@@ -236,7 +236,7 @@ def test_no_term_is_listed_twice():
 
 
 def test_a_failure_to_respond_to_treatment_is_not_life_threatening():
-    """"Ne répond pas" used to be searched for without context.
+    """ "Ne répond pas" used to be searched for without context.
 
     It is an ordinary turn of phrase in a report — "ne répond pas au traitement antibiotique" —
     and it classified the case as life-threatening. Concrete effect: the questionnaire stopped

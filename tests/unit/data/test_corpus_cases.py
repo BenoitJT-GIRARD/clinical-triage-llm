@@ -106,9 +106,9 @@ def test_the_length_bound_fits_inside_the_service_budget():
     it fails the day ``MAX_LENGTH`` changes, or the model window, or the generation budget,
     without the set being rebuilt.
     """
-    published = json.loads(
-        (PATHS.data_processed / "metadata.json").read_text(encoding="utf-8")
-    )["statistics"]["description_lengths"]
+    published = json.loads((PATHS.data_processed / "metadata.json").read_text(encoding="utf-8"))[
+        "statistics"
+    ]["description_lengths"]
 
     assert published["char_cap"] == MAX_LENGTH, "the delivered set was built under another bound"
     assert published["max_tokens"] <= published["token_budget"]

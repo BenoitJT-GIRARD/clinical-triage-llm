@@ -102,9 +102,7 @@ def test_evaluating_predictions_without_generation():
 
 
 def test_the_error_table_keeps_only_the_misclassified_cases():
-    errors = error_table(
-        CASES, ["URGENCE_VITALE", "URGENCE_VITALE"], [RIGHT_ANSWER, WRONG_ANSWER]
-    )
+    errors = error_table(CASES, ["URGENCE_VITALE", "URGENCE_VITALE"], [RIGHT_ANSWER, WRONG_ANSWER])
     assert len(errors) == 1
     error = errors[0]
     assert error["id"] == "ev02"

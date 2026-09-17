@@ -52,7 +52,7 @@ class Paths:
     tracking: Path = PROJECT_ROOT / "var" / "mlruns"
 
     def ensure(self) -> None:
-        """Create the working directories if they do not exist yet."""
+        """Make the directories a run writes into, on first use."""
         for directory in (self.data_processed, self.models, self.figures, self.logs):
             directory.mkdir(parents=True, exist_ok=True)
 

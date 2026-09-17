@@ -123,7 +123,9 @@ def test_a_model_that_is_right_everywhere_the_baseline_is_wrong_is_separated(eva
 
 def test_no_prediction_produces_no_comparison(evaluation):
     """A model that was not evaluated is not compared to anything."""
-    assert evaluation._compare_to_baseline(_cases(IMMEDIATE), [], "sft", [IMMEDIATE], "rule") is None
+    assert (
+        evaluation._compare_to_baseline(_cases(IMMEDIATE), [], "sft", [IMMEDIATE], "rule") is None
+    )
 
 
 # --- The failure that costs a patient ----------------------------------------

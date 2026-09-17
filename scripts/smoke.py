@@ -61,10 +61,10 @@ TOOLS: tuple[str, ...] = ("matplotlib", "numpy", "scikit-learn", "fastapi", "pyd
 
 
 def steps() -> None:
-    """Redraw every figure from the artefacts the runs wrote.
+    """Redraw the ten published figures from the committed result files.
 
-    Nothing here catches: a step that failed would otherwise leave evidence saying the run
-    succeeded.
+    No exception is swallowed here. A step that failed and was caught would leave behind a
+    piece of evidence claiming the run went through.
     """
     for script in ("build_figures.py",):
         done = subprocess.run(  # nosec B603 - this interpreter, a script of this repository

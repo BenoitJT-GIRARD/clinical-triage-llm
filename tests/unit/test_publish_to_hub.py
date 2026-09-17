@@ -54,9 +54,7 @@ def test_every_published_model_has_its_card(publication):
 def test_the_base_model_of_every_adapter_is_published(publication):
     """Without it, ``PeftModel.from_pretrained`` would look for a repository that does not exist."""
     published = {
-        publication._model_repository(what)
-        for what in publication.EVERYTHING
-        if what != "dataset"
+        publication._model_repository(what) for what in publication.EVERYTHING if what != "dataset"
     }
     published.add(MODEL.base_model)  # the base model comes from its own publisher
 

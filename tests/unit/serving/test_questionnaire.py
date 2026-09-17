@@ -156,7 +156,7 @@ def test_empty_answers_are_ignored():
     ],
 )
 def test_a_word_starting_with_no_is_not_a_negation(answer):
-    """"no" is a negation in English, and the start of "Notre" in French.
+    """ "no" is a negation in English, and the start of "Notre" in French.
 
     The comparison used to be on a prefix: "Notre fille saigne du nez" was read as a "non", and
     the summary handed to the model wrote "Aucun saignement actif" — the exact opposite of what
