@@ -1,58 +1,57 @@
 [project]
 name = "clinical-triage"
 version = "1.0.0"
-description = "POC d'un agent IA de triage medical pour le service des urgences : fine-tuning SFT/LoRA puis alignement DPO d'un Qwen3-1.7B, servi par une API FastAPI devant vLLM"
+description = "Emergency-department triage assistant: a Qwen3-1.7B supervised fine-tuned with LoRA then preference-aligned with DPO, served by a FastAPI gateway in front of vLLM"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = { text = "MIT" }
 authors = [{ name = "Benoît J. T. GIRARD", email = "53222414+BenoitJT-GIRARD@users.noreply.github.com" }]
-keywords = ["llm", "fine-tuning", "lora", "dpo", "triage", "sante"]
+keywords = ["llm", "fine-tuning", "lora", "dpo", "triage", "healthcare"]
 
-# Dependances du service et de la chaine de donnees. Ce qu'il faut pour
-# construire le dataset, evaluer un modele, servir l'API et rendre les figures.
-# L'entrainement, lui, vit dans le groupe `train` : la passerelle de service n'a
-# aucun besoin de torch, et l'y inclure ferait installer 2,5 Go de CUDA a chaque
-# execution de l'integration continue.
+# Dependencies of the service and of the data chain. What it takes to build the
+# dataset, evaluate a model, serve the API and draw the figures. Training itself
+# lives in the `train` group: the service gateway has no need of torch, and putting
+# it here would install 2.5 GB of CUDA on every continuous-integration run.
 dependencies = [
-    # --- Donnees ---
-    # Borne haute imposee par Unsloth (`datasets<4.4.0`), qui fournit les noyaux
-    # d'entrainement. La faille PYSEC-2026-3716 des versions <5.0.1 porte sur les
-    # constructeurs de jeux par dossier, que ce projet n'utilise jamais : il lit
-    # du JSONL et des depots du Hub. L'exception est inscrite dans l'audit de CI.
+    # --- Data ---
+    # Upper bound imposed by Unsloth (`datasets<4.4.0`), which supplies the training
+    # kernels. PYSEC-2026-3716, in versions below 5.0.1, affects the folder-based
+    # dataset builders, which this project never uses: it reads local JSONL and Hub
+    # repositories. The exception is recorded in the CI audit.
     "datasets>=4.2,<4.4",
     "numpy>=1.26,<2.2",
-    # `datasets` tire pandas. La borne haute evite la version 3.0.4, retiree de
-    # l'index par ses auteurs pour des plantages sur les dates.
+    # `datasets` pulls pandas in. The upper bound avoids version 3.0.4, withdrawn
+    # from the index by its authors over crashes on dates.
     "pandas>=2.2,<3",
-    # --- Anonymisation RGPD ---
+    # --- GDPR anonymisation ---
     "presidio-analyzer>=2.2",
     "presidio-anonymizer>=2.2",
     "spacy>=3.7,<3.9",
-    # Modeles spaCy requis par Presidio, installes depuis leur roue officielle.
+    # spaCy models Presidio requires, installed from their official wheel.
     "fr-core-news-md",
     "en-core-web-sm",
-    # --- Figures ---
+    # --- Published figures ---
     "matplotlib>=3.9",
-    # --- Reference classique de l'evaluation ---
-    # Un classifieur lineaire sur n-grammes, entraine sur les memes paires que le
-    # modele, dit ce que vaut le fine-tuning face a une approche ordinaire. Sans
-    # cette reference, l'evaluation ne compare le modele qu'a des references
-    # triviales et ne peut rien conclure sur l'interet du fine-tuning.
+    # --- The ordinary baseline of the evaluation ---
+    # A linear classifier over n-grams, trained on the same pairs as the model, says
+    # what fine-tuning is worth against an ordinary approach. Without that baseline
+    # the evaluation compares the model to trivial references alone, and can conclude
+    # nothing about what fine-tuning bought.
     "scikit-learn>=1.5",
-    # --- Configuration locale ---
-    # Lecture du fichier `.env`. Deja presente par `uvicorn[standard]`, mais le
-    # paquet l'importe directement : une dependance dont on se sert se declare.
+    # --- Local configuration ---
+    # Reads the `.env` file. Already pulled in by `uvicorn[standard]`, but the
+    # package imports it directly: a dependency you use, you declare.
     "python-dotenv>=1.0",
-    # --- Service d'inference ---
+    # --- Inference service ---
     "fastapi>=0.115",
     "uvicorn[standard]>=0.34",
     "pydantic>=2.10",
     "httpx>=0.28",
 ]
 
-# vLLM n'est pas declare en dependance : le serveur d'inference tourne dans son
-# image officielle (voir infra/docker-compose.yml). L'y ajouter figerait en plus
-# les versions de torch et de transformers du projet sur celles que vLLM impose.
+# vLLM is not declared as a dependency: the inference server runs in its official
+# image (see infra/docker-compose.yml). Adding it here would also freeze the
+# project's torch and transformers versions to the ones vLLM imposes.
 
 [project.scripts]
 clinical-triage = "clinical_triage.cli:main"
@@ -65,17 +64,16 @@ requires = ["uv_build>=0.9,<0.12"]
 build-backend = "uv_build"
 
 [dependency-groups]
-# Fine-tuning et alignement. Installe par defaut en developpement ; l'integration
-# continue s'en passe avec `uv sync --no-group train`.
+# Fine-tuning and alignment. Installed by default in development; continuous
+# integration does without it, through `uv sync --no-group train`.
 train = [
     "torch>=2.12,<2.13",
-    # Unsloth fournit les noyaux de fine-tuning LoRA du projet. C'est lui qui
-    # fixe les bornes de `transformers` et de `trl` : il reecrit des fonctions
-    # internes de ces deux bibliotheques, et une version qu'il ne connait pas se
-    # traduit par un echec a l'import, pas par une degradation silencieuse.
-    # `datasets`, en revanche, reste a la version corrigee : Unsloth n'en depend
-    # que par une borne basse, et la 4.3 qu'il accepterait porte une faille de
-    # traversee de repertoire.
+    # Unsloth supplies the project's LoRA fine-tuning kernels. It is what fixes the
+    # bounds on `transformers` and `trl`: it rewrites internal functions of both
+    # libraries, and a version it does not know about shows up as an import failure,
+    # not as a silent degradation. `datasets`, on the other hand, stays at the fixed
+    # version: Unsloth depends on it through a lower bound only, and the 4.3 it would
+    # accept carries a directory-traversal flaw.
     "unsloth>=2026.9",
     "transformers>=4.57,<=5.5",
     "trl>=0.23,<=0.24",
@@ -90,15 +88,15 @@ train = [
 dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
-    # Plancher aligné sur la version épinglée dans `.pre-commit-config.yaml` :
-    # deux versions majeures d'écart, ce sont deux linters différents, et le
-    # développeur voit passer ce que l'intégration continue refuse ensuite.
+    # Floor aligned with the version pinned in `.pre-commit-config.yaml`: two major
+    # versions apart are two different linters, and the developer would pass what
+    # continuous integration refuses right after.
     "ruff>=0.16.7",
     "bandit[toml]>=1.8",
-    # Verification independante des intervalles exacts : le paquet calcule sa borne par
-    # bissection sur la binomiale cumulee, et le test la compare au quantile beta en forme
-    # fermee. scipy arrive de toute facon avec scikit-learn -- une dependance dont on se
-    # sert se declare, meme transitive.
+    # Independent check of the exact intervals: the package computes its bound by
+    # bisection on the cumulative binomial, and the test compares it with the
+    # closed-form beta quantile. scipy arrives with scikit-learn anyway — a dependency
+    # you use, you declare, transitive or not.
     "scipy>=1.14",
     "pip-audit>=2.7",
     "pre-commit>=4.0",
@@ -108,14 +106,14 @@ dev = [
     "nbconvert>=7.16",
     "reportlab>=4.2",
     "python-pptx>=1.0",
-    # Client de deploiement de l'endpoint de demonstration (infra/modal_app.py).
+    # Deployment client for the demonstration endpoint (infra/modal_app.py).
     "modal>=1.0",
 ]
 
 [tool.uv]
 default-groups = ["dev", "train"]
 
-# --- Index PyTorch CUDA 13.0 (RTX 4060 Ti) et modeles spaCy ---
+# --- PyTorch CUDA 13.0 index (RTX 4060 Ti) and spaCy models ---
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }
 fr-core-news-md = { url = "https://github.com/explosion/spacy-models/releases/download/fr_core_news_md-3.8.0/fr_core_news_md-3.8.0-py3-none-any.whl" }
@@ -129,14 +127,14 @@ explicit = true
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-# Aucune exclusion. Un motif d'exclusion vaut pour tout dossier de ce nom, à
-# n'importe quelle profondeur : exclure `data` écarterait aussi le dossier
-# `data/` du paquet — catalogue clinique, règle de triage, constantes vitales et
-# anonymisation — et l'analyse passerait au vert sans avoir lu le cœur du projet.
+# No exclusion. An exclusion pattern applies to every folder of that name, at any
+# depth: excluding `data` would also drop the package's own `data/` folder — clinical
+# catalogue, triage rule, vital-sign constants and anonymisation — and the analysis
+# would go green without having read the heart of the project.
 
 [tool.ruff.lint]
 extend-select = ["I", "UP", "B", "C4", "SIM"]
-# E501 : la longueur de ligne est geree par le formateur.
+# E501: line length is the formatter's business.
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -146,41 +144,41 @@ ignore = ["E501"]
 addopts = "-ra -q --strict-markers --cov --cov-branch --cov-report=term-missing --cov-fail-under=70"
 testpaths = ["tests"]
 pythonpath = ["src"]
-# Le dossier dit la portee, le marqueur dit l'intention, et les deux se croisent : un `claim`
-# peut etre unitaire comme systeme. `--strict-markers` ferme le vocabulaire -- un marqueur mal
-# orthographie devient une erreur de collecte au lieu d'un filtre qui ne selectionne rien.
+# The folder says the scope, the marker says the intent, and the two cross: a `claim`
+# can be a unit test as readily as a system one. `--strict-markers` closes the
+# vocabulary — a misspelt marker becomes a collection error instead of a filter that
+# selects nothing.
 markers = [
-    "integration: assemble plusieurs modules dans ce processus, sans sortir de la machine",
-    "system: lance le produit dans son propre processus et lui parle par le reseau",
-    "claim: echoue des qu'un chiffre publie cesse de correspondre au code",
-    "simulation: rejoue une execution simulee plutot qu'une mesure reelle",
-    "slow: depasse la seconde, typiquement en demarrant un processus ou un moteur",
+    "integration: assembles several modules in this process, without leaving the machine",
+    "system: starts the product in its own process and talks to it over the network",
+    "claim: fails as soon as a published figure stops matching the code",
+    "simulation: replays a simulated run rather than a real measurement",
+    "slow: takes more than a second, typically by starting a process or an engine",
 ]
-# Un avertissement que personne ne lit est un defaut qui attend : ils sont tous des erreurs. La
-# seule exception est l'annonce de Starlette, qui reclame `httpx2` pour son client de test. Elle
-# est levee a l'import du client, le projet ne choisit pas ce client -- il vient de FastAPI --
-# et le service, lui, appelle `httpx` directement, hors de tout client de test. Rien dans ce
-# depot ne peut lever la condition ; elle sera levee par la mise a jour de FastAPI.
+# A warning nobody reads is a defect waiting: they are all errors here. The one
+# exception is Starlette's notice, which asks for `httpx2` for its test client. It is
+# raised when that client is imported, the project does not choose the client — it
+# comes with FastAPI — and the service itself calls `httpx` directly, outside any test
+# client. Nothing in this repository can lift the condition; a FastAPI upgrade will.
 filterwarnings = [
     "error",
     "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
 ]
 
 [tool.coverage.run]
-# Tout le Python suivi, pas seulement le paquet : `scripts/` porte la chaine de bout en
-# bout et `infra/` le descripteur de deploiement, et les deux sont couverts par des tests.
+# All the tracked Python, not the package alone: `scripts/` carries the chain end to
+# end and `infra/` the deployment descriptor, and both are covered by tests.
 source = ["src/clinical_triage", "scripts", "infra"]
-# Ces modules-la demandent un GPU : ils sont verifies par des executions reelles
-# du pipeline d'entrainement, pas par des tests unitaires. Les fichiers sont
-# nommes un par un, et non par un motif sur le groupe training/, qui en
-# exempterait aussi le suivi d'experiences et le calcul du nombre de pas de
-# chauffe -- deux modules de pur Python que les tests couvrent.
+# These modules need a GPU: they are verified by real runs of the training pipeline,
+# not by unit tests. The files are named one by one rather than by a pattern over the
+# training/ group, which would also exempt experiment tracking and the warm-up step
+# computation — two modules of pure Python that the tests do cover.
 #
-# Les quatre scripts d'entrainement sont exemptes pour la meme raison, et pour elle
-# seule : ils chargent les poids sur le GPU des leur premiere ligne utile. Les trois
-# autres scripts longs -- construction du jeu, evaluation, banc de latence -- restent
-# mesures bien qu'aucun test ne les couvre : ils demandent le Hub ou un endpoint
-# servi, pas une carte, et leur 0 % doit se voir.
+# The four training scripts are exempt for the same reason, and for that reason alone:
+# they load the weights onto the GPU from their first useful line. The other long
+# scripts — dataset build, evaluation, latency bench — stay measured although no test
+# covers them: they need the Hub or a served endpoint, not a card, and their 0% has to
+# be visible.
 omit = [
     "*/training/sft.py",
     "*/training/dpo.py",
@@ -194,10 +192,10 @@ omit = [
 
 [tool.bandit]
 exclude_dirs = [".venv", "tests"]
-# Ces deux dérogations valent pour tout ce que bandit analyse : le paquet et les
-# scripts, les deux périmètres que l'intégration continue lui passe en ligne de
-# commande. Elles suppriment neuf constats dans le paquet et six dans les
-# scripts ; sans elles, l'analyse sort en erreur dans les deux cas.
+# These two derogations apply to everything bandit analyses: the package and the
+# scripts, the two perimeters continuous integration passes it on the command line.
+# They remove nine findings in the package and six in the scripts; without them the
+# analysis exits in error in both cases.
 #
 # B615 signale tout téléchargement depuis le Hugging Face Hub sans révision
 # épinglée. Onze appels sont concernés, de trois natures :

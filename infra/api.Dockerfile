@@ -1,47 +1,44 @@
-# Passerelle API de triage : FastAPI devant un serveur vLLM.
+# Triage API gateway: FastAPI in front of a vLLM server.
 #
-# L'image ne contient ni torch ni poids de modèle. Elle valide les requêtes,
-# conduit le questionnaire adaptatif, applique la règle explicite de contrôle,
-# anonymise et journalise, puis délègue la génération à vLLM. Cette séparation
-# permet de redéployer la passerelle sans redéployer le modèle, et inversement.
+# The image contains neither torch nor model weights. It validates requests, runs the adaptive
+# questionnaire, applies the explicit control rule, anonymises and logs, then delegates
+# generation to vLLM. That separation is what lets the gateway be redeployed without
+# redeploying the model, and the other way round.
 #
-# L'image de base est épinglée par empreinte et les dépendances Python le sont
-# jusqu'à la dernière transitive : deux constructions de la même révision
-# produisent la même image.
+# The base image is pinned by digest and the Python dependencies down to the last transitive
+# one: two builds of the same revision produce the same image.
 FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
 
-# Sorties non tamponnées : les traces du conteneur arrivent en temps réel dans
-# le collecteur de journaux.
+# Unbuffered output: the container's traces reach the log collector in real time.
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-# Dépendances épinglées, installées avant le code : la couche est réutilisée
-# tant que le fichier ne change pas. Ce fichier est généré depuis
-# `requirements-api.in`, qui porte les contraintes et la procédure.
+# Pinned dependencies, installed before the code: the layer is reused as long as the file does
+# not change. That file is generated from `requirements-api.in`, which carries the constraints
+# and the procedure.
 COPY infra/requirements-api.txt /app/infra/requirements-api.txt
 RUN pip install --no-cache-dir -r /app/infra/requirements-api.txt
 
-# Code du paquet.
+# The package code.
 COPY src/clinical_triage /app/src/clinical_triage
 ENV PYTHONPATH=/app/src
 
-# Utilisateur sans privilège, propriétaire du répertoire des journaux d'audit.
+# Unprivileged user, owner of the audit log directory.
 RUN useradd --create-home --uid 10001 triage \
-    && mkdir -p /app/logs \
+    && mkdir -p /app/var/logs \
     && chown -R triage:triage /app
 USER triage
 
 ENV TRIAGE_BACKEND=vllm \
     TRIAGE_VLLM_URL=http://vllm:8000 \
-    TRIAGE_AUDIT_LOG=/app/logs/audit_triage.jsonl
+    TRIAGE_AUDIT_LOG=/app/var/logs/audit_triage.jsonl
 
 EXPOSE 8080
 
-# La sonde laisse au service le temps de charger les modèles spaCy avant de
-# compter les échecs.
+# The probe leaves the service time to load the spaCy models before it starts counting failures.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s \
     CMD python -c "import httpx,sys; sys.exit(0 if httpx.get('http://localhost:8080/health', timeout=4).json()['status']=='ok' else 1)"
 
