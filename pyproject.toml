@@ -146,7 +146,7 @@ ignore = ["E501"]
 "tests/*" = ["S101"]
 
 [tool.pytest.ini_options]
-addopts = "-ra -q --strict-markers --cov --cov-branch --cov-report=term-missing --cov-fail-under=70"
+addopts = "-ra -q --strict-markers --cov --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=70"
 testpaths = ["tests"]
 pythonpath = ["src"]
 # The folder says the scope, the marker says the intent, and the two cross: a `claim`
@@ -194,6 +194,12 @@ omit = [
     "scripts/tune_hyperparameters.py",
     "scripts/merge_adapter.py",
 ]
+
+# The coverage report is published: the header badge reads its line rate, and a rate nobody
+# can open is a number nobody can check. It is rewritten by every local run, so it describes
+# the suite as it stands rather than the day it was last thought about.
+[tool.coverage.xml]
+output = "reports/coverage/coverage.xml"
 
 [tool.bandit]
 exclude_dirs = [".venv", "tests"]

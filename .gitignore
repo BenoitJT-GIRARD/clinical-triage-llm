@@ -9,8 +9,10 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 .coverage
-coverage.xml
 htmlcov/
+# A stray report at the root. The published one lives in `reports/coverage/`, where the header
+# badge reads its line rate: a pattern without a slash would match that one too.
+/coverage.xml
 
 # IDE
 .vscode/
