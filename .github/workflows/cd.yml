@@ -1,22 +1,23 @@
 name: CD
 
-# Déploiement continu. Le pipeline distingue deux objets qui évoluent à des
-# rythmes différents :
+# Continuous deployment. The pipeline separates two objects that move at different rates:
 #
-#   - la **passerelle API**, reconstruite à chaque poussée sur `main` ;
-#   - le **modèle**, dont une version est figée sur le Hugging Face Hub lorsque
-#     le dépôt est étiqueté `modele-v*`.
+#   - the **API gateway**, rebuilt on every push to `main`;
+#   - the **model**, whose version is frozen on the Hugging Face Hub when the repository is
+#     tagged `model-v*`.
 #
-# Les deux se rejoignent dans le job de déploiement, qui transmet à l'hébergeur
-# le couple (image, révision de modèle). Le serveur d'inférence recharge les
-# poids depuis le Hub à la révision demandée : aucune image n'a à embarquer
-# trois gigaoctets. Une nouvelle version de modèle se livre donc sans
-# reconstruire la passerelle, et inversement.
+# The two meet in the deployment job, which hands the host the pair (image, model revision). The
+# inference server reloads the weights from the Hub at the revision asked for: no image has to
+# carry three gigabytes. A new model version therefore ships without rebuilding the gateway, and
+# the other way round.
+#
+# Actions are pinned by commit: a tag moves, and a moved tag is code nobody reviewed running
+# with this repository's secrets.
 
 on:
   push:
     branches: [main]
-    tags: ["v*", "modele-v*"]
+    tags: ["v*", "model-v*"]
   workflow_dispatch:
 
 permissions:
@@ -25,46 +26,45 @@ permissions:
 
 jobs:
   image:
-    name: Publier l'image de la passerelle
+    name: Publish the gateway image
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
-      image: ${{ steps.nom.outputs.image }}
+      image: ${{ steps.name.outputs.image }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      # GHCR n'accepte que des références en minuscules, alors que le nom du
-      # dépôt conserve la casse du compte propriétaire.
-      - name: Déterminer le nom de l'image
-        id: nom
+      # GHCR accepts lowercase references only, whereas the repository name keeps the case of
+      # the owning account.
+      - name: Determine the image name
+        id: name
         run: echo "image=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/api" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Connexion à GHCR
-        uses: docker/login-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Étiquettes de l'image
+      - name: Image tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
-          images: ${{ steps.nom.outputs.image }}
+          images: ${{ steps.name.outputs.image }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
             type=sha,format=short
             type=raw,value=latest,enable={{is_default_branch}}
 
-      # `sbom` et `provenance` joignent à l'image la liste de ce qu'elle contient
-      # et l'attestation de la façon dont elle a été construite. C'est ce qui
-      # permet, le jour où une vulnérabilité est publiée, de répondre sans
-      # reconstruire : cette image-là contient-elle le paquet concerné ?
-      - name: Construire et publier
-        uses: docker/build-push-action@v6
+      # `sbom` and `provenance` attach to the image the list of what it contains and the
+      # attestation of how it was built. That is what makes it possible, the day a vulnerability
+      # is published, to answer without rebuilding: does that image contain the package?
+      - name: Build and publish
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: infra/api.Dockerfile
@@ -76,122 +76,118 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  modele:
-    name: Publier la version du modèle
-    if: startsWith(github.ref, 'refs/tags/modele-v')
+  model:
+    name: Publish the model version
+    if: startsWith(github.ref, 'refs/tags/model-v')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
       revision: ${{ github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Installer uv
-        uses: astral-sh/setup-uv@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           enable-cache: true
 
-      - name: Installer Python 3.12
+      - name: Install Python 3.12
         run: uv python install 3.12
 
-      # Le groupe `train` reste dehors : publier une carte de modèle ne demande
-      # ni torch ni Unsloth. Les commandes qui suivent portent `--no-sync`, sans
-      # quoi `uv run` resynchronise avec les groupes par défaut (`dev` et
-      # `train`) et réinstalle ce que cette étape vient d'écarter.
-      - name: Synchroniser les dépendances
+      # The `train` group stays out: publishing a model card needs neither torch nor Unsloth.
+      # The commands that follow carry `--no-sync`, without which `uv run` resynchronises with
+      # the default groups (`dev` and `train`) and reinstalls what this step has just left out.
+      - name: Sync the dependencies
         run: uv sync --frozen --no-group train
 
-      # L'exécuteur ne publie que ce dont il dispose réellement : les **cartes de
-      # modèle**, qui sont versionnées. Ni les poids ni les jeux d'entraînement ne
-      # sont dans le dépôt — les premiers pèsent des gigaoctets, les seconds sont
-      # reconstruits par `scripts/build_dataset.py` et publiés depuis la machine qui les a
-      # produits. Publier le dataset d'ici téléverserait deux fichiers sur six et
-      # l'annoncerait comme un succès.
+      # The runner publishes only what it actually has: the **model cards**, which are
+      # versioned. Neither the weights nor the training sets are in the repository — the first
+      # weigh gigabytes, the second are rebuilt by `scripts/build_dataset.py` and published from
+      # the machine that produced them. Publishing the dataset from here would upload two files
+      # out of six and announce it as a success.
       #
-      # L'étiquette est le cœur du mécanisme : elle fige une révision citable sur
-      # le Hub, que le serveur d'inférence demandera explicitement. Sans elle, un
-      # déploiement pointerait sur `main`, qui bouge à chaque publication. Elle est
-      # posée sur chaque dépôt du Hub, dataset compris.
-      - name: Publier les cartes de modèle et étiqueter la version
+      # The tag is the heart of the mechanism: it freezes a citable revision on the Hub, which
+      # the inference server will ask for explicitly. Without it, a deployment would point at
+      # `main`, which moves at every publication. It is placed on every Hub repository this run
+      # touched, the dataset included.
+      - name: Publish the model cards and tag the version
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_NAMESPACE: ${{ vars.HF_NAMESPACE }}
-        run: uv run --no-sync python scripts/publish_to_hub.py --what cartes --etiquette "$GITHUB_REF_NAME"
+        run: uv run --no-sync python scripts/publish_to_hub.py --what cards --tag "$GITHUB_REF_NAME"
 
-      - name: Récapituler la version publiée
+      - name: Summarise the published version
         run: |
-          echo "### Version de modèle $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Model version $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Cartes de modèle publiées, étiquette $GITHUB_REF_NAME posée sur les dépôts du Hub." >> "$GITHUB_STEP_SUMMARY"
-          echo "Poids et jeux de données : téléversés depuis la machine d'entraînement." >> "$GITHUB_STEP_SUMMARY"
-          echo "Le serveur d'inférence chargera cette révision au déploiement." >> "$GITHUB_STEP_SUMMARY"
+          echo "Model cards published, tag $GITHUB_REF_NAME placed on the Hub repositories." >> "$GITHUB_STEP_SUMMARY"
+          echo "Weights and datasets: uploaded from the training machine." >> "$GITHUB_STEP_SUMMARY"
+          echo "The inference server will load this revision at deployment." >> "$GITHUB_STEP_SUMMARY"
 
-  deploiement:
-    name: Déployer l'endpoint
-    needs: [image, modele]
-    # `modele` ne s'exécute que sur une étiquette de modèle. Sans `always()`, son
-    # absence suffirait à annuler le déploiement de la passerelle seule.
+  deployment:
+    name: Deploy the endpoint
+    needs: [image, model]
+    # `model` only runs on a model tag. Without `always()`, its absence alone would cancel the
+    # deployment of the gateway on its own.
     if: >-
       ${{ always()
           && vars.DEPLOY_ENABLED == 'true'
           && needs.image.result == 'success'
-          && needs.modele.result != 'failure' }}
+          && needs.model.result != 'failure' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Installer uv
-        uses: astral-sh/setup-uv@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           enable-cache: true
 
-      - name: Installer Python 3.12
+      - name: Install Python 3.12
         run: uv python install 3.12
 
-      # Le paquet lui-même, pas seulement l'outillage : `infra/modal_app.py`
-      # importe `clinical_triage` au moment du déploiement, pour que le conteneur
-      # distant reçoive le code de service. Le groupe `train` reste dehors —
-      # l'exécuteur n'entraîne rien — et le déploiement ci-dessous porte
-      # `--no-sync` : `uv run` resynchroniserait sinon avec les groupes par
-      # défaut, soit plusieurs gigaoctets de roues CUDA réinstallées dans un job
-      # plafonné à quinze minutes qui doit encore attendre la sonde de santé.
-      - name: Synchroniser les dépendances
+      # The package itself, not only the tooling: `infra/modal_app.py` imports `clinical_triage`
+      # at deployment time, so that the remote container receives the service code. The `train`
+      # group stays out — the runner trains nothing — and the deployment below carries
+      # `--no-sync`: otherwise `uv run` would resynchronise with the default groups, that is
+      # several gigabytes of CUDA wheels reinstalled inside a fifteen-minute job that still has
+      # a health probe to wait for.
+      - name: Sync the dependencies
         run: uv sync --frozen --no-group train
 
-      # Modal reconstruit ses deux conteneurs à partir de `infra/modal_app.py` :
-      # le moteur vLLM, qui lit les poids sur le Hub à la révision ci-dessous, et
-      # la passerelle FastAPI. Hors étiquette de modèle, la révision vaut `main` :
-      # seule la passerelle change, le modèle en place reste servi.
+      # Modal rebuilds its two containers from `infra/modal_app.py`: the vLLM engine, which
+      # reads the weights from the Hub at the revision below, and the FastAPI gateway. Outside a
+      # model tag the revision is `main`: only the gateway changes, and the model in place goes
+      # on being served.
       #
-      # L'image publiée sur GHCR par le job `image` n'est pas ce que Modal
-      # déploie — elle sert l'installation sur site, décrite dans `infra/`. Les
-      # deux chemins partent du même code de service ; le job `image` reste donc
-      # une condition du déploiement, puisqu'il le compile et l'éprouve.
-      - name: Déployer sur Modal
+      # The image published to GHCR by the `image` job is not what Modal deploys — it serves the
+      # on-site installation, described in `infra/`. Both paths start from the same service
+      # code; the `image` job therefore remains a condition of the deployment, since it compiles
+      # and exercises it.
+      - name: Deploy to Modal
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-          # Le compte seul : l'identifiant complet se compose côté `modal_app.py`,
-          # avec le même repli que `config.py`. Interpolée nue, une variable de
-          # dépôt non définie arrive vide et donne « /qwen3-1.7b-clinical-triage ».
+          # The account alone: the full identifier is composed in `modal_app.py`, with the same
+          # fallback as `config.py`. Interpolated bare, an undefined repository variable arrives
+          # empty and gives "/qwen3-1.7b-clinical-triage".
           HF_NAMESPACE: ${{ vars.HF_NAMESPACE }}
-          TRIAGE_MODEL_REVISION: ${{ needs.modele.outputs.revision || 'main' }}
+          TRIAGE_MODEL_REVISION: ${{ needs.model.outputs.revision || 'main' }}
         run: uv run --no-sync modal deploy infra/modal_app.py
 
-      # Un déploiement qui ne vérifie pas son résultat n'est pas un déploiement.
-      - name: Vérifier la santé de l'endpoint après déploiement
+      # A deployment that does not check its result is not a deployment.
+      - name: Check the endpoint's health after deployment
         env:
           ENDPOINT: ${{ vars.DEPLOY_ENDPOINT_URL }}
         run: |
-          for tentative in $(seq 1 20); do
+          for attempt in $(seq 1 20); do
             if curl -fs "$ENDPOINT/health" | grep -q '"status":"ok"'; then
-              echo "Endpoint en bonne santé."
+              echo "Endpoint healthy."
               exit 0
             fi
             sleep 15
           done
-          echo "L'endpoint ne répond pas correctement après déploiement."
+          echo "The endpoint does not answer correctly after deployment."
           exit 1
-

@@ -1,18 +1,19 @@
 name: CI
 
-# Qualité continue : style, sécurité, tests et construction de l'image de
-# service, à chaque poussée et à chaque demande de fusion.
+# Continuous quality: style, security, tests and the build of the service image, on every push
+# and every pull request.
 #
-# Les dépendances d'entraînement sont volontairement écartées (`--no-group
-# train`) : aucun test n'importe torch, et les installer ferait télécharger
-# 2,5 Go de bibliothèques CUDA à chaque exécution. L'audit de sécurité, lui,
-# porte bien sur l'arbre complet : il lit le fichier de verrouillage plutôt que
-# l'environnement installé.
+# The training dependencies are deliberately left out (`--no-group train`): no test imports
+# torch, and installing them would download 2.5 GB of CUDA libraries on every run. The security
+# audit, on the other hand, does cover the whole tree: it reads the lock file rather than the
+# installed environment.
 #
-# Chaque commande lancée après la synchronisation porte `--no-sync` : `uv run`
-# resynchronise sinon l'environnement avec les groupes par défaut (`dev` et
-# `train`, voir `[tool.uv]` dans pyproject.toml) et réinstalle aussitôt le
-# groupe que la synchronisation venait d'écarter.
+# Every command run after the sync carries `--no-sync`: without it `uv run` resynchronises the
+# environment with the default groups (`dev` and `train`, see `[tool.uv]` in pyproject.toml) and
+# immediately reinstalls the group the sync had just left out.
+#
+# Actions are pinned by commit: a tag moves, and a moved tag is code nobody reviewed running
+# with this repository's token.
 
 on:
   push:
@@ -20,7 +21,7 @@ on:
   pull_request:
     branches: [main, develop]
 
-# Une nouvelle poussée annule l'exécution précédente sur la même branche.
+# A new push cancels the previous run on the same branch.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -29,22 +30,22 @@ permissions:
   contents: read
 
 jobs:
-  qualite:
-    name: Style et sécurité
+  quality:
+    name: Style and security
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Installer uv
-        uses: astral-sh/setup-uv@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           enable-cache: true
 
-      - name: Installer Python 3.12
+      - name: Install Python 3.12
         run: uv python install 3.12
 
-      - name: Synchroniser les dépendances
+      - name: Sync the dependencies
         run: uv sync --frozen --no-group train
 
       - name: Lint
@@ -53,109 +54,102 @@ jobs:
       - name: Format
         run: uv run --no-sync ruff format --check .
 
-      # Les deux analyses lisent la même configuration, donc les deux mêmes
-      # dérogations de chaîne, déclarées et justifiées dans `[tool.bandit]` :
-      # B615 (téléchargement depuis le Hub sans révision épinglée) et B311
-      # (générateur pseudo-aléatoire). Sans elles, bandit sort en erreur : neuf
-      # constats dans le paquet et six dans les scripts, relevant tous de ces
-      # deux familles. Les dérogations restantes sont écrites en ligne, sur les
-      # trois règles `subprocess` : `utils.py` interroge git pour la révision du
-      # dépôt, `11_package_deliverable.py` pour la dernière étiquette de modèle.
-      - name: Analyse statique de sécurité
+      # Both analyses read the same configuration, hence the same two project-wide derogations,
+      # declared and justified in `[tool.bandit]`: B615 (download from the Hub without a pinned
+      # revision) and B311 (pseudo-random generator). Without them bandit exits in error: nine
+      # findings in the package and six in the scripts, all of those two families. The remaining
+      # derogations are written inline, on the `subprocess` rules: `utils.py` asks git for the
+      # repository revision, and `scripts/smoke.py` asks it what the run reproduced.
+      - name: Static security analysis
         run: uv run --no-sync bandit -c pyproject.toml -r src/clinical_triage
 
-      # Le paquet et les scripts sont deux arbres distincts : `-r src/clinical_triage`
-      # ne descend pas dans `scripts/`, qui resterait sinon hors analyse.
-      - name: Analyse statique de sécurité des scripts
+      # The package and the scripts are two separate trees: `-r src/clinical_triage` does not
+      # descend into `scripts/`, which would otherwise go unanalysed.
+      - name: Static security analysis of the scripts
         run: uv run --no-sync bandit -c pyproject.toml -r scripts
 
-      # L'audit couvre l'arbre complet, groupe d'entraînement compris, sans avoir
-      # à l'installer : il lit le fichier de verrouillage, pas l'environnement.
+      # The audit covers the whole tree, training group included, without having to install it:
+      # it reads the lock file, not the environment.
       #
-      # Deux retouches avant l'audit, parce que pip-audit interroge PyPI :
-      #   - le suffixe local de torch (`+cu130`) désigne la même source que la
-      #     version publiée sur PyPI, mais n'existe pas comme numéro sur l'index :
-      #     sans le retirer, torch échapperait purement et simplement à l'audit ;
-      #   - les deux modèles spaCy sont des roues de données servies depuis une
-      #     publication GitHub figée, introuvables sur PyPI. `spacy`, qui porte le
-      #     code, reste audité.
-      # `--strict` garde ainsi tout son sens : n'importe quelle *autre* dépendance
-      # inauditable fait échouer la construction.
-      - name: Vulnérabilités connues des dépendances
+      # Two edits before the audit, because pip-audit queries PyPI:
+      #   - torch's local suffix (`+cu130`) designates the same source as the version published
+      #     on PyPI, but does not exist as a number on the index: without removing it, torch
+      #     would escape the audit entirely;
+      #   - the two spaCy models are data wheels served from a frozen GitHub release, and cannot
+      #     be found on PyPI. `spacy`, which carries the code, stays audited.
+      # `--strict` therefore keeps its meaning: any *other* unauditable dependency fails the
+      # build.
+      - name: Known vulnerabilities in the dependencies
         run: |
           uv export --frozen --no-hashes --no-emit-project --all-groups \
-            --format requirements-txt -o dependances-verrouillees.txt
-          grep -v 'spacy-models/releases' dependances-verrouillees.txt \
-            | sed -E 's/\+cu[0-9]+$//' > dependances-auditees.txt
-          # Quatre exceptions, toutes dans le groupe `train` — celui qui ne part
-          # jamais en production : l'image de service ne contient ni torch, ni
-          # transformers, ni datasets, et son propre audit ci-dessous est sans
-          # dérogation. Chacune est bornée par un plafond de version que la pile
-          # d'entraînement impose, et aucune n'est atteignable dans ce projet :
+            --format requirements-txt -o locked-dependencies.txt
+          grep -v 'spacy-models/releases' locked-dependencies.txt \
+            | sed -E 's/\+cu[0-9]+$//' > audited-dependencies.txt
+          # Four exceptions, all in the `train` group — the one that never goes to production:
+          # the service image contains neither torch, nor transformers, nor datasets, and its
+          # own audit below carries no derogation. Each is bounded by a version ceiling the
+          # training stack imposes, and none is reachable in this project:
           #
-          #   PYSEC-2026-3716  datasets  — traversée de répertoire dans les
-          #     constructeurs de jeux *par dossier*. On charge du JSONL local et
-          #     des dépôts du Hub, jamais un dossier à métadonnées.
-          #   PYSEC-2025-194   torch     — corruption mémoire dans
-          #     `torch.jit.script`, que le projet n'appelle nulle part.
-          #   PYSEC-2026-3929  transformers — écriture hors répertoire via les
-          #     clés d'un `chat_template` fourni sous forme de dictionnaire. Le
-          #     projet installe son propre gabarit, une chaîne unique, et ne
-          #     charge que des dépôts officiels ou les siens.
-          #   PYSEC-2026-3447  setuptools — normalisation Unicode des exclusions
-          #     `MANIFEST.in` sur APFS et HFS+, donc macOS uniquement, et au seul
-          #     moment de construire une distribution source. Version imposée par
-          #     la roue `torch 2.12.1+cu130`.
+          #   PYSEC-2026-3716  datasets  — directory traversal in the *folder-based* dataset
+          #     builders. This project loads local JSONL and Hub repositories, never a folder
+          #     with metadata.
+          #   PYSEC-2025-194   torch     — memory corruption in `torch.jit.script`, which the
+          #     project never calls.
+          #   PYSEC-2026-3929  transformers — write outside the directory through the keys of a
+          #     `chat_template` supplied as a dictionary. The project installs its own template,
+          #     a single string, and loads only official repositories or its own.
+          #   PYSEC-2026-3447  setuptools — Unicode normalisation of `MANIFEST.in` exclusions on
+          #     APFS and HFS+, so macOS only, and only when building a source distribution.
+          #     Version imposed by the `torch 2.12.1+cu130` wheel.
           #
-          # À réexaminer à chaque montée de version d'Unsloth : les plafonds
-          # qu'il impose (torch < 2.13, transformers <= 5.5, datasets < 4.4) sont
-          # la seule raison pour laquelle ces correctifs restent hors d'atteinte.
-          uv run --no-sync pip-audit --strict -r dependances-auditees.txt \
+          # To be reconsidered at every Unsloth upgrade: the ceilings it imposes (torch < 2.13,
+          # transformers <= 5.5, datasets < 4.4) are the only reason these fixes stay out of
+          # reach.
+          uv run --no-sync pip-audit --strict -r audited-dependencies.txt \
             --ignore-vuln PYSEC-2026-3716 \
             --ignore-vuln PYSEC-2025-194 \
             --ignore-vuln PYSEC-2026-3929 \
             --ignore-vuln PYSEC-2026-3447
 
-      # L'image déployée n'installe pas le fichier de verrouillage mais sa propre
-      # liste épinglée : sans cet audit-là, c'est justement ce qui tourne en
-      # production qui échapperait au contrôle.
-      - name: Vulnérabilités connues des dépendances de l'image
+      # The deployed image does not install the lock file but its own pinned list: without this
+      # second audit, what actually runs in production would be the one thing left unchecked.
+      - name: Known vulnerabilities in the image dependencies
         run: |
-          grep -v 'spacy-models/releases' infra/requirements-api.txt > image-auditee.txt
-          uv run --no-sync pip-audit --strict -r image-auditee.txt
+          grep -v 'spacy-models/releases' infra/requirements-api.txt > audited-image.txt
+          uv run --no-sync pip-audit --strict -r audited-image.txt
 
   tests:
     name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Installer uv
-        uses: astral-sh/setup-uv@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           enable-cache: true
 
-      - name: Installer Python 3.12
+      - name: Install Python 3.12
         run: uv python install 3.12
 
-      - name: Synchroniser les dépendances
+      - name: Sync the dependencies
         run: uv sync --frozen --no-group train
 
-      - name: Tests et couverture
+      - name: Tests and coverage
         run: uv run --no-sync pytest
 
   image:
-    name: Image de service
+    name: Service image
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
-      - name: Construire l'image de la passerelle
-        uses: docker/build-push-action@v6
+      - name: Build the gateway image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: infra/api.Dockerfile
@@ -165,32 +159,31 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Une image qui ne démarre pas n'est pas une image, et une authentification
-      # non testée n'en est pas une. Le moteur vLLM est absent de l'exécution de
-      # CI : la sonde doit donc répondre « degraded » tout en restant joignable.
-      - name: Vérifier que le service démarre, répond et refuse un appel sans clé
+      # An image that does not start is not an image, and an authentication nobody tested is not
+      # one either. The vLLM engine is absent from a CI run: the probe must therefore answer
+      # "degraded" while staying reachable.
+      - name: Check that the service starts, answers, and refuses a call without a key
         run: |
           docker run -d --name triage-api -p 8080:8080 \
-            -e TRIAGE_API_KEY=cle-de-test \
+            -e TRIAGE_API_KEY=ci-test-key \
             -e TRIAGE_VLLM_URL=http://127.0.0.1:9 \
             clinical-triage-api:ci
-          for tentative in $(seq 1 40); do
-            if curl -fs http://localhost:8080/health > sante.json; then break; fi
+          for attempt in $(seq 1 40); do
+            if curl -fs http://localhost:8080/health > health.json; then break; fi
             sleep 3
           done
-          cat sante.json
-          grep -q '"backend":"vllm"' sante.json
-          grep -q '"status":"degraded"' sante.json
+          cat health.json
+          grep -q '"backend":"vllm"' health.json
+          grep -q '"status":"degraded"' health.json
 
-          sans_cle=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/triage \
+          without_key=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/triage \
             -H 'Content-Type: application/json' -d '{"symptoms":"douleur thoracique"}')
-          test "$sans_cle" = "401"
+          test "$without_key" = "401"
 
           questionnaire=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/questionnaire/next \
-            -H 'Content-Type: application/json' -H 'X-API-Key: cle-de-test' \
+            -H 'Content-Type: application/json' -H 'X-API-Key: ci-test-key' \
             -d '{"chief_complaint":"mal de gorge"}')
           test "$questionnaire" = "200"
 
           docker logs triage-api
           docker rm -f triage-api
-
