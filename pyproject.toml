@@ -139,9 +139,28 @@ ignore = ["E501", "RUF001", "RUF002", "RUF003"]
 "tests/*" = ["S101"]
 
 [tool.pytest.ini_options]
-addopts = "-ra -q --cov=clinical_triage --cov-report=term-missing --cov-fail-under=70"
+addopts = "-ra -q --strict-markers --cov=clinical_triage --cov-branch --cov-report=term-missing --cov-fail-under=70"
 testpaths = ["tests"]
 pythonpath = ["src"]
+# Le dossier dit la portee, le marqueur dit l'intention, et les deux se croisent : un `claim`
+# peut etre unitaire comme systeme. `--strict-markers` ferme le vocabulaire -- un marqueur mal
+# orthographie devient une erreur de collecte au lieu d'un filtre qui ne selectionne rien.
+markers = [
+    "integration: assemble plusieurs modules dans ce processus, sans sortir de la machine",
+    "system: lance le produit dans son propre processus et lui parle par le reseau",
+    "claim: echoue des qu'un chiffre publie cesse de correspondre au code",
+    "simulation: rejoue une execution simulee plutot qu'une mesure reelle",
+    "slow: depasse la seconde, typiquement en demarrant un processus ou un moteur",
+]
+# Un avertissement que personne ne lit est un defaut qui attend : ils sont tous des erreurs. La
+# seule exception est l'annonce de Starlette, qui reclame `httpx2` pour son client de test. Elle
+# est levee a l'import du client, le projet ne choisit pas ce client -- il vient de FastAPI --
+# et le service, lui, appelle `httpx` directement, hors de tout client de test. Rien dans ce
+# depot ne peut lever la condition ; elle sera levee par la mise a jour de FastAPI.
+filterwarnings = [
+    "error",
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
 
 [tool.coverage.run]
 source = ["src/clinical_triage"]
