@@ -1,25 +1,45 @@
-# Ce qui ne doit jamais entrer dans le contexte de construction Docker.
-# Sans ce fichier, le démon reçoit les poids de modèles, le dataset et
-# l'historique git à chaque construction : plusieurs gigaoctets pour une image
-# qui ne copie que `src/`.
+# What the build must not see. The context is the repository root — `infra/docker-compose.yml`
+# declares `context: ..` — so everything below it is within reach of a COPY unless it is named
+# here. The image carries the package and its pinned dependency list, and nothing else: no
+# history, no virtual environment, no weights, no secrets.
+#
+# A pattern without `**/` matches at the root of the context only, which is why the caches carry
+# one and the top-level folders do not.
 
-.git/
-.github/
-.venv/
-venv/
-__pycache__/
-*.pyc
+# Version history: the largest thing in the repository, and useless to the image.
+.git
+.gitignore
+.gitattributes
+.github
 
-models/
-data/
-mlruns/
-logs/
-reports/
-notebooks/
-infos/
-
-.pytest_cache/
-.ruff_cache/
+# Local environments and caches.
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.ruff_cache
+.pytest_cache
+**/.ipynb_checkpoints
+htmlcov
 .coverage
-htmlcov/
+coverage.xml
+
+# Secrets. The service receives its settings from the host at run time.
 .env
+
+# Everything a run produces: weights, audit log, experiment store.
+var
+
+# What the image does not serve: the laboratory notebook, the published results and their
+# figures, the tests, the datasets and the documents.
+notebooks
+reports
+tests
+docs
+data
+
+# Editor and OS leftovers.
+.vscode
+.idea
+.DS_Store
+Thumbs.db
