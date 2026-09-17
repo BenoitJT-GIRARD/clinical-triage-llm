@@ -1,0 +1,65 @@
+{
+  "schema": "image-manifest/1",
+  "images": {
+    "api-contract.png": {
+      "sha256": "126b66a558a88a0a07a5efaca6138122b48c5843b8a670e4d195846c0a0cc7b8",
+      "written": "2026-09-17",
+      "source": "scripts/capture.py",
+      "command": "uv run python scripts/capture.py --only api-contract",
+      "target": "http://127.0.0.1:8010/docs",
+      "viewport": [
+        1280,
+        1000
+      ],
+      "device_scale_factor": 2,
+      "app_state": "the gateway started by SERVE_COMMAND with a capture key, and no inference engine behind it: the page is the contract, which does not depend on the engine",
+      "data_source": "none: the page is generated from the Pydantic models",
+      "demonstrates_behaviour": "the three routes and the X-API-Key scheme are generated from the Pydantic models, so the page a caller reads cannot drift from what the service enforces",
+      "git_revision": "c5f0a4664d1f360b1e5e8fad332627758c2fb32c",
+      "depends_on": [
+        "src/clinical_triage/serving/api.py",
+        "src/clinical_triage/serving/schemas.py"
+      ]
+    },
+    "questionnaire-answer.png": {
+      "sha256": "3d1c06f767d0819be3c4039da0e425a980bf3f98471acd31b8c1212a84ccdce3",
+      "written": "2026-09-17",
+      "source": "scripts/capture.py",
+      "command": "uv run python scripts/capture.py --only questionnaire-answer",
+      "target": "http://127.0.0.1:8010/docs#/default/questionnaire_next_questionnaire_next_post",
+      "viewport": [
+        1280,
+        1000
+      ],
+      "device_scale_factor": 2,
+      "app_state": "the same gateway, authorised with the capture key, after one call to POST /questionnaire/next carrying a chest-discomfort complaint and the three red-flag answers",
+      "data_source": "the questionnaire plan of src/clinical_triage/serving/questionnaire.py, written for this project",
+      "demonstrates_behaviour": "the questionnaire adapts to the complaint rather than reading a fixed list: the chest theme is detected and the next question asked is the one about radiating pain. Nothing here goes through the model — the answer is the explicit rule's, computed in the gateway",
+      "git_revision": "c5f0a4664d1f360b1e5e8fad332627758c2fb32c",
+      "paired_with": "triage-contract.png",
+      "depends_on": [
+        "src/clinical_triage/serving/questionnaire.py",
+        "src/clinical_triage/data/triage_rules.py"
+      ]
+    },
+    "triage-contract.png": {
+      "sha256": "6ca6229f9478abc5ababec9c40bebfb2c3523af3dc7590d32c3f74c7816e43a8",
+      "written": "2026-09-17",
+      "source": "scripts/capture.py",
+      "command": "uv run python scripts/capture.py --only triage-contract",
+      "target": "http://127.0.0.1:8010/docs#/default/triage_triage_post",
+      "viewport": [
+        1280,
+        1000
+      ],
+      "device_scale_factor": 2,
+      "app_state": "the same gateway, with the triage operation expanded on its reply schema",
+      "data_source": "none: the schema is generated from the Pydantic models",
+      "demonstrates_behaviour": "the reply carries `rule_level`, `rule_reasons` and `agreement` beside the model's own answer: a caller cannot read the decision without seeing whether the explicit rule agreed with it",
+      "git_revision": "c5f0a4664d1f360b1e5e8fad332627758c2fb32c",
+      "depends_on": [
+        "src/clinical_triage/serving/schemas.py"
+      ]
+    }
+  }
+}

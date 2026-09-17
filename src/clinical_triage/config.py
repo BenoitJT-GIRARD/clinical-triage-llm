@@ -48,6 +48,7 @@ class Paths:
     models: Path = PROJECT_ROOT / "var" / "models"
     reports: Path = PROJECT_ROOT / "reports"
     figures: Path = PROJECT_ROOT / "reports" / "figures"
+    images: Path = PROJECT_ROOT / "docs" / "images"
     logs: Path = PROJECT_ROOT / "var" / "logs"
     tracking: Path = PROJECT_ROOT / "var" / "mlruns"
 
