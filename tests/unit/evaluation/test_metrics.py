@@ -112,11 +112,10 @@ def test_the_full_summary():
 
 
 def test_the_accuracy_interval_goes_through_the_single_door():
-    """Below six cases no interval is publishable, including in the overall summary.
+    """Pins the summary on the same door as everything else, floor included.
 
-    The function hard-wired Wilson. On sixty cases the two paths agree, but the same function is
-    called on subgroups whose effectives fall to three, and a published interval that stops
-    following the written rule is exactly the kind of drift nothing would report.
+    Wilson used to be wired in here. The two paths give the same answer on sixty cases, so the
+    difference only shows on a subgroup — which is where nobody would have looked.
     """
     assert summarize([CRITICAL] * 3, [CRITICAL] * 3)["accuracy_ci95"] is None
     assert summarize([CRITICAL] * 8, [CRITICAL] * 8)["accuracy_ci95"] == clopper_pearson(8, 8)
@@ -199,7 +198,7 @@ def test_the_classical_baseline_learns_and_predicts():
 def test_the_classical_baseline_chooses_its_setting_on_the_validation_split():
     """The evaluation set must never enter the choice of the baseline.
 
-    A baseline tuned on the set that judges it is no longer one. The trace therefore publishes
+    A baseline that saw the judging set while choosing its own setting is not one. The trace
     the setting kept and the score that kept it, both from the validation split alone.
     """
     texts, levels = _separable_set(20)
@@ -224,7 +223,7 @@ def test_without_disagreement_nothing_separates_them():
 def test_the_mcnemar_test_reads_the_binomial_law(won, lost, expected):
     """On a handful of disagreements, the chi-square approximation makes no sense.
 
-    Each disagreement falls one way or the other on a coin toss under the null hypothesis: the
+    Under the null hypothesis a disagreement goes either way with equal chance, so the
     binomial law is read directly.
     """
     assert mcnemar_exact(won, lost) == pytest.approx(expected)
@@ -266,7 +265,7 @@ def test_a_mute_system_gets_the_best_overtriage_score():
 
 
 def test_with_no_observation_the_interval_is_total_ignorance():
-    """Zero measurements do not establish a null proportion, they establish nothing.
+    """An interval computed on nothing must cover everything.
 
     The function used to return [0, 0]: a zero-width interval drawn from nothing, that is to
     say absolute certainty — exactly the mistake a confidence interval exists to prevent.
@@ -317,10 +316,10 @@ def test_the_exact_method_is_more_cautious_than_wilson_on_small_effectives():
 
 
 def test_no_rate_is_published_below_six_observations():
-    """On three cases the exact interval covers 71% of the scale.
+    """Pins the floor: under six observations the function hands back no interval at all.
 
-    A whisker like that reads as "measured with uncertainty" when the correct reading is "not
-    measurable". The caller must write the raw fraction.
+    What the caller does with that — a hatched bar and the raw fraction — is decided in the
+    figures module; here only the refusal itself is held.
     """
     assert interval_for_proportion(3, 3) is None
     assert interval_for_proportion(4, 4) is None
@@ -336,7 +335,7 @@ def test_the_policy_picks_the_exact_method_then_wilson():
 def test_a_gap_is_read_on_its_own_interval_and_not_on_the_overlap():
     """The overlap fallacy gives the opposite of the right conclusion here.
 
-    On this project's numbers — 465/500 against 51/60 — the two Wilson intervals overlap widely,
+    Taken from the published results — 465/500 and 51/60 — the two marginal intervals overlap,
     and yet the interval on the difference excludes zero: the eight-point gap is real.
     """
     internal = wilson_interval(465, 500)

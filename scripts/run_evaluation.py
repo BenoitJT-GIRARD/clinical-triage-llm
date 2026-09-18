@@ -390,7 +390,7 @@ def main() -> None:
             }
 
         # Degraded inputs: a three-letter entry, a two-page paste, an off-domain question, a
-        # hijacked prompt. None has a right triage answer; what is checked is that the agent
+        # hijacked prompt. No level is correct for any of them; what is measured is whether
         # keeps its output contract.
         checks = robustness.run(agent)
         results["robustness"][name] = robustness.summarize(checks)

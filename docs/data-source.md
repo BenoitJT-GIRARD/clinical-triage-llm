@@ -74,9 +74,9 @@ a transcription of the rule, which the evaluation would then flatter.
 
 No real patient data is used. The catalogue vignettes are synthetic, and the public corpora are
 research sets with no identifying content. The anonymisation pass runs anyway, on both languages,
-and an independent check looks afterwards for what it might have missed — what it masks, what it
-deliberately does not, and what it still reports are in
-[`../data/README.md`](../data/README.md#gdpr-what-is-masked-and-what-is-checked).
+and a separate check looks afterwards for what it might have let through. The data card holds the
+three answers: the entities masked, the ones left alone on purpose, and the residue the check
+still reports — [`../data/README.md`](../data/README.md#gdpr-what-is-masked-and-what-is-checked).
 
 ## Reusing this dataset
 

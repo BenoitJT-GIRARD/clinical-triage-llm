@@ -1,8 +1,8 @@
 """A video-memory failure must be reported where it happens.
 
-When the card is full, the loading library silently spreads part of the layers onto the CPU.
-Unsloth memorises that placement, and the error only surfaces at the first generation as an
-"Invalid target device: None" that says nothing about its cause. These tests fix the expected
+A full card makes the loader place some layers on the processor without announcing it, and
+Unsloth then keeps that placement. Nothing fails until the first generation, which raises an
+"Invalid target device: None" naming neither the card nor the cause. These tests fix the expected
 behaviour: fail at loading, with what to do about it.
 """
 

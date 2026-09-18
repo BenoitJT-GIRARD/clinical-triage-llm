@@ -15,8 +15,8 @@ Two evaluation sets, deliberately, because they answer different questions.
 
 The **clinical set** is sixty cases written by hand, one at a time, each with the clinical reason
 for its label recorded beside it. Forty of them are urgent. None was seen during training, and
-none was labelled by the explicit rule — which is what makes the comparison against that rule
-mean something. Nearly half are written to mislead: a presentation that sounds reassuring and is
+the explicit rule never touched their labels — without which comparing the model to that rule
+would prove nothing. Nearly half are written to mislead: a presentation that sounds reassuring and is
 not, one that sounds alarming and is not, a negation, a vital sign that contradicts the
 narrative.
 
@@ -60,13 +60,13 @@ recipe. It is there because of a property of this base model.
 
 Its twenty-five ChatML control tokens share a single untrained vector: `im_start` and `im_end`
 have a cosine similarity of 1.000 to the third decimal. The output head is tied to the embedding
-matrix, and LoRA freezes both. The model therefore cannot emit the end-of-sequence token, and
-every answer runs to the generation cap. Training the head alongside the projections is what
-fixes it: clean stops go from none to all, and the median answer falls from the cap of 220 tokens
-to under a hundred.
+matrix, and LoRA freezes both. Nothing in the adapters can therefore teach the model to close its
+turn, and every answer runs to the generation cap. Adding the head to what is trained is what
+repairs it: every answer then stops by itself, and the median falls from the cap of 220 tokens to
+under a hundred.
 
 <!-- source: reports/training/sft.json -->
-![Training and validation loss against optimiser steps for the supervised run that produced the shipped model, n = 4,000 training examples and 500 validation examples](../reports/figures/sft_training.png)
+![Two curves, training and validation cross-entropy, falling as the optimiser advances on the run that produced the shipped weights, n = 4,000 training examples and 500 validation examples](../reports/figures/sft_training.png)
 
 <!-- source: reports/training/sft.json -->
 The run trains **346,030,080** parameters of 2,377,769,984 — **14.553%** — which is what the
@@ -76,7 +76,7 @@ one RTX 4060 Ti and never exceeds **7.43** gigabytes of GPU memory.
 ### The preference run
 
 <!-- source: reports/training/dpo.json -->
-![The preference run: DPO loss on the left, the reward margin it opens on the right, n = 2,160 training pairs](../reports/figures/dpo_alignment.png)
+![Two panels for the alignment run: its loss falling, and beside it the separation it opens between the preferred answer and the rejected one, n = 2,160 training pairs](../reports/figures/dpo_alignment.png)
 
 <!-- source: reports/training/dpo.json -->
 On its own validation pairs the alignment is complete: n = 240 pairs, **1.0** of them ordered
@@ -88,8 +88,8 @@ further down this page, and the answer is nothing.
 
 Never by the overlap of two confidence intervals. Two systems evaluated on the same cases are
 paired data, and on paired data the information lives entirely in the cases where they disagree:
-comparing marginal intervals throws that away, and is systematically too cautious. Two nearly
-superposed intervals are perfectly compatible with a real gap.
+comparing marginal intervals throws that away, and is systematically too cautious. Two intervals
+that all but coincide can still sit either side of a real difference.
 
 Every comparison in this repository is therefore an **exact McNemar test** on the same cases, and
 what it reports is the count each way — how many cases the model saves that the baseline loses,
@@ -137,9 +137,9 @@ a measurement.
 
 <!-- source: reports/evaluation_results.json -->
 The confusion matrices carry a column the triage scale does not have: **off-format**. An answer
-the information system cannot parse is not a prediction, and filing it under a level would move
-the error into a class it never named. For the shipped model that column is empty; for the base
-model it holds most of the answers.
+nothing can parse predicts nothing, and putting it in a level would attribute to that level an
+error it did not make. For the shipped model the column is empty; for the base model it holds
+most of the answers.
 
 <!-- source: reports/evaluation_results.json -->
 Read by level, n = 20 cases each, the shape of the failure is plain: recall on the
@@ -185,6 +185,5 @@ and therefore a way of describing a patient; a case written by a nurse would not
 That is the limitation most likely to flatter the numbers, and no measurement in this repository
 addresses it.
 
-The comparison against the ordinary classifier is not close to significant in either direction.
-"The model is not better than n-grams here" is what sixty cases support; "the model is worse" is
-not.
+Against the ordinary classifier, nothing is established either way. Sixty cases support "the
+model does not beat n-grams here"; they do not support "the model is worse".

@@ -75,7 +75,7 @@ def test_an_absent_log_reads_as_empty(tmp_path):
 
 
 def test_the_patient_name_is_masked_before_writing(tmp_path):
-    """A module that claims to write anonymised data must anonymise it itself, without
+    """The masking belongs to the writer, and is not left to the caller, without
     trusting its caller."""
     log = tmp_path / "audit.jsonl"
     record_interaction(

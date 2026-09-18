@@ -126,10 +126,10 @@ def test_the_hyperparameter_tuning_is_drawn(tmp_path):
 
 
 def test_a_validation_loss_that_was_not_measured_is_not_drawn_as_a_zero(tmp_path):
-    """A bar at zero would read as "this setting has nothing left to learn".
+    """Pins the treatment of a `None` loss: no bar, and the marker in its place.
 
-    That is the opposite of what a missing measurement allows anyone to say. The bar is left
-    out and the marker takes its place.
+    The reason is in `figures.hyperparameter_tuning`; what this test holds is that the drawing
+    never turns an absence into a zero.
     """
     comparison = {
         "kept": "r16_lr2e-4",
@@ -148,7 +148,7 @@ def test_a_validation_loss_that_was_not_measured_is_not_drawn_as_a_zero(tmp_path
 
 
 def test_the_training_curve_says_on_how_many_examples_it_was_measured(tmp_path):
-    """A gap between two validation points does not read the same on fifty as on five hundred."""
+    """Pins the two effectives into the manifest, where a reader of the image can find them."""
     history = [{"step": 20, "loss": 1.2}, {"step": 40, "loss": 0.8, "eval_loss": 0.9}]
     path = figures.sft_training(
         history,
@@ -196,10 +196,9 @@ def test_undertriage_by_subgroup_is_drawn(tmp_path):
 def test_a_subgroup_too_small_carries_no_whisker(tmp_path):
     """Three cases do not let a rate be estimated.
 
-    The exact interval of a perfect score on three cases is [0.29, 1.00]: it covers 71% of the
-    scale. A bar topped with a whisker like that reads as "measured, with uncertainty" when the
-    correct reading is "not measurable". The bar is hatched instead, and the hatch survives a
-    greyscale print.
+    Three out of three gives an exact interval of [0.29, 1.00] — most of the scale. Drawn as a
+    whisker it would promise a measurement; hatched, it says there is none. The hatch was chosen
+    over a colour because it survives a greyscale print.
     """
     by_system = {
         "SFT + DPO": {

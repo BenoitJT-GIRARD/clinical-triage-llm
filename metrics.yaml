@@ -1,7 +1,7 @@
-# What this repository's published numbers mean.
+# The legend of everything this repository counts.
 #
-# Every numeric column of every table in the README and in `docs/`, and every axis of every
-# figure, is a key below. Two of them are easy to confuse and cost a patient if confused:
+# Every table in the README and in `docs/` has a key below for each of its numeric columns,
+# and so does every figure axis. Two of them are easy to confuse and cost a patient if confused:
 # accuracy counts every case, undertriage counts only the urgent ones, and a system can move
 # one without moving the other. The entry says so rather than leaving the reader to work it out
 # from a column header.

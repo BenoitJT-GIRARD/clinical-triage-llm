@@ -11,8 +11,8 @@ name: CD
 # carry three gigabytes. A new model version therefore ships without rebuilding the gateway, and
 # the other way round.
 #
-# Actions are pinned by commit: a tag moves, and a moved tag is code nobody reviewed running
-# with this repository's secrets.
+# Every action is referenced by commit rather than by tag. A tag can be moved onto other code,
+# and that code would run here with the secrets below.
 
 on:
   push:
@@ -106,8 +106,8 @@ jobs:
       # The runner publishes only what it actually has: the **model cards**, which are
       # versioned. Neither the weights nor the training sets are in the repository — the first
       # weigh gigabytes, the second are rebuilt by `scripts/build_dataset.py` and published from
-      # the machine that produced them. Publishing the dataset from here would upload two files
-      # out of six and announce it as a success.
+      # the machine that produced them. A runner that tried would send two files of the six and
+      # report a success.
       #
       # The tag is the heart of the mechanism: it freezes a citable revision on the Hub, which
       # the inference server will ask for explicitly. Without it, a deployment would point at

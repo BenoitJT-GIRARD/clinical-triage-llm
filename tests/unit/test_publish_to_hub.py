@@ -52,7 +52,7 @@ def test_every_published_model_has_its_card(publication):
 
 
 def test_the_base_model_of_every_adapter_is_published(publication):
-    """Without it, ``PeftModel.from_pretrained`` would look for a repository that does not exist."""
+    """Pins the rule that every adapter's declared base is itself published."""
     published = {
         publication._model_repository(what) for what in publication.EVERYTHING if what != "dataset"
     }
@@ -88,11 +88,10 @@ def test_the_repository_identifiers_are_all_distinct():
 
 
 def test_an_incomplete_dataset_does_not_go_to_the_hub(publication, tmp_path, monkeypatch):
-    """Publishing from a cloned repository would upload two files out of six.
+    """Pins the refusal: an incomplete set stops the publication instead of truncating it.
 
-    The four training sets are not versioned: they are rebuilt by ``scripts/build_dataset.py``.
-    Without this guard rail the publication succeeded and said so, leaving a truncated dataset on
-    the Hub.
+    The refusal names what is missing, and names only that — a file already on disk must not
+    appear in the message, or the operator looks for a problem that is not there.
     """
     import dataclasses
 
@@ -128,10 +127,7 @@ def test_the_six_expected_files_are_the_ones_the_preparation_produces(publicatio
 
 
 def test_every_card_carries_the_marker_for_its_figures(publication):
-    """A model card with no measurable performance is not a card.
-
-    It is the first page anyone opening the repository on the Hub sees.
-    """
+    """Pins the marker every card must carry, since the figures are substituted into it."""
     for what in publication.MODELS:
         card = publication._model_card(what)
         assert "{{EVALUATION}}" in card.read_text(encoding="utf-8"), what

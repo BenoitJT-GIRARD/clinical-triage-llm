@@ -1,6 +1,6 @@
 """Tests of the robustness checks.
 
-Most degraded inputs have no right triage answer: what is checked is that the agent keeps its
+A degraded input rarely has a correct level at all. What these tests hold is that the agent keeps
 output contract. One input is the exception — the third-language description, which describes an
 acute coronary syndrome — and carries the level expected of it. These tests verify that each
 check really detects what it claims to detect.
@@ -176,9 +176,9 @@ def test_inputs_with_no_right_answer_require_no_level():
 
 
 def test_the_prompt_fingerprint_is_cut_from_the_prompt_itself():
-    """A copied fingerprint would keep matching a wording the service no longer uses.
+    """A fingerprint written out by hand goes on recognising a prompt nobody serves any more.
 
-    The check would then pass by describing a leak that can no longer happen — the worst kind of
+    The check then reports on a leak that stopped being possible — the worst kind of
     green.
     """
     from clinical_triage.evaluation.robustness import PROMPT_FINGERPRINT

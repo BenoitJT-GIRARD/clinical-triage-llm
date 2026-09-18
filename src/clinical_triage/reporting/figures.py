@@ -730,8 +730,8 @@ def endpoint_latency(measures: dict[str, dict], destination: Path) -> Path:
 def subgroup_undertriage(by_subgroup: dict[str, dict], destination: Path) -> Path:
     """Undertriage of the shipped model on each subgroup, with its exact interval.
 
-    Exact rather than Wilson, and drawn even below six cases: this is the safety metric, and
-    it is by subgroup that its effectives are smallest.
+    Exact rather than Wilson, and drawn even below six cases. Everywhere else a thin effective
+    means no interval; here it means the opposite, because this is the number patients pay for.
     """
 
     # Declared order rather than the artefact's: a chart sorted by name would put "discordant

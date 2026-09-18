@@ -112,10 +112,10 @@ def test_an_answer_with_no_level_extracts_none():
 
 
 def test_the_three_parts_are_read_back():
-    """Both texts are returned as the model wrote them, accents included.
+    """The justification and the recommendation come back untouched, accents and all.
 
-    They appear on the nurse's screen: "Fievre elevee" would be a visible mistake there. Only
-    the level line is read on a normalised text, because its label carries an accent the model
+    They land on the nurse's screen, where "Fievre elevee" would be a visible mistake. Only
+    the level itself is looked up after stripping accents, since the label the model
     may omit.
     """
     answer = build_target_response("URGENCE_MODEREE", "Fièvre élevée.", "Évaluation sous 4 heures.")

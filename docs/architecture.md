@@ -15,8 +15,8 @@ of them describes patients at all. The funnel in [`../data/README.md`](../data/R
 counts what each one really yields.
 
 So the truth comes from a **clinical catalogue** written for the project — seventy presentations,
-each with its complaint, its signs, its history, a vital-sign profile and the clinical reason for
-its level — from which a generator draws vignettes. The public corpora contribute authentic
+each carrying what a patient arrives with, what can be measured on them, and why that puts them
+at that level — from which a generator draws vignettes. The public corpora contribute authentic
 cases, filtered and labelled by an explicit rule, and carry an explicitly lower confidence that
 travels with every example.
 
@@ -39,9 +39,9 @@ the model worked. It was kept, wired into the service, and published in every re
 
 The reason is not sentimental. The rule never hallucinates and never invents a level; the model
 sometimes does. Where the two agree, the nurse has two independent reasons to trust the level.
-Where they disagree, the screen can say so, and the human decides with the disagreement in front
-of them rather than behind them. A decision-support agent that hides its disagreement is worse
-than no agent, because it converts a visible doubt into an invisible one.
+Where they disagree, the screen can say so, and the human decides with the doubt in front of them
+rather than behind them. Concealed, that doubt does not go away — it becomes a certainty nobody
+checked.
 
 **What was rejected.** Serving the rule as a fallback when the model fails — a silent switch —
 was rejected: the caller would have no way of knowing which system answered. The rule's verdict

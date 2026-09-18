@@ -18,14 +18,13 @@ every failure is one of them being up while the other is not.
 | engine | a GPU, the weights at a pinned revision | the gateway starts, answers the probe as degraded, and refuses every triage with 503 |
 
 The gateway **refuses to start** without `TRIAGE_API_KEY`, unless open mode is asked for
-explicitly. An authentication that switches itself off when a variable is missing is not an
-authentication, and the failure to start is the only way to make that visible at deployment
-rather than at the first request.
+explicitly. A check that disappears when its setting does is not a check at all, and refusing to
+start is the only way to show that at deployment rather than at the first request.
 
 It also opens the audit log at startup, empty, and refuses to serve if it cannot. Tracing every
-interaction is a requirement of this service; a service that answers without being able to record
-what it answered does not meet it. The case is not theoretical: it happens the moment a mounted
-volume belongs to another user than the one running the process.
+interaction is one of this service's obligations, and answering without being able to write down
+the answer breaks it. The case is not theoretical: a volume mounted from the host arrives owned
+by root, and the service does not run as root.
 
 ## The health probe, and what it does not say
 
@@ -67,12 +66,12 @@ anyone can saturate, so the gateway counts requests per caller over a sliding mi
 429 above the limit — announcing the limit in the message, so that an integrator does not have to
 discover it by trial and error.
 
-Two details that were defects first. The counting identity is the API key **only once it has been
-verified**: in open mode nobody verifies it, and a caller changing the header on every request
-used to get a fresh bucket each time. In open mode the identity is the caller's address instead.
-And the counter forgets callers that have gone quiet for a minute, without which it keeps one
-entry per address seen since startup — a counter meant to protect the service would end up
-straining it.
+Two details that were defects first. The key counts as an identity **only where it was checked
+against something**: open mode checks nothing, so a caller who changed the header at every
+request used to be handed a fresh bucket each time. There, the address is the identity instead.
+And callers that have gone quiet for a minute are dropped from the table, without which it grows
+by one entry per address seen since startup — protection that ends up costing more than what it
+protects.
 
 The default is sixty a minute, which fits a reception desk. A load bench holds a single key and
 passes that from its first concurrency level, so the compose file lets the value be raised for
@@ -87,12 +86,12 @@ engine, and the retention period in days.
 
 Three things about it are not obvious.
 
-**Both texts are masked, not just the incoming one.** The justification the model writes echoes
-the nurse's narrative, and would bring back through one door a name masked at the other.
+**Both texts are masked, not just the incoming one.** The model's justification repeats what the
+nurse wrote, so a name removed from the description would walk back in through the answer.
 
-**The model version is the one actually loaded**, passed by the service at call time rather than
-read from a constant. A configuration value could describe a model that is not the one that
-answered, and traceability that can be falsified traces nothing.
+**The model version is read from what is loaded**, and passed at call time rather than taken from
+a setting. A setting can name one model while another answers, and a trace that can say the wrong
+thing is not a trace.
 
 **The retention is written into every line**, so the obligation travels with the data rather than
 living in a document beside it.
@@ -112,23 +111,22 @@ runs unprivileged: every request then failed on the write, after having produced
 | 429 under a bench | the quota, working | raise `TRIAGE_RATE_LIMIT` for the measurement, not for the service |
 | answers cut mid-sentence | a description longer than the window | the reply says `description_truncated`; the bound is in characters, in the gateway |
 
-The last one deserves its sentence. A clinical narrative silently truncated is exactly what a
-decision-support system must not produce, so the gateway bounds it, says that it did, and the
-audit line records it. The bound is in characters because the gateway carries no tokenizer —
+The last one deserves its sentence. Cutting a patient's story without saying so is the one thing
+a system of this kind must never do, so the gateway bounds the description, announces the bound
+in its reply, and records it in the audit line. The bound is in characters because the gateway carries no tokenizer —
 that is the point of a thin gateway — and the character figure is set from the measured token
 budget.
 
 ## What is deployed, and what is not
 
-The on-demand deployment runs the same two applications: a GPU container serving the merged model
-with vLLM, and the same FastAPI application as the Docker image, exposed as is. Nothing is
-rewritten, only rewired. The engine shuts down after fifteen minutes without a request and comes
-back on the next one — on a credit account, a demonstration left running costs the rest of the
-month.
+The on-demand deployment raises the same pair: one container with a card, running vLLM over the
+merged weights, and the gateway of the Docker image, unchanged. Nothing is rewritten, only rewired.
+The engine shuts itself down after fifteen minutes of silence and wakes on the next request,
+which is what keeps a demonstration from consuming a month of credit while nobody watches.
 
-The engine gets a public address, like the gateway, and demands the service key: without that,
-the address alone would buy free GPU inference, with no quota, no anonymisation and no line in
-the audit log, at the account's expense.
+The engine gets a public address, like the gateway, and demands the service key. Without it,
+finding that address would be enough to run generations on someone else's card — untraced,
+unmasked, uncounted, and billed to them.
 
 **No service is running behind this repository today.** The deployment is a command, described in
 [`../infra/README.md`](../infra/README.md), not an address kept alive.

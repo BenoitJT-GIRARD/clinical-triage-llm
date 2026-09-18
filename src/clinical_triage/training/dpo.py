@@ -10,7 +10,7 @@ Four method choices, all meant to stop the alignment from undoing the work of th
    *new* LoRA adapter is attached to it. The library then uses the model with its adapter
    disabled as the reference: that is exactly the SFT model. Taking the base model as reference
    would allow DPO to drift away from the format just learnt.
-2. **``rpo_alpha`` adds the supervised loss on the preferred answer.** DPO alone optimises a
+2. **``rpo_alpha`` keeps a supervised term on the answer that was preferred.** DPO alone optimises a
    likelihood ratio: it can lower the probability of both answers as long as the gap widens.
    This second term keeps the preferred answer at a high likelihood.
 3. **the adapter does not touch the output head.** SFT already did, and the merged model that

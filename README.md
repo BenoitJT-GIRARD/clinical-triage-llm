@@ -15,8 +15,8 @@ their artefacts are committed, and every number below names the file it comes fr
 command anyone can run, not an address kept alive. What the figures and the documents rest on is
 `reports/run-evidence.json`, written by a run of `scripts/smoke.py` that redraws every published
 figure from the committed results and refuses to write anything if one of them comes out
-different. The workflows still fire on every push and every pull request; archiving the
-repository reduces them to a manual trigger.
+different. Pushes and pull requests still set the workflows off; the day this repository is
+archived, they fall back to a manual trigger.
 
 ## The problem
 
@@ -46,7 +46,7 @@ Three routes, and the third is the point.
 | Route | What it answers |
 |---|---|
 | `POST /questionnaire/next` | the next question to ask, chosen from the complaint; collection stops as soon as a vital sign appears |
-| `POST /triage` | a priority level, its justification, what to do next — **and the level the explicit rule would have chosen** |
+| `POST /triage` | the triage level, why, what to do — **and what the explicit rule would have decided** |
 | `GET /health` | whether the gateway and its inference engine are answering |
 
 <!-- source: docs/images/MANIFEST.json -->
@@ -71,9 +71,9 @@ over its OpenAI-compatible route. Request and reply shapes are **Pydantic** mode
 the contract page above is generated rather than written. The gateway's **Docker** image carries
 neither weights nor torch, so a new model version ships without rebuilding it.
 
-Around the code: **uv** for a locked environment, **Ruff** and **Bandit** on every push, and
-**pytest** in three tiers whose system tier starts the gateway in its own process and talks to it
-over HTTP. `datasets` keeps its cache in Arrow, and the **Parquet** reader is imported before
+Around all that: the environment is held to its lock file by **uv**, every push is read by
+**Ruff** and by **Bandit**, and **pytest** works in three tiers — the last of which starts the
+gateway in a process of its own and talks to it over the network. `datasets` keeps its cache in Arrow, and the **Parquet** reader is imported before
 torch in the suite: on Windows the other order ends the process with an access violation.
 
 ## The result
@@ -227,6 +227,6 @@ MIT — see [LICENSE](LICENSE).
 
 The training set is built from four public medical corpora, each used under its own licence and
 none redistributed here in its original form; the clinical vignettes and the evaluation cases
-were written for this project. No real patient data is used, and what the anonymisation masks —
-and what it still misses — is measured and published in
-[`data/README.md`](data/README.md#gdpr-what-is-masked-and-what-is-checked).
+were written for this project. No real patient data is used. The masking, and the residue a
+separate check still finds after it, are measured and published in the
+[data card](data/README.md#gdpr-what-is-masked-and-what-is-checked).

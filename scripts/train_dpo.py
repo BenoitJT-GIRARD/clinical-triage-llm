@@ -8,7 +8,7 @@ the format just learnt.
 Usage::
 
     uv run python scripts/train_dpo.py
-    uv run python scripts/train_dpo.py --max-steps 20   # pipeline check
+    uv run python scripts/train_dpo.py --max-steps 20   # does the chain hold?
     uv run python scripts/train_dpo.py --beta 0.2
 """
 

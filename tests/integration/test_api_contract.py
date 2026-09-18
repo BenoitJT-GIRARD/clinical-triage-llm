@@ -231,8 +231,8 @@ def test_the_contract_names_the_header_without_which_it_answers_401(client):
 def test_the_gateway_presents_a_key_to_the_engine(monkeypatch):
     """Without it, the engine's address alone buys GPU inference.
 
-    Free, with no quota, no anonymisation and no line in the audit log. Locally the engine asks
-    for none and the header is ignored; at a host it demands one, and the gateway must have it.
+    Free of charge, untraced and uncounted. On the local stack nothing checks that header; at a
+    host it is the only thing between the engine and whoever finds its address.
     """
     monkeypatch.setenv("TRIAGE_API_KEY", "service-key")
     monkeypatch.delenv("TRIAGE_VLLM_API_KEY", raising=False)

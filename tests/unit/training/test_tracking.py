@@ -1,6 +1,6 @@
 """Experiment tracking must never fail a training run.
 
-Training costs hours of GPU; tracking costs a few kilobytes of JSON. If the second falls over,
+Hours of card time on one side, a few kilobytes of JSON on the other. If the second breaks,
 the first carries on. These tests force the failures ``tracking`` claims to absorb, because a
 promise written in a docstring and never exercised is only an intention.
 """
