@@ -12,59 +12,57 @@ tags:
   - lora
 ---
 
-# Agent de triage médical the emergency department — adaptateur LoRA (fine-tuning supervisé)
+# Emergency triage assistant — LoRA adapter (supervised fine-tuning)
 
-Adaptateur LoRA issu du **fine-tuning supervisé** de `Qwen3-1.7B-Base` sur le
-corpus de triage du service. Il ne contient pas le modèle : il s'applique sur le
-modèle de base.
+A LoRA adapter from the **supervised fine-tuning** of `Qwen3-1.7B-Base` on the project's triage
+corpus. It holds no model: it applies on top of the base model.
 
-Pour un usage direct, préférer le
-[modèle final fusionné](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage),
-qui inclut en plus l'alignement par préférences.
+For direct use, prefer the
+[final merged model](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage), which
+carries the preference alignment as well.
 
-> **Prototype pédagogique.** Aide à la décision sous supervision humaine
-> obligatoire. Le catalogue clinique ayant servi à construire les données **n'a
-> pas été validé par un médecin urgentiste** : ne pas utiliser en situation
-> réelle. Devant tout signe vital engagé, appeler le 15 (SAMU).
+> **Teaching prototype.** This adapter proposes a triage level; a clinician decides it. The
+> catalogue its training data comes from **was written by a developer and reviewed by no
+> physician**, so nothing here belongs anywhere near a patient. Call the emergency services on
+> any life-threatening sign.
 
-## Utilisation
+## Use
 
 ```python
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 base = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-1.7B-Base", device_map="auto")
-modele = PeftModel.from_pretrained(base, "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-sft")
+model = PeftModel.from_pretrained(base, "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-sft")
 tokenizer = AutoTokenizer.from_pretrained("BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-sft")
 ```
 
-Le tokenizer publié ici porte le **gabarit de dialogue du projet** et déclare
-`<|im_end|>` comme jeton de fin de séquence. Charger le tokenizer du modèle de
-base à la place ferait générer sans jamais s'arrêter : le format appris n'est pas
-celui d'origine.
+The tokenizer published here carries the **project's dialogue template** and declares
+`<|im_end|>` as the end-of-sequence token. Loading the base model's tokenizer instead would
+generate without ever stopping: the format the adapter learnt is not the original one.
 
-## Format de sortie
+## Output format
 
 ```
 Niveau de priorité : URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE
-Justification : <explication clinique courte>
-Recommandation : <conduite à tenir>
+Justification : <short clinical explanation>
+Recommandation : <what to do next>
 ```
 
-## Évaluation
+## Evaluation
 
-Mesuré sur un jeu de cas **écrits à la main**, jamais vus à l'entraînement, dont près de
-la moitié sont des présentations atypiques.
+Sixty **hand-written** cases the model never met, forty of them urgent, with a good half built
+to mislead a reader who goes by keywords.
 
 {{EVALUATION}}
 
-Comparaison aux références, analyse d'erreurs et détail par langue : rapport
-technique du dépôt.
+How it stands against the explicit rule and against an ordinary classifier: the repository's
+protocol page.
 
-## Données, évaluation et limites
+## Data, evaluation and limits
 
-Voir la carte du [modèle final](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage)
-et le dépôt du projet : <https://github.com/BenoitJT-GIRARD/clinical-triage>
+The [final model](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage) carries
+the full account, and the code lives at <https://github.com/BenoitJT-GIRARD/clinical-triage>
 
 ## Licence
 

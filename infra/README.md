@@ -1,93 +1,88 @@
-# Déploiement de l'endpoint de triage
+# Deploying the triage endpoint
 
-L'agent est servi par **vLLM** derrière une passerelle **FastAPI**. Ce document
-couvre les trois situations : la démonstration locale, la pile complète en
-conteneurs, et le déploiement dans le cloud.
+The assistant is served by **vLLM** behind a **FastAPI** gateway. This page covers the three
+situations: the local demonstration, the full container stack, and the cloud deployment.
 
-## Architecture
+## Shape of it
 
 ```
-poste d'accueil / SIH  ──HTTPS──▶  passerelle FastAPI  ──HTTP──▶  serveur vLLM (GPU)
-                                   authentification              modèle fusionné
-                                   questionnaire adaptatif       traitement par lots
-                                   règle de contrôle             cache d'attention
-                                   anonymisation et audit
+reception desk / hospital IS  ──HTTPS──▶  FastAPI gateway  ──HTTP──▶  vLLM server (GPU)
+                                          authentication             merged model
+                                          adaptive questionnaire     batching
+                                          control rule               attention cache
+                                          anonymisation and audit
 ```
 
-La séparation est délibérée. La passerelle est légère — ni torch, ni poids — et
-se redéploie en quelques secondes ; le serveur d'inférence se met à jour sans
-toucher à la logique métier. Le contrat OpenAPI rend l'intégration au système
-d'information indépendante des deux.
+The split is deliberate. The gateway is light — no torch, no weights — and redeploys in seconds;
+the inference server updates without touching the business logic. The OpenAPI contract makes the
+integration independent of both.
 
-## 1. Préparer le modèle
+## 1. Preparing the model
 
-vLLM sert un modèle complet : il faut fusionner les adaptateurs.
+vLLM serves a whole model, so the adapters have to be merged.
 
 ```bash
 uv run python scripts/merge_adapter.py --adapter sft
 uv run python scripts/train_dpo.py
 uv run python scripts/merge_adapter.py --adapter dpo
-# produit models/qwen3-1.7b-triage-dpo-merged
+# produces var/models/qwen3-1.7b-triage-dpo-merged
 ```
 
-Le tokenizer exporté porte le gabarit de dialogue du projet et `<|im_end|>` comme
-jeton de fin de séquence. La configuration de génération voyage donc avec le
-modèle : tout moteur d'inférence s'arrête au bon endroit sans réglage côté appelant.
+The exported tokenizer carries the project's dialogue template and `<|im_end|>` as the
+end-of-sequence token. The generation configuration therefore travels with the model: any
+inference engine stops in the right place, with nothing to set on the caller's side.
 
-## 2. Pile complète en conteneurs
+## 2. The full container stack
 
-Prérequis : un hôte avec GPU NVIDIA et `nvidia-container-toolkit`. Sous Windows,
-Docker Desktop avec le backend WSL 2 convient.
+Requirements: a host with an NVIDIA GPU and `nvidia-container-toolkit`. On Windows, Docker
+Desktop with the WSL 2 backend will do.
 
 ```bash
-export TRIAGE_API_KEY="une-cle-choisie"
+export TRIAGE_API_KEY="a-key-of-your-choosing"
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-- passerelle : <http://localhost:8080/docs>
-- serveur vLLM : <http://localhost:8000/v1>
+- gateway: <http://localhost:8080/docs>
+- vLLM server: <http://localhost:8000/v1>
 
-8000 et 8080 sont des ports courants : si l'un est déjà pris sur la machine, la
-pile refuse de démarrer. Les deux se choisissent sans toucher au fichier de
-composition, et sans rien arrêter d'autre :
+8000 and 8080 are common ports: if one of them is already taken on the machine, the stack refuses
+to start. Both can be chosen without touching the compose file and without stopping anything
+else:
 
 ```bash
 TRIAGE_VLLM_PORT=8001 TRIAGE_API_PORT=8081 \
   docker compose -f infra/docker-compose.yml up --build
 ```
 
-Seule la publication côté hôte change ; à l'intérieur de la pile, la passerelle
-joint le moteur sur son port interne, qui ne bouge pas.
+Only what is published on the host changes; inside the stack, the gateway reaches the engine on
+its internal port, which does not move.
 
-**Si le dépôt est sur un disque synchronisé dans le nuage**, les poids doivent en
-sortir. Docker Desktop ne monte pas un disque virtuel de synchronisation : le
-conteneur démarre, ne trouve rien sous `/models`, prend le chemin pour un
-identifiant de dépôt Hugging Face et s'arrête sur `Repo id must be in the form
-'repo_name' or 'namespace/repo_name'`. La sonde de santé échoue alors sans dire
-pourquoi.
+**If the repository sits on a cloud-synchronised disk**, the weights have to live outside it.
+Docker Desktop does not mount a synchronisation virtual disk: the container starts, finds nothing
+under `/models`, takes the path for a Hugging Face repository identifier and stops on `Repo id
+must be in the form 'repo_name' or 'namespace/repo_name'`. The health probe then fails without
+saying why.
 
 ```bash
-cp -r models/qwen3-1.7b-triage-dpo-merged ~/.local/share/clinical-triage/models/
+cp -r var/models/qwen3-1.7b-triage-dpo-merged ~/.local/share/clinical-triage/models/
 TRIAGE_MODELS_DIR=~/.local/share/clinical-triage/models \
   docker compose -f infra/docker-compose.yml up --build
 ```
 
-**Si l'hôte est un poste Windows**, le moteur épinglé ne démarre pas. Le moteur
-V1 de vLLM exige l'adressage virtuel unifié de CUDA ; WSL 2 ne l'expose pas, et
-le serveur s'arrête sur `RuntimeError: UVA is not available` avant d'avoir chargé
-les poids. La bascule `VLLM_USE_V1=0` ne sert à rien : le moteur V0 a été retiré.
-Une version antérieure passe, au prix d'un moteur différent de celui du
-déploiement :
+**If the host is a Windows workstation**, the pinned engine will not start. vLLM's V1 engine
+requires CUDA's unified virtual addressing; WSL 2 does not expose it, and the server stops on
+`RuntimeError: UVA is not available` before loading any weights. The `VLLM_USE_V1=0` switch is of
+no help: the V0 engine has been removed. An earlier version works, at the price of an engine that
+is not the deployment's:
 
 ```bash
 TRIAGE_VLLM_IMAGE=vllm/vllm-openai:v0.11.0 \
   docker compose -f infra/docker-compose.yml up --build
 ```
 
-C'est la seule raison de surcharger cette variable. Sur un hôte Linux avec
-`nvidia-container-toolkit`, la version épinglée par empreinte fonctionne, et
-c'est elle qui doit servir : elle fige le moteur d'inférence sous un modèle et
-un contrat d'API donnés.
+That is the only reason to override this variable. On a Linux host with
+`nvidia-container-toolkit` the version pinned by digest works, and it is the one that should
+serve: it freezes the inference engine under a given model and a given API contract.
 
 ```bash
 curl -X POST http://localhost:8080/triage \
@@ -95,265 +90,258 @@ curl -X POST http://localhost:8080/triage \
   -d '{"symptoms": "Homme de 62 ans, douleur thoracique et sueurs depuis 20 minutes. TA 148/92, FC 102."}'
 ```
 
-La passerelle attend que vLLM se déclare en bonne santé avant de démarrer. Sans
-cette condition, les premières requêtes échouent pendant le chargement des poids
-et la sonde de la passerelle serait verte alors que l'inférence ne répond pas.
+Compose holds the gateway back until vLLM reports itself healthy. Started together, the first
+requests would fail during the minutes the weights take to load, and the gateway would report
+itself green throughout.
 
-Mesurer la performance de la pile, de bout en bout sur la passerelle — c'est ce
-que le service rend, anonymisation et journal d'audit compris :
+Measuring the stack end to end, on the gateway — which is what the service actually delivers,
+anonymisation and audit log included:
 
 ```bash
 uv run python scripts/benchmark_endpoint.py --api-key "$TRIAGE_API_KEY"
 ```
 
-Ajouter `--url-moteur http://localhost:8000` pour mesurer en plus le coût du
-moteur seul, que le rapport présente comme une décomposition et non comme la
-performance de l'endpoint.
+Add `--engine-url http://localhost:8000` to measure the cost of the engine alone as well, which
+the results present as a decomposition and not as the performance of the endpoint.
 
-Le banc n'utilise qu'une clé d'API, donc un seul seau de quota : au-delà du
-premier palier de concurrence, la passerelle lui répond 429. Relever le quota le
-temps de la mesure, sans toucher à la valeur de service :
+The bench holds a single API key, hence a single quota bucket: past the first concurrency level
+the gateway answers it 429. Raise the quota for the duration of the measurement, without
+touching the service value:
 
 ```bash
 TRIAGE_RATE_LIMIT=6000 docker compose -f infra/docker-compose.yml up -d
 ```
 
-## 3. Démonstration sans GPU ni Docker
+## 3. A demonstration without a GPU and without Docker
 
-vLLM ne fonctionne pas nativement sous Windows. Pour une démonstration locale, la
-passerelle sait charger le modèle elle-même avec `transformers` — plus lent, mais
-suffisant pour montrer le comportement.
+vLLM does not run natively on Windows. For a local demonstration the gateway can load the model
+itself with `transformers` — slower, but enough to show the behaviour.
 
 ```powershell
 $env:TRIAGE_BACKEND = "transformers"
-$env:TRIAGE_BASE_MODEL = "models/qwen3-1.7b-triage-sft-merged"
-$env:TRIAGE_ADAPTER_DIR = "models/qwen3-1.7b-triage-dpo"
-$env:TRIAGE_API_KEY = "cle-de-demonstration"
+$env:TRIAGE_BASE_MODEL = "var/models/qwen3-1.7b-triage-sft-merged"
+$env:TRIAGE_ADAPTER_DIR = "var/models/qwen3-1.7b-triage-dpo"
+$env:TRIAGE_API_KEY = "a-demonstration-key"
 uv run uvicorn clinical_triage.serving.api:app --port 8080
 ```
 
-Les latences obtenues dans ce mode ne sont pas comparables à celles de
-l'endpoint vLLM et ne doivent pas être rapportées comme telles.
+The latencies of this mode are not comparable with the vLLM endpoint's, and must not be reported
+as if they were.
 
-## 4. Déploiement cloud
+## 4. Cloud deployment
 
-### Option retenue — Modal
+### The option taken — Modal
 
-[Modal](https://modal.com) alloue un GPU à la demande, facture à la seconde et
-éteint le conteneur quand il n'est plus sollicité. Le compte gratuit reçoit 30 $
-de crédits renouvelés chaque mois, sans carte bancaire : une démonstration
-consomme moins d'une heure de L4, soit environ 0,80 $.
+[Modal](https://modal.com) allocates a GPU on demand, bills by the second and shuts the container
+down when nothing asks for it. The free account receives 30 $ of credit renewed every month,
+without a card: a demonstration consumes less than an hour of L4, about 0.80 $.
 
-`modal_app.py` monte les deux mêmes briques que la pile Docker de ce dossier — un
-conteneur GPU servant le modèle fusionné sous vLLM, et la passerelle FastAPI du
-projet exposée telle quelle. C'est la séparation du projet, pas une adaptation à
-l'hébergeur : le code de service n'est pas modifié d'une ligne.
+`modal_app.py` raises the same two pieces as the Docker stack of this folder — a GPU container
+serving the merged model under vLLM, and the project's FastAPI gateway exposed as is. That is the
+project's own split, not an adaptation to the host: not a line of the service code changes.
 
 ```bash
-uv run modal setup                      # authentification, ouvre le navigateur
+uv run modal setup                      # authentication, opens the browser
 uv run modal secret create clinical-triage \
-    TRIAGE_API_KEY="une-cle-choisie" \
+    TRIAGE_API_KEY="a-key-of-your-choosing" \
     HF_TOKEN="hf_..."
 uv run modal deploy infra/modal_app.py
 ```
 
-Le déploiement affiche deux adresses. Reporter celle du moteur dans le secret,
-puis redéployer pour que la passerelle sache où s'adresser :
+Two addresses are printed. The engine's belongs in the secret; redeploying afterwards is what
+tells the gateway where to send its requests:
 
 ```bash
 uv run modal secret create clinical-triage --force \
-    TRIAGE_API_KEY="une-cle-choisie" \
+    TRIAGE_API_KEY="a-key-of-your-choosing" \
     HF_TOKEN="hf_..." \
-    TRIAGE_VLLM_URL="https://<compte>--clinical-triage-moteur.modal.run"
+    TRIAGE_VLLM_URL="https://<account>--clinical-triage-engine.modal.run"
 uv run modal deploy infra/modal_app.py
 ```
 
-`modal setup` écrit les jetons du compte dans `~/.modal.toml`. En intégration
-continue, où il n'y a ni navigateur ni fichier de configuration, `MODAL_TOKEN_ID`
-et `MODAL_TOKEN_SECRET` les remplacent dans l'environnement du job.
+`modal setup` writes the account tokens into `~/.modal.toml`. In continuous integration, where
+there is neither a browser nor a configuration file, `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`
+replace them in the job's environment.
 
-Le moteur charge les poids **depuis le Hub, à la révision étiquetée** par le
-pipeline de déploiement continu : la démonstration reste rejouable à l'identique
-même si la branche par défaut bouge ensuite. Le cache Hugging Face est monté sur
-un volume persistant, faute de quoi chaque démarrage à froid retéléchargerait
-trois gigaoctets.
+The engine loads the weights **from the Hub, at the revision tagged** by the deployment pipeline:
+the demonstration stays replayable identically even if the default branch moves afterwards. The
+Hugging Face cache is mounted on a persistent volume, without which every cold start would
+re-download three gigabytes.
 
-Le dépôt et la révision se choisissent par `HF_NAMESPACE`, `TRIAGE_MODEL_ID` et
-`TRIAGE_MODEL_REVISION`, posées dans le shell au moment du `modal deploy` :
-`infra/modal_app.py` s'exécute sur le poste et lit son environnement dès
-l'import, avant que le paquet du projet — et donc `.env` — ne soit chargé. Sans elles, le
-déploiement sert le modèle et la révision épinglés dans le fichier.
+The repository and the revision are chosen through `HF_NAMESPACE`, `TRIAGE_MODEL_ID` and
+`TRIAGE_MODEL_REVISION`, set in the shell at `modal deploy` time: `infra/modal_app.py` runs on the
+workstation and reads its environment at import, before the project's package — and therefore
+`.env` — is loaded. Without them, the deployment serves the model and the revision pinned in the
+file.
 
-**Le jour d'une démonstration**, réveiller l'endpoint cinq minutes avant de
-passer : un démarrage à froid tient en une minute quand le cache est chaud, mais
-une minute de silence devant un auditoire est longue. `GET /health` interroge
-réellement le moteur et sert exactement à ça.
+**On the day of a demonstration**, wake the endpoint five minutes before going on: a cold start
+takes a minute when the cache is warm, and a minute of silence in front of an audience is long.
+`GET /health` really questions the engine, and exists for exactly that.
 
-### Option A — conteneur vLLM managé
+### Option A — a managed vLLM container
 
-1. Publier le modèle fusionné sur le Hub :
+1. Publish the merged model on the Hub:
    ```bash
-   export HF_TOKEN="hf_..."      # jeton d'écriture
-   export HF_NAMESPACE="votre-compte"
-   uv run python scripts/publish_to_hub.py --what modele-final
+   export HF_TOKEN="hf_..."      # a write token
+   export HF_NAMESPACE="your-account"
+   uv run python scripts/publish_to_hub.py --what final-model
    ```
-2. Créer un endpoint d'inférence chez l'hébergeur, en choisissant le dépôt du
-   modèle, un GPU de la classe L4 ou équivalent, et le conteneur vLLM.
-3. Déployer la passerelle — l'image publiée par le pipeline sur GHCR — sur un
-   service de conteneurs sans GPU, avec `TRIAGE_VLLM_URL` pointant vers
-   l'endpoint d'inférence et `TRIAGE_API_KEY` en secret.
+2. Create an inference endpoint at the host, choosing the model repository, an L4-class GPU or
+   equivalent, and the vLLM container.
+3. Deploy the gateway — the image the pipeline publishes to GHCR — on a container service without
+   a GPU, with `TRIAGE_VLLM_URL` pointing at the inference endpoint and `TRIAGE_API_KEY` as a
+   secret.
 
-### Option B — machine virtuelle avec GPU
+### Option B — a virtual machine with a GPU
 
-1. Provisionner une machine avec GPU, Docker et `nvidia-container-toolkit`.
-2. Copier `models/qwen3-1.7b-triage-dpo-merged` sur la machine, ou laisser vLLM
-   le télécharger depuis le Hub.
+1. Provision a machine with a GPU, Docker and `nvidia-container-toolkit`.
+2. Copy `var/models/qwen3-1.7b-triage-dpo-merged` onto the machine, or let vLLM download it from
+   the Hub.
 3. `docker compose -f infra/docker-compose.yml up -d`
-4. Exposer le port 8080 derrière un proxy inverse avec certificat TLS.
+4. Expose port 8080 behind a reverse proxy with a TLS certificate.
 
-### Livrer une nouvelle version du modèle
+### Shipping a new model version
 
-Les poids sont téléversés depuis la machine d'entraînement — ils ne transitent
-pas par l'intégration continue. C'est l'**étiquette de version** qui fait le lien.
+The weights are uploaded from the training machine — they do not travel through continuous
+integration. The **version tag** is what ties the two together.
 
 ```bash
-uv run python scripts/publish_to_hub.py --what tout     # poids, dataset, cartes
-git tag modele-v1.0.0 && git push origin modele-v1.0.0 # déclenche le pipeline
+uv run python scripts/publish_to_hub.py --what all      # weights, dataset, cards
+git tag model-v1.0.0 && git push origin model-v1.0.0    # triggers the pipeline
 ```
 
-L'étiquette déclenche le job `modele` de `cd.yml` : republication du dataset et
-des cartes, puis pose de l'étiquette `modele-v1.0.0` sur les dépôts du Hub. Le
-job de déploiement relance ensuite `modal deploy` avec cette révision, et le
-serveur d'inférence redémarre sur ces poids-là :
+The tag triggers the `model` job of `cd.yml`: the model cards are republished, then the
+`model-v1.0.0` tag is placed on the Hub repositories, the dataset included. The dataset files
+themselves are not republished from there — the pipeline did not rebuild them and holds only two
+of the six. They travel with the weights, from the training machine, through the command above.
+The deployment job then runs `modal deploy` with that revision, and the inference server restarts
+on those weights:
 
 ```bash
-vllm serve <compte>/qwen3-1.7b-clinical-triage --revision modele-v1.0.0 \
+vllm serve <account>/qwen3-1.7b-clinical-triage --revision model-v1.0.0 \
   --served-model-name qwen3-1.7b-clinical-triage --max-model-len 1024
 ```
 
-Épingler la révision plutôt que la branche par défaut est ce qui rend un
-déploiement reproductible : `main` désigne un contenu qui change à chaque
-publication, `modele-v1.0.0` désigne toujours les mêmes poids. C'est aussi ce qui
-rend le retour arrière trivial — redéployer l'étiquette précédente.
+Pinning the revision rather than the default branch is what makes a deployment reproducible:
+`main` designates content that changes at every publication, `model-v1.0.0` always designates the
+same weights. It is also what makes rolling back trivial — redeploy the previous tag.
 
-### Ce que le dépôt GitHub doit connaître
+The four cards published beside the weights are versioned here, and the continuous-deployment job
+is what substitutes the evaluation figures and the served revision into them:
+[`model-cards/final-model.md`](model-cards/final-model.md) for the model the service serves,
+[`model-cards/sft-adapter.md`](model-cards/sft-adapter.md) and
+[`model-cards/dpo-adapter.md`](model-cards/dpo-adapter.md) for the two adapters, and
+[`model-cards/merged-sft-model.md`](model-cards/merged-sft-model.md) for the intermediate model
+the second adapter needs in order to load at all.
 
-Le déploiement automatique est **désactivé tant qu'on ne l'a pas armé**. Il ne
-s'exécute que si la variable `DEPLOY_ENABLED` vaut `true` : sans elle, la chaîne
-construit, teste et publie, mais ne touche à rien de vivant.
+### What the GitHub repository has to know
 
-| Nom | Type | Rôle |
+Automatic deployment is **disabled until it is armed**. It runs only if the `DEPLOY_ENABLED`
+variable is `true`: without it the chain builds, tests and publishes, but touches nothing alive.
+
+| Name | Type | Role |
 |---|---|---|
-| `MODAL_TOKEN_ID` | secret | jeton Modal, obtenu par `modal token new` |
-| `MODAL_TOKEN_SECRET` | secret | sa moitié secrète |
-| `HF_TOKEN` | secret | republication du dataset et des cartes sur le Hub |
-| `DEPLOY_ENABLED` | variable | `true` pour armer le déploiement |
-| `DEPLOY_ENDPOINT_URL` | variable | adresse de la passerelle, sondée après déploiement |
-| `HF_NAMESPACE` | variable | compte Hugging Face cible, si ce n'est pas celui par défaut |
+| `MODAL_TOKEN_ID` | secret | Modal token, from `modal token new` |
+| `MODAL_TOKEN_SECRET` | secret | its secret half |
+| `HF_TOKEN` | secret | republishing the model cards and placing the tag on the Hub |
+| `DEPLOY_ENABLED` | variable | `true` to arm the deployment |
+| `DEPLOY_ENDPOINT_URL` | variable | address of the gateway, probed after deployment |
+| `HF_NAMESPACE` | variable | target Hugging Face account, when it is not the default |
 
-La clé d'API du service et le jeton Hugging Face du conteneur ne passent pas par
-GitHub : ils vivent dans le secret Modal `clinical-triage`, créé plus haut. GitHub
-n'a besoin que de savoir déployer, pas de connaître ce que le service manipule.
+The service API key and the container's Hugging Face token do not go through GitHub: they live in
+the Modal secret `clinical-triage`, created above. GitHub needs to know how to deploy, not what
+the service handles.
 
 ## Configuration
 
-Variables lues par la passerelle elle-même, dans `.env` à la racine ou dans
-l'environnement du conteneur :
+Variables the gateway itself reads, from `.env` at the root or from the container's environment:
 
-| Variable | Rôle | Défaut |
+| Variable | Role | Default |
 |---|---|---|
-| `TRIAGE_API_KEY` | clé d'API attendue en en-tête `X-API-Key` | **aucun — le service refuse de démarrer sans** |
-| `TRIAGE_ALLOW_ANONYMOUS` | autorise explicitement le mode ouvert, pour la démonstration | `false` |
-| `TRIAGE_BACKEND` | `vllm` ou `transformers` | `vllm` |
-| `TRIAGE_VLLM_URL` | adresse du serveur d'inférence | `http://localhost:8000` |
-| `TRIAGE_VLLM_MODEL` | nom du modèle servi par vLLM | `qwen3-1.7b-clinical-triage` |
-| `TRIAGE_VLLM_API_KEY` | clé présentée au moteur d'inférence | à défaut, `TRIAGE_API_KEY` |
-| `TRIAGE_BASE_MODEL` | modèle chargé en mode `transformers` | modèle SFT fusionné |
-| `TRIAGE_ADAPTER_DIR` | adaptateur appliqué en mode `transformers` | adaptateur DPO |
-| `TRIAGE_MODEL_VERSION` | version inscrite au journal d'audit | `qwen3-1.7b-clinical-triage` |
-| `TRIAGE_AUDIT_LOG` | chemin du journal d'audit | `logs/audit_triage.jsonl` |
-| `TRIAGE_RATE_LIMIT` | requêtes par minute et par appelant | `60` |
+| `TRIAGE_API_KEY` | key expected in the `X-API-Key` header | **none — the service refuses to start without it** |
+| `TRIAGE_ALLOW_ANONYMOUS` | explicitly allows open mode, for a demonstration | `false` |
+| `TRIAGE_BACKEND` | `vllm` or `transformers` | `vllm` |
+| `TRIAGE_VLLM_URL` | address of the inference server | `http://localhost:8000` |
+| `TRIAGE_VLLM_MODEL` | name of the model vLLM serves | `qwen3-1.7b-clinical-triage` |
+| `TRIAGE_VLLM_API_KEY` | key presented to the inference engine | failing that, `TRIAGE_API_KEY` |
+| `TRIAGE_BASE_MODEL` | model loaded in `transformers` mode | the merged SFT model |
+| `TRIAGE_ADAPTER_DIR` | adapter applied in `transformers` mode | the DPO adapter |
+| `TRIAGE_MODEL_VERSION` | version written to the audit log | `qwen3-1.7b-clinical-triage` |
+| `TRIAGE_AUDIT_LOG` | path of the audit log | `var/logs/audit_triage.jsonl` |
+| `TRIAGE_RATE_LIMIT` | requests per minute and per caller | `60` |
 
-Variables lues par les outils qui montent la pile, et non par le service. Elles
-ne passent pas par le `.env` de la racine — `HF_NAMESPACE` exceptée, que
-`config.py` lit aussi pour la publication sur le Hub : `docker compose -f
-infra/docker-compose.yml` cherche son fichier d'environnement dans `infra/`,
-et la commande `modal` charge `infra/modal_app.py` hors du processus qui lit
-`.env`. Les unes comme les autres se posent dans le shell, en préfixe de la
-commande ou par `export`, comme dans les exemples plus haut.
+Variables the tools that raise the stack read, and not the service. They do not go through the
+`.env` at the root — `HF_NAMESPACE` excepted, which `config.py` also reads for publication:
+`docker compose -f infra/docker-compose.yml` looks for its environment file in `infra/`, and the
+`modal` command loads `infra/modal_app.py` outside the process that reads `.env`. Both kinds are
+set in the shell, as a prefix to the command or through `export`, as in the examples above.
 
-| Variable | Lue par | Rôle | Défaut |
+| Variable | Read by | Role | Default |
 |---|---|---|---|
-| `TRIAGE_VLLM_PORT` | `docker compose` | port du moteur publié sur l'hôte | `8000` |
-| `TRIAGE_API_PORT` | `docker compose` | port de la passerelle publié sur l'hôte | `8080` |
-| `TRIAGE_MODELS_DIR` | `docker compose` | dossier des poids, côté hôte, monté sur `/models` | `../models` |
-| `TRIAGE_VLLM_IMAGE` | `docker compose` | image du moteur d'inférence | version épinglée par empreinte |
-| `HF_NAMESPACE` | `modal deploy`, et `config.py` pour la publication | compte Hugging Face d'où le moteur tire les poids | `BenoitJT-GIRARD` |
-| `TRIAGE_MODEL_ID` | `modal deploy` | dépôt du modèle servi | `<HF_NAMESPACE>/qwen3-1.7b-clinical-triage` |
-| `TRIAGE_MODEL_REVISION` | `modal deploy` | révision épinglée des poids | `modele-v1.0.0` |
+| `TRIAGE_VLLM_PORT` | `docker compose` | engine port published on the host | `8000` |
+| `TRIAGE_API_PORT` | `docker compose` | gateway port published on the host | `8080` |
+| `TRIAGE_MODELS_DIR` | `docker compose` | weights folder on the host, mounted on `/models` | `../var/models` |
+| `TRIAGE_VLLM_IMAGE` | `docker compose` | inference engine image | the version pinned by digest |
+| `HF_NAMESPACE` | `modal deploy`, and `config.py` for publication | Hugging Face account the engine pulls the weights from | `BenoitJT-GIRARD` |
+| `TRIAGE_MODEL_ID` | `modal deploy` | repository of the served model | `<HF_NAMESPACE>/qwen3-1.7b-clinical-triage` |
+| `TRIAGE_MODEL_REVISION` | `modal deploy` | pinned revision of the weights | `model-v1.0.0` |
 
-`docker compose` interpole aussi `TRIAGE_API_KEY` et `TRIAGE_RATE_LIMIT` avant
-de les passer au conteneur : sur la pile en conteneurs, ces deux-là viennent
-donc du shell elles aussi. Sans `TRIAGE_API_KEY`, la pile s'arrête avant de
-démarrer, en le disant.
+`docker compose` also interpolates `TRIAGE_API_KEY` and `TRIAGE_RATE_LIMIT` before passing them
+to the container: on the container stack those two come from the shell as well. Without
+`TRIAGE_API_KEY`, the stack stops before starting, and says so.
 
-`.env.example` à la racine liste les variables du premier tableau, ainsi que le
-jeton et le compte Hugging Face des scripts de publication et les emplacements
-de cache et de suivi. Copié en `.env`, il est lu par `config.py` — sans jamais
-écraser une variable déjà posée dans l'environnement, pour qu'un hébergeur garde
-la main sur ses propres secrets. Le fichier est exclu de git et du contexte de
-construction Docker.
+`.env.example` at the root lists the variables of the first table, along with the Hugging Face
+token and account the publication scripts need and the cache and tracking locations. Copied to
+`.env`, it is read by `config.py` — never overwriting a variable already set in the environment,
+so that a host keeps control of its own secrets. The file is excluded from git and from the
+Docker build context.
 
-## Sécurité
+## Security
 
-- **Clé d'API obligatoire.** Le service refuse de démarrer sans elle. Le mode
-  ouvert existe pour la démonstration locale et doit être demandé explicitement.
-- **Comparaison à temps constant**, pour ne pas laisser reconstituer la clé par la
-  durée de réponse.
-- **Quota par appelant** sur fenêtre glissante : chaque requête mobilise un GPU,
-  et un endpoint sans quota est trivialement saturable.
-- **Secrets** hors du dépôt, en variables d'environnement chiffrées côté hébergeur.
-- **Conteneur** exécuté sans privilège, image de base épinglée par empreinte,
-  dépendances épinglées jusqu'à la dernière transitive et auditées en intégration
-  continue, sans dérogation.
-- **Moteur d'inférence** lié à la boucle locale dans la pile en conteneurs, et
-  protégé par une clé dès qu'il est joignable autrement : il n'a ni quota ni
-  journal d'audit, c'est la passerelle qui les porte.
-- **TLS** à la charge du proxy inverse ou de l'hébergeur.
+- **No key, no service.** Startup fails rather than falling back to an open port. Open mode
+  exists for a local demonstration, and has to be asked for by name.
+- **Constant-time comparison**, so that the key cannot be reconstructed from the response time.
+- **Per-caller quota** over a sliding window: every request takes a GPU, and an endpoint without
+  a quota is trivially saturable.
+- **Secrets** outside the repository, as encrypted environment variables on the host's side.
+- **The container** runs unprivileged, from a base image pinned by digest, with dependencies
+  pinned down to the last transitive one and audited in continuous integration, without
+  derogation.
+- **The inference engine** is bound to the loopback in the container stack, and protected by a key
+  as soon as it is reachable otherwise: it has neither quota nor audit log, and the gateway is
+  what carries both.
+- **TLS** is the reverse proxy's or the host's business.
 
-## Exploitation
+## Running it
 
-| Indicateur | Seuil d'alerte | Réaction |
+| Indicator | Alert threshold | Reaction |
 |---|---|---|
-| Sonde `/health` | deux échecs consécutifs | redémarrage du conteneur, alerte |
-| Latence 95ᵉ centile | dépassement du double de la référence | vérification de la charge GPU |
-| Réponses hors format | plus de 2 % sur une heure | gel de la version, retour à la précédente |
-| Désaccord modèle / règle | plus de 25 % sur une journée | revue clinique de l'échantillon |
-| Taux d'erreur HTTP | plus de 1 % | alerte d'exploitation |
+| `/health` probe | two consecutive failures | restart the container, raise an alert |
+| 95th-percentile latency | twice the reference | check the GPU load |
+| Off-format answers | more than 2% over an hour | freeze the version, roll back |
+| Model / rule disagreement | more than 25% over a day | clinical review of the sample |
+| HTTP error rate | more than 1% | operations alert |
 
-Le **journal d'audit** est monté sur un volume persistant nommé `audit` : sans
-cela, la traçabilité exigée pour les audits médicaux disparaîtrait à chaque
-redéploiement. Un dossier de l'hôte ne convient pas — Docker le monte au compte
-de root, et le service, qui tourne sans privilège, ne peut pas y écrire ; il
-refuse alors de démarrer, en le disant. Le volume survit à `docker compose
-down` ; `docker compose down -v` l'efface.
+The **audit log** is mounted on a named volume called `audit`: without it, the traceability
+required for medical audits would disappear at every redeployment. A host folder does not do —
+Docker mounts it as root, and the service, which runs unprivileged, cannot write there; it then
+refuses to start, and says so. The volume survives `docker compose down`; `docker compose down
+-v` erases it.
 
 ```bash
-docker compose -f infra/docker-compose.yml cp api:/app/logs/audit_triage.jsonl .
+docker compose -f infra/docker-compose.yml cp api:/app/var/logs/audit_triage.jsonl .
 ```
 
-Prévoir sa rotation et sa centralisation, et respecter la durée de conservation
-inscrite dans chaque ligne.
+Plan for its rotation and its centralisation, and respect the retention period written into every
+line.
 
-Le **taux de désaccord entre le modèle et la règle explicite** est l'indicateur de
-production le plus utile : il ne nécessite aucune étiquette, se calcule en
-continu, et détecte une dérive avant qu'un patient n'en pâtisse.
+The **rate of disagreement between the model and the explicit rule** is the most useful
+production indicator: it needs no labels, is computed continuously, and catches a drift before a
+patient pays for it.
 
-## Limites d'usage
+## Limits of use
 
-Aide à la décision destinée au personnel soignant, sous supervision humaine
-obligatoire. L'agent ne pose pas de diagnostic et ne remplace pas une évaluation
-clinique. Le catalogue de présentations qui a servi à construire les données n'a
-pas été validé par un médecin urgentiste : ce service ne doit pas être utilisé en
-situation réelle avant que ses critères de mise en service soient
-satisfaits.
+Decision support for clinical staff, under mandatory human supervision. The assistant makes no
+diagnosis and does not replace a clinical assessment. The catalogue of presentations behind the
+training data has not been validated by an emergency physician: this service must not be used in
+a real setting.

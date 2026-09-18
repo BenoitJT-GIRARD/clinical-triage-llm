@@ -42,9 +42,9 @@ import modal
 # Revision published by the `model` job of `.github/workflows/cd.yml`, which passes it in the
 # environment at deployment time. Without it, the shipped version is pinned: the demonstration
 # stays replayable identically.
-# The `or` is not a shortcut, and there are two: an undefined GitHub repository variable arrives
-# in the environment as an empty string, not as a missing variable. Without them, the identifier
-# asked of the Hub would start with a slash. Same rule as `config.hub_namespace`.
+# Two `or` that look like shortcuts and are not, for the reason `config.hub_namespace` sets
+# out: what GitHub hands over for a variable it does not have is an empty string. Without them
+# the Hub would be asked for an identifier beginning with a slash.
 ACCOUNT = os.environ.get("HF_NAMESPACE") or "BenoitJT-GIRARD"
 MODEL_ID = os.environ.get("TRIAGE_MODEL_ID") or f"{ACCOUNT}/qwen3-1.7b-clinical-triage"
 REVISION = os.environ.get("TRIAGE_MODEL_REVISION") or "model-v1.0.0"

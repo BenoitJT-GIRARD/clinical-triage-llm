@@ -10,74 +10,75 @@ tags:
   - medical
   - triage
   - emergency-department
+  - lora
 ---
 
-# Agent de triage médical the emergency department — modèle supervisé fusionné
+# Emergency triage assistant — merged supervised model
 
-`Qwen3-1.7B-Base` après **fine-tuning supervisé** sur le corpus de triage du
-the emergency department, adaptateur LoRA fusionné dans les poids. C'est le modèle **intermédiaire**
-du projet : il sait trier et respecte le format de sortie, mais il n'a pas encore
-reçu l'alignement par préférences.
+`Qwen3-1.7B-Base` after **supervised fine-tuning** on the project's triage corpus, with the LoRA
+adapter merged into the weights. This is the project's **intermediate** model: it triages and
+respects the output format, but it has not yet been aligned on preferences.
 
-Pour un usage direct, préférer le
-[modèle final](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage),
-qui inclut cet alignement.
+For direct use, prefer the
+[final model](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage), which carries
+that alignment.
 
-Ce dépôt existe pour deux raisons précises :
+This repository exists for two precise reasons:
 
-1. **c'est le modèle de base de l'adaptateur DPO.** L'alignement a été entraîné
-   par-dessus ces poids-ci ; sans eux,
-   [l'adaptateur DPO](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-dpo)
-   ne peut pas être chargé ;
-2. **il permet de mesurer ce que l'alignement apporte**, en comparant les deux
-   modèles sur le même jeu d'évaluation.
+1. **it is the base model of the DPO adapter.** The alignment was trained on top of these
+   weights; without them,
+   [the DPO adapter](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-dpo)
+   cannot be loaded at all;
+2. **it makes the alignment measurable**, by comparing the two models on the same evaluation set.
 
-> **Prototype pédagogique.** Aide à la décision sous supervision humaine
-> obligatoire. Le catalogue clinique ayant servi à construire les données **n'a
-> pas été validé par un médecin urgentiste** : ne pas utiliser en situation
-> réelle. Devant tout signe vital engagé, appeler le 15 (SAMU).
+> **Teaching prototype.** An intermediate artefact of a teaching project, published so that
+> the adapter above it can load. Its levels come from a catalogue **no emergency physician has
+> read**, and it has no place in a real department. Call the emergency services on any
+> life-threatening sign.
 
-## Utilisation
+## Use
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-depot = "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-sft-merged"
-modele = AutoModelForCausalLM.from_pretrained(depot, device_map="auto")
-tokenizer = AutoTokenizer.from_pretrained(depot)
+repository = "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-sft-merged"
+model = AutoModelForCausalLM.from_pretrained(repository, device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained(repository)
 ```
 
-Le tokenizer publié ici porte le **gabarit de dialogue du projet** et déclare
-`<|im_end|>` comme jeton de fin de séquence.
+The tokenizer in this repository is the project's own: it carries the dialogue template the
+model was trained on, and `<|im_end|>` is declared as its stop token.
 
-La tête de sortie a été **découplée** de la matrice d'embeddings avant la fusion.
-Le modèle de base partage un seul tenseur entre les deux ; comme le fine-tuning
-adapte la tête, fusionner sans délier aurait écrit la correction dans l'entrée du
-modèle autant que dans sa sortie. Ce dépôt porte donc un `lm_head.weight` propre,
-et `tie_word_embeddings` à `false`.
+The output head was **untied** from the embedding matrix before the merge. Base and head share
+one tensor in the original model; since the fine-tuning changes the head, a merge that left them
+tied would have applied the correction to what the model reads as well as to what it writes. This
+repository therefore carries an `lm_head.weight` of its own, and `tie_word_embeddings` set to
+`false`.
 
-## Format de sortie
+## Output format
 
 ```
 Niveau de priorité : URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE
-Justification : <explication clinique courte>
-Recommandation : <conduite à tenir>
+Justification : <short clinical explanation>
+Recommandation : <what to do next>
 ```
 
-## Évaluation
+## Evaluation
 
-Mesuré sur un jeu de cas **écrits à la main**, jamais vus à l'entraînement, dont près de
-la moitié sont des présentations atypiques.
+The same sixty cases as every other card here: **written one by one**, held out of every
+training set, and deliberately weighted towards presentations that read as the opposite of what
+they are.
 
 {{EVALUATION}}
 
-Comparaison aux références, analyse d'erreurs et détail par langue : rapport
-technique du dépôt.
+Where the errors land, and what separates this stage from the aligned one: see the protocol
+page.
 
-## Données, évaluation et limites
+## Data, evaluation and limits
 
-Voir la carte du [modèle final](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage)
-et le dépôt du projet : <https://github.com/BenoitJT-GIRARD/clinical-triage>
+Both are written out on the
+[final model](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage)'s card. Code and
+pipeline: <https://github.com/BenoitJT-GIRARD/clinical-triage>
 
 ## Licence
 

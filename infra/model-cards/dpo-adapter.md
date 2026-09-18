@@ -13,42 +13,44 @@ tags:
   - dpo
 ---
 
-# Agent de triage médical the emergency department — adaptateur LoRA (alignement par préférences)
+# Emergency triage assistant — LoRA adapter (preference alignment)
 
-Adaptateur LoRA issu de l'**alignement par préférences (DPO)** du modèle de
-triage du service. Il s'applique sur le **modèle supervisé fusionné**, pas sur
-`Qwen3-1.7B-Base` : l'alignement a été entraîné au-dessus du premier, et
-l'appliquer sur le second produirait une composition de poids incohérente.
+A LoRA adapter from the **preference alignment (DPO)** of the project's triage model. It applies
+on top of the **merged supervised model**, not on `Qwen3-1.7B-Base`: the alignment was trained
+above the first, and applying it to the second would compose weights that do not go together.
 
-Pour un usage direct, préférer le
-[modèle final fusionné](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage),
-qui combine déjà les deux étapes.
+For direct use, prefer the
+[final merged model](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage), which
+already combines both stages.
 
-> **Prototype pédagogique.** Aide à la décision sous supervision humaine
-> obligatoire. Le catalogue clinique ayant servi à construire les données **n'a
-> pas été validé par un médecin urgentiste** : ne pas utiliser en situation
-> réelle. Devant tout signe vital engagé, appeler le 15 (SAMU).
+> **Teaching prototype.** What this adapter corrects, it corrects on synthetic data. The
+> presentations it learnt from **were never reviewed by a physician**, and a real triage desk is
+> not a place for it. Call the emergency services on any life-threatening sign.
 
-## Ce que l'alignement apprend
+## What the alignment learns
 
-Entre deux réponses au même cas, préférer celle qui :
+Between two answers to the same case, prefer the one that:
 
-- ne **sous-évalue** pas le niveau d'urgence ;
-- ne propose pas une conduite à tenir qui **retarde** la prise en charge ;
-- n'**affirme** pas de diagnostic, la consigne système l'interdisant ;
-- répond dans la **langue** attendue.
+- does not **understate** the level of urgency;
+- does not suggest a course of action that **delays** care;
+- does not **assert** a diagnosis, which the system prompt forbids;
+- keeps to the **language** it was asked for.
 
-Les paires de préférence ont le même format et une longueur comparable : sans
-cette précaution, l'alignement apprend la longueur plutôt que le fond, et le
-modèle cesse d'émettre son jeton de fin.
+The preference pairs share their format and are of comparable length. Without that precaution the
+alignment learns length rather than substance, and the model stops emitting its end-of-turn
+token.
 
-## Utilisation
+What it does **not** learn is worth stating here rather than in a report: on an external
+preference set it never saw, this adapter orders the pairs no better than the supervised model
+does, and both are below chance. The benefit measured on the clinical cases is real; it does not
+generalise beyond the defects the pairs were built from.
 
-Cet adaptateur s'applique sur le **modèle supervisé fusionné**, pas sur le modèle
-de base : il a été entraîné au-dessus, et l'y appliquer directement produirait une
-composition de poids incohérente. Ce modèle intermédiaire est publié pour cette
-raison précise, et la configuration de l'adaptateur le désigne : rien n'est donc
-à reconstruire.
+## Use
+
+This adapter applies on the **merged supervised model**, not on the base model: it was trained
+above it, and applying it directly would compose weights that do not go together. That
+intermediate model is published for this precise reason, and the adapter's configuration names
+it, so nothing has to be rebuilt.
 
 ```python
 from peft import PeftModel
@@ -57,30 +59,29 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 base = AutoModelForCausalLM.from_pretrained(
     "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-sft-merged", device_map="auto"
 )
-modele = PeftModel.from_pretrained(base, "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-dpo")
+model = PeftModel.from_pretrained(base, "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-dpo")
 tokenizer = AutoTokenizer.from_pretrained("BenoitJT-GIRARD/qwen3-1.7b-clinical-triage-dpo")
 ```
 
-**Pour servir le modèle, préférez le [modèle final
-fusionné](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage)** : il ne
-demande aucune reconstruction, et c'est une seule référence à épingler, là où
-cet adaptateur demande au serveur d'héberger aussi le modèle supervisé fusionné
-et de les apparier.
+**To serve the model, prefer the [final merged
+model](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage)**: it needs no
+rebuilding, and it is one reference to pin, where this adapter asks the server to host the merged
+supervised model as well and to pair the two.
 
-## Évaluation
+## Evaluation
 
-Mesuré sur un jeu de cas **écrits à la main**, jamais vus à l'entraînement, dont près de
-la moitié sont des présentations atypiques.
+Sixty cases **composed for the evaluation**, unseen in training. Nearly half of them are
+atypical on purpose, because that is where a triage system earns its place or loses it.
 
 {{EVALUATION}}
 
-Comparaison aux références, analyse d'erreurs et détail par langue : rapport
-technique du dépôt.
+What the alignment moved and what it did not: the protocol page has the paired comparison.
 
-## Données, évaluation et limites
+## Data, evaluation and limits
 
-Voir la carte du [modèle final](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage)
-et le dépôt du projet : <https://github.com/BenoitJT-GIRARD/clinical-triage>
+Read them on the card of the
+[final model](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage), or in the
+repository itself: <https://github.com/BenoitJT-GIRARD/clinical-triage>
 
 ## Licence
 

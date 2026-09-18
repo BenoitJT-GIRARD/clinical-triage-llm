@@ -14,58 +14,55 @@ tags:
   - dpo
 ---
 
-# Agent de triage médical the emergency department — modèle final
+# Emergency triage assistant — final model
 
-`Qwen3-1.7B-Base` spécialisé au triage des urgences par fine-tuning supervisé
-avec LoRA, puis aligné par préférences (DPO). Les adaptateurs sont **fusionnés** :
-le modèle se charge comme n'importe quel modèle causal, sans bibliothèque
-d'adaptation.
+`Qwen3-1.7B-Base`, specialised for emergency triage by supervised fine-tuning with LoRA and then
+aligned on preferences with DPO. Both adapters are **merged**: the model loads like any causal
+model, with no adapter library.
 
-> **Prototype pédagogique.** Aide à la décision destinée au personnel soignant,
-> sous supervision humaine obligatoire. Le catalogue de présentations cliniques
-> ayant servi à construire les données d'entraînement **n'a pas été validé par un
-> médecin urgentiste** : ce modèle ne doit pas être utilisé en situation réelle.
-> Devant tout signe vital engagé, appeler le 15 (SAMU).
+> **Teaching prototype.** Decision support for clinical staff, under mandatory human
+> supervision. The catalogue of clinical presentations behind the training data **has not been
+> validated by an emergency physician**: this model must not be used in a real setting. On any
+> life-threatening sign, call the emergency services.
 
-## Ce que fait le modèle
+## What the model does
 
-À partir d'une description de patient — motif, symptômes, antécédents,
-constantes relevées à l'accueil, en français ou en anglais — il produit une
-réponse en français, toujours structurée ainsi :
+From a patient description — complaint, symptoms, history, vital signs taken at the desk, in
+French or in English — it produces an answer in French, always shaped like this:
 
 ```
 Niveau de priorité : URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE
-Justification : <explication clinique courte>
-Recommandation : <conduite à tenir>
+Justification : <short clinical explanation>
+Recommandation : <what to do next>
 ```
 
-| Niveau | Délai de prise en charge | Échelle FRENCH |
+| Level | Care within | FRENCH scale |
 |---|---|---|
-| `URGENCE_VITALE` | immédiate | tris 1 et 2 |
-| `URGENCE_MODEREE` | quelques heures | tris 3 et 4 |
-| `CONSULTATION_DIFFEREE` | consultation programmée | tri 5 |
+| `URGENCE_VITALE` | immediately | sorts 1 and 2 |
+| `URGENCE_MODEREE` | a few hours | sorts 3 and 4 |
+| `CONSULTATION_DIFFEREE` | a scheduled consultation | sort 5 |
 
-## Utilisation
+## Use
 
-Le gabarit de dialogue et le jeton de fin de séquence sont inscrits dans le
-tokenizer exporté : aucun réglage n'est nécessaire côté appelant.
+The dialogue template and the end-of-sequence token are written into the exported tokenizer:
+the caller has nothing to configure.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-nom = "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage"
-tokenizer = AutoTokenizer.from_pretrained(nom)
-modele = AutoModelForCausalLM.from_pretrained(nom, device_map="auto")
+name = "BenoitJT-GIRARD/qwen3-1.7b-clinical-triage"
+tokenizer = AutoTokenizer.from_pretrained(name)
+model = AutoModelForCausalLM.from_pretrained(name, device_map="auto")
 
 messages = [
-    {"role": "system", "content": CONSIGNE_SYSTEME},
+    {"role": "system", "content": SYSTEM_PROMPT},
     {"role": "user", "content": "Homme de 67 ans, douleur thoracique et sueurs depuis 20 minutes."},
 ]
-invite = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 ```
 
-La consigne système exacte est publiée dans la carte du dataset et dans son
-fichier `metadata.json`. Servi par vLLM :
+The exact system prompt is published in the dataset card and in its `metadata.json`. Served by
+vLLM:
 
 ```bash
 vllm serve BenoitJT-GIRARD/qwen3-1.7b-clinical-triage \
@@ -73,58 +70,55 @@ vllm serve BenoitJT-GIRARD/qwen3-1.7b-clinical-triage \
   --served-model-name qwen3-1.7b-clinical-triage --max-model-len 1024
 ```
 
-`--revision` épingle une version citable : la branche par défaut bouge à chaque
-publication, l'étiquette non.
+`--revision` pins a citable version: the default branch moves at every publication, the tag does
+not.
 
-### Une particularité à connaître
+### One thing worth knowing
 
-Le modèle de base porte les jetons ChatML comme un **vecteur unique jamais
-entraîné**, et lie sa tête de sortie à ses embeddings. Un fine-tuning LoRA qui
-n'adapte que les projections produit donc un modèle incapable d'émettre son jeton
-de fin de tour : il génère jusqu'à la limite. Ce modèle-ci a été entraîné **avec
-sa tête de sortie**, et ses poids sont exportés avec le lien défait
-(`tie_word_embeddings: false`). Il s'arrête donc de lui-même.
+The base model carries its ChatML tokens as a **single untrained vector**, and ties its output
+head to its embeddings. A LoRA fine-tuning that adapts the projections alone therefore produces
+a model unable to emit its end-of-turn token: it generates to the cap, every time. This model was
+trained **with its output head**, and its weights are exported with that tie undone
+(`tie_word_embeddings: false`). It stops on its own.
 
-Quiconque repart du modèle de base pour refaire l'exercice rencontrera ce piège :
-il est décrit en détail dans la documentation du projet.
+Anyone starting again from the base model will meet the same trap. It is described, with the
+measurements, in the project's protocol page.
 
-## Données d'entraînement
+## Training data
 
-Dataset [`BenoitJT-GIRARD/clinical-triage-medical-bilingue`](https://huggingface.co/datasets/BenoitJT-GIRARD/clinical-triage-medical-bilingue) :
-corpus équilibré sur trois niveaux de triage et deux langues, construit à partir
-d'un catalogue de présentations cliniques rédigé pour le projet, complété de cas
-filtrés issus de **MediQAl** (vignettes cliniques françaises), MedQuAD et MedMCQA.
-**Aucune donnée patient réelle.**
+Dataset [`BenoitJT-GIRARD/clinical-triage-bilingual`](https://huggingface.co/datasets/BenoitJT-GIRARD/clinical-triage-bilingual):
+a corpus balanced over three triage levels and two languages, built from a catalogue of clinical
+presentations written for the project and completed with filtered cases from **MediQAl** (French
+clinical vignettes), MedQuAD and MedMCQA. **No real patient data.**
 
-## Évaluation
+## Evaluation
 
-Les chiffres ci-dessous portent sur un jeu de cas **écrits à la main**, jamais vus
-à l'entraînement, dont près de la moitié sont des présentations atypiques. Le modèle est
-comparé à quatre références, dont une règle de triage explicite et un
-classifieur classique entraîné sur les mêmes paires.
+Sixty cases **written one by one** for this evaluation, none of them seen in training, nearly
+half built to mislead. Four baselines stand beside the model, and the two that matter are the
+keyword rule a department could deploy tomorrow and a linear classifier fitted on the very same
+examples.
 
 {{EVALUATION}}
 
-Analyse d'erreurs, détail par langue et par type de présentation : rapport
-technique du dépôt.
+The failure modes, subgroup by subgroup, and the paired tests behind each comparison: the
+repository's protocol page.
 
-## Limites
+## Limits
 
-- **Catalogue clinique non validé par un urgentiste** — limite principale.
-- Données d'entraînement en majorité synthétiques : elles n'ont pas le désordre
-  du langage réel, et les vignettes générées partagent un petit nombre de
-  réponses attendues.
-- Jeu d'évaluation de quelques dizaines de cas : à cet effectif, aucun écart
-  d'exactitude entre systèmes n'est concluant.
-- Aucune vérité terrain externe : le catalogue, la règle de triage et le jeu
-  d'évaluation ont la même source.
-- 1,7 milliard de paramètres : un format et trois classes, pas un raisonnement clinique.
+- **The clinical catalogue was not validated by an emergency physician** — the main limit.
+- The training data is mostly synthetic: it lacks the disorder of real language, and the
+  generated vignettes share a small number of expected answers.
+- An evaluation set of a few dozen cases: at that effective, no difference in accuracy between
+  two systems is conclusive.
+- No external ground truth: the catalogue, the triage rule and the evaluation set have the same
+  author.
+- 1.7 billion parameters: a format and three classes, not clinical reasoning.
 
-## Reproduire
+## Reproducing it
 
-Code, hyperparamètres, graine et pipeline complet :
+Code, hyper-parameters, seed and the whole pipeline:
 <https://github.com/BenoitJT-GIRARD/clinical-triage>
 
 ## Licence
 
-MIT, comme le modèle de base `Qwen/Qwen3-1.7B-Base`.
+MIT, like the base model `Qwen/Qwen3-1.7B-Base`.
