@@ -72,17 +72,21 @@ flowchart LR
 
 ### How it is built
 
-`Qwen3-1.7B-Base` is fine-tuned with LoRA on the project's bilingual set, on **PyTorch** under
-Unsloth's kernels, then aligned on preference pairs that each carry one deliberate defect. Every
-run writes to a local **MLflow** store, which is what makes the four LoRA settings comparable
+`Qwen3-1.7B-Base` is fine-tuned with LoRA on the project's bilingual set: **Transformers**
+holds the model, **PEFT** holds the adapter, **TRL** runs the supervised pass and then the DPO
+pass over preference pairs that each carry one deliberate defect, and **Unsloth** supplies the
+kernels that make it fit on one consumer card. **PyTorch** is underneath all four. Every run
+writes to a local **MLflow** store, which is what makes the four LoRA settings comparable
 after the fact rather than from memory. The ordinary baseline is a **scikit-learn** linear
 classifier over n-grams, trained on the same pairs, and it is the demanding comparison.
 
 Serving splits in two. A **FastAPI** gateway behind **Uvicorn** validates, runs the
-questionnaire, applies the explicit rule, anonymises and logs; generation is delegated to vLLM
-over its OpenAI-compatible route. Request and reply shapes are **Pydantic** models, which is why
+questionnaire, applies the explicit rule, anonymises and logs; generation is delegated to
+**vLLM** over its OpenAI-compatible route. Request and reply shapes are **Pydantic** models, which is why
 the contract page above is generated rather than written. The gateway's **Docker** image carries
-neither weights nor torch, so a new model version ships without rebuilding it.
+neither weights nor torch, so a new model version ships without rebuilding it. **Modal**
+deploys that same pair in one command when the demonstration has to leave this machine: a GPU
+engine that sleeps between requests, and the gateway unchanged. Nothing is kept running.
 
 Around all that: the environment is held to its lock file by **uv**, every push is read by
 **Ruff** and by **Bandit**, and **pytest** works in three tiers — the last of which starts the
