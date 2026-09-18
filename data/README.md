@@ -220,6 +220,12 @@ Measured yield of each corpus, after filtering for the cases genuinely usable fo
 n = 203,384 entries read across the four corpora, 1,716 cases delivered.
 <!-- yield:end -->
 
+> **How to read it.** One row per corpus, read left to right as a funnel. `Entries read` is
+> everything the source holds; the four columns after it are the reasons an entry was dropped,
+> the largest by far being that the entry describes no patient at all. `Cases extracted` is what
+> survived, `Cases delivered` is what the balancing caps then let through, and `Yield` sets the
+> second against the first.
+
 The four corpora are read **in full**, with no read cap: a cap would give a yield describing the
 limit we set ourselves and not the source. The loss columns add up with "cases extracted" to give
 back the entries read; "cases delivered" is what remains after per-cell capping, anonymisation,

@@ -28,6 +28,12 @@ the two sets can be read.
 <!-- source: data/processed/metadata.json -->
 ![What the training corpus is made of: by source, by triage level, by language and by label confidence, n = 5,000 training examples, exhaustive counts](../reports/figures/dataset_composition.png)
 
+> **How to read it.** Four counts of the same five thousand training examples, each cut a
+> different way. Bar height is a number of examples. The panels answer whether any one source,
+> level, language or confidence grade dominates the set, since a model trained on a lopsided
+> corpus learns the lopsidedness first. Read them together: a balance holding in one panel and
+> breaking in another is still an imbalance.
+
 The training corpus itself is balanced by construction across the three levels and the two
 languages; where its cases come from, and what the public corpora really yielded, is in
 [`data-source.md`](data-source.md).
@@ -41,6 +47,12 @@ and judged on the validation split alone.
 
 <!-- source: reports/training/hyperparameter_comparison.json -->
 ![The four LoRA settings on the validation split: triage accuracy with its interval on the left, validation loss on the right, n = 60 validation cases](../reports/figures/hyperparameter_tuning.png)
+
+> **How to read it.** Four LoRA (low-rank adaptation) settings, each fine-tuning only a small
+> added matrix and leaving the base weights alone. The left panel is triage accuracy on the
+> validation split, higher being better, each bar with a 95 % interval. The right panel is
+> validation loss in nats per token, where lower is better. Sixty validation cases give wide
+> intervals, so a setting wins only when the two panels agree.
 
 <!-- source: reports/training/hyperparameter_comparison.json -->
 The setting kept is `r32_lr2e-4`, on n = 60 validation cases: **0.833** accuracy against
@@ -68,6 +80,11 @@ under a hundred.
 <!-- source: reports/training/sft.json -->
 ![Two curves, training and validation cross-entropy, falling as the optimiser advances on the run that produced the shipped weights, n = 4,000 training examples and 500 validation examples](../reports/figures/sft_training.png)
 
+> **How to read it.** The horizontal axis is optimiser steps, and both curves are cross-entropy
+> in nats per token, a measure of how surprised the model is by the correct next token. Lower
+> means less surprised. The training curve falling while the validation curve stops falling is
+> the signature of memorisation beginning, which is what decides where the run is stopped.
+
 <!-- source: reports/training/sft.json -->
 The run trains **346,030,080** parameters of 2,377,769,984, that is **14.553%**, which is what
 the output head adds to the adapters. Over n = 4,000 training examples it takes **3,396** seconds on
@@ -77,6 +94,12 @@ one RTX 4060 Ti and never exceeds **7.43** gigabytes of GPU memory.
 
 <!-- source: reports/training/dpo.json -->
 ![Two panels for the alignment run: its loss falling, and beside it the separation it opens between the preferred answer and the rejected one, n = 2,160 training pairs](../reports/figures/dpo_alignment.png)
+
+> **How to read it.** Two views of the same alignment run. DPO (direct preference optimisation)
+> shows the model a preferred answer and a rejected one and pushes them apart. The left panel is
+> its loss, falling as the pair separates. The right panel is the reward margin, the log of how
+> much likelier the preferred answer has become, and it should climb. A flat margin means the
+> loss fell without the preference being learnt.
 
 <!-- source: reports/training/dpo.json -->
 On its own validation pairs the alignment is complete: n = 240 pairs, **1.0** of them ordered
@@ -118,8 +141,19 @@ dependency, and the test verifies that the choice costs no precision.
 <!-- source: reports/evaluation_results.json -->
 ![Accuracy by kind of presentation, for the supervised and the aligned model, with a 95% interval where the effective allows one and a hatched bar where it does not, n = 60 cases split by kind](../reports/figures/accuracy_by_case_type.png)
 
+> **How to read it.** The sixty cases split by the trap each one sets, with two bars per group
+> for the supervised and the aligned model. A hatched bar carries fewer than six cases, too few
+> for an interval to mean anything, and the hatching is there to stop a ranking being read in.
+> The groups that hold enough cases are the only ones a difference can be claimed on.
+
 <!-- source: reports/evaluation_results.json -->
 ![Undertriage of the shipped model by kind of presentation, with its exact interval, n = 40 urgent cases split by kind](../reports/figures/undertriage_by_case_type.png)
+
+> **How to read it.** The same split, restricted to the forty urgent cases and to the shipped
+> model, with shorter bars being better: each one is the share of that group's urgent patients
+> filed below where they belonged. The interval is the exact one and never the approximation, since groups
+> of two or three patients break the usual formula. A tall bar on a small group names a
+> weakness worth probing, and never a measured rate.
 
 <!-- source: reports/evaluation_results.json -->
 On the cases that present straightforwardly, n = 32, the model reaches **0.9062** accuracy and
@@ -134,6 +168,12 @@ a measurement.
 
 <!-- source: reports/evaluation_results.json -->
 ![Where each model's errors land, as counted confusion matrices with an off-format column, n = 60 cases](../reports/figures/confusion_matrices.png)
+
+> **How to read it.** One grid per model. Rows are the level a nurse assigned, columns the level
+> the model returned, and each cell counts the cases falling in that pair. The diagonal is
+> agreement. Everything below the diagonal is a patient sent somewhere gentler than they needed,
+> everything above is caution, and the extra column on the right holds answers no information
+> system could parse.
 
 <!-- source: reports/evaluation_results.json -->
 The confusion matrices carry a column the triage scale does not have: **off-format**. An answer

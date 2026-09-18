@@ -45,6 +45,12 @@ weights. The image's own health check gives it a grace period for exactly that.
 <!-- source: reports/benchmark_endpoint.json -->
 ![Perceived latency of POST /triage at three concurrency levels, median to 95th percentile, and the throughput of the gateway beside it, n = 40 requests per level](../reports/figures/endpoint_latency.png)
 
+> **How to read it.** Both panels share a horizontal axis counting callers hitting the service
+> at once. The upper one is what a caller waits, the bar running from the median to the
+> ninety-fifth percentile, so its length is how much worse an unlucky call is than a typical
+> one. The lower one is how many requests the gateway completes per second. A wait that climbs
+> while throughput flattens means the queue, and not the model, is the limit.
+
 <!-- source: reports/benchmark_endpoint.json -->
 One triage takes **1,473.5** milliseconds at the median with a single caller, n = 40 requests,
 and **1,682.6** at the 95th percentile. The gateway's own share of that is **28.3** milliseconds:

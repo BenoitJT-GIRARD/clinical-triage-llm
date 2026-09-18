@@ -112,8 +112,20 @@ n = 60 cases, of which n = 40 are urgent: undertriage is counted on those forty 
 everything else on all sixty. What each column measures, and with which estimator, is in
 [`metrics.yaml`](metrics.yaml).
 
+> **How to read it.** One row per system, all answering the same sixty cases. `accuracy` is the
+> share filed at the level a nurse would have chosen. `undertriage` is the share of the urgent
+> cases sent somewhere gentler, which is the failure that reaches a patient, so it is counted on
+> the forty urgent ones alone. `overtriage` is the share pushed above their level, which costs a
+> place in the queue. `format compliance` is the share an information system can parse at all.
+
 <!-- source: reports/figures/MANIFEST.json -->
 ![Accuracy, undertriage and overtriage for every system on the same hand-written cases, each proportion with its 95% interval, n = 60 cases of which 40 are urgent](reports/figures/systems_comparison.png)
+
+> **How to read it.** Three panels, one per measure, with one bar per system. The middle panel
+> is the one to read first: shorter is better there, and it counts urgent patients sent somewhere
+> gentler. The right-hand panel runs the other way round, since caution costs a queue place and
+> nothing worse. Each bar carries a 95 % interval, and two bars whose intervals overlap are not
+> told apart by sixty cases.
 
 <!-- source: reports/evaluation_results.json -->
 Against the rule it would replace, the shipped model halves the failure that matters, on the
@@ -132,6 +144,12 @@ regression.
 
 <!-- source: reports/figures/MANIFEST.json -->
 ![Accuracy on the internal test split against the hand-written clinical set, for each system, with the difference and its interval on the right, n = 120 internal cases and 60 clinical cases](reports/figures/recall_versus_transfer.png)
+
+> **How to read it.** The upper panel puts two accuracies side by side for each system: one on
+> the internal split, whose cases resemble the training material, and one on the hand-written
+> clinical set, which nothing in training resembles. The lower panel is the gap between them with
+> its interval. A large positive gap means a system restating what it memorised; a gap whose
+> interval contains zero means the skill travelled.
 
 <!-- source: reports/evaluation_results.json -->
 On the internal test split, n = 120 cases, the model scores **1.000**. That number measures
