@@ -14,10 +14,10 @@ name: CD
 # Every action is referenced by commit rather than by tag. A tag can be moved onto other code,
 # and that code would run here with the secrets below.
 
+# Frozen on 2026-09-18. The workflows below ran green on the commit this repository
+# publishes, and the Actions tab holds that run. They fire by hand from now on: a
+# repository nobody maintains should not go red on a dependency that moved.
 on:
-  push:
-    branches: [main]
-    tags: ["v*", "model-v*"]
   workflow_dispatch:
 
 permissions:

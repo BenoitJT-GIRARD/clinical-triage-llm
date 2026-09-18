@@ -15,8 +15,8 @@ their artefacts are committed, and every number below names the file it comes fr
 command anyone can run, not an address kept alive. What the figures and the documents rest on is
 `reports/run-evidence.json`, written by a run of `scripts/smoke.py` that redraws every published
 figure from the committed results and refuses to write anything if one of them comes out
-different. Pushes and pull requests still set the workflows off; the day this repository is
-archived, they fall back to a manual trigger.
+different. The workflows ran green on the commit published here and are started by hand from
+now on; nothing sets them off on its own.
 
 **This is not a medical device, and nothing it returns is clinical advice.** It is a
 demonstration built to study how a small language model can be fine-tuned and aligned for a
@@ -88,7 +88,7 @@ neither weights nor torch, so a new model version ships without rebuilding it. *
 deploys that same pair in one command when the demonstration has to leave this machine: a GPU
 engine that sleeps between requests, and the gateway unchanged. Nothing is kept running.
 
-Around all that: the environment is held to its lock file by **uv**, every push is read by
+Around all that: the environment is held to its lock file by **uv**, every run is read by
 **Ruff** and by **Bandit**, and **pytest** works in three tiers — the last of which starts the
 gateway in a process of its own and talks to it over the network. `datasets` keeps its cache in Arrow, and the **Parquet** reader is imported before
 torch in the suite: on Windows the other order ends the process with an access violation.
