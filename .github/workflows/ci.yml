@@ -20,9 +20,7 @@ name: CI
 # Actions are pinned by commit: a tag moves, and a moved tag is code nobody reviewed running
 # with this repository's token.
 
-# Frozen on 2026-09-18. The workflows below ran green on the commit this repository
-# publishes, and the Actions tab holds that run. They fire by hand from now on: a
-# repository nobody maintains should not go red on a dependency that moved.
+# From 2026-09-18 these fire on request alone; the passing run is kept above.
 on:
   workflow_dispatch:
 
