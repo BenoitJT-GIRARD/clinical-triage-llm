@@ -58,9 +58,10 @@ Four findings, checked on the corpora themselves:
   distinct French vignettes — complaint, history, and for 569 of them the vital signs on arrival.
   It is the only authentic French-language source;
 <!-- source: data/processed/metadata.json -->
-- **FrenchMedMCQA holds 1,080 questions** across its three splits, of which only six are
-  recognised as a patient presentation — and none carries an identifiable triage sign. It is a
-  set of pharmacy questions; it cannot carry the French half of a triage dataset;
+- **FrenchMedMCQA holds 1,080 questions** across its three splits — n = 1,080 entries read, of
+  which only six are recognised as a patient presentation, and none carries an identifiable
+  triage sign. It is a set of pharmacy questions; it cannot carry the French half of a triage
+  dataset;
 - **MedQuAD asks about conditions, not about patients.** Its symptom sheets are turned into
   patient complaints, which yields a few cases, but it does not describe clinical situations;
 - **UltraMedical-Preference orders a large share of its pairs by answer length alone**:
@@ -216,6 +217,7 @@ Measured yield of each corpus, after filtering for the cases genuinely usable fo
 | MedQuAD | 16,407 | 15,909 | 0 | 315 | 0 | 183 | 120 | 120 / 16,407 |
 | MedMCQA | 182,822 | 171,251 | 372 | 9,038 | 71 | 2,090 | 1,283 | 1,283 / 182,822 |
 | FrenchMedMCQA | 1,080 | 1,074 | 0 | 6 | 0 | 0 | **0** | **0 / 1,080** |
+n = 203,384 entries read across the four corpora, 1,716 cases delivered.
 <!-- yield:end -->
 
 The four corpora are read **in full**, with no read cap: a cap would give a yield describing the

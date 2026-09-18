@@ -1,0 +1,187 @@
+# What this repository's published numbers mean.
+#
+# Every numeric column of every table in the README and in `docs/`, and every axis of every
+# figure, is a key below. Two of them are easy to confuse and cost a patient if confused:
+# accuracy counts every case, undertriage counts only the urgent ones, and a system can move
+# one without moving the other. The entry says so rather than leaving the reader to work it out
+# from a column header.
+#
+# `anchor` is what makes a number checkable: a value, the tracked artefact it comes from, and
+# the key inside it.
+
+metrics:
+
+  accuracy:
+    definition: >-
+      The share of cases for which the predicted triage level is the reference level. An
+      unparsable answer counts as wrong, because it is: the information system receives no
+      level at all.
+    unit: "proportion, 0 to 1"
+    direction: higher_is_better
+    anchor: "0.700 — reports/evaluation_results.json#clinical_set.models.dpo-merged.accuracy"
+    business_reading: >-
+      Out of a hundred patients described to the assistant, seventy are filed at the level a
+      nurse would have chosen. It says nothing about which way the other thirty went, which is
+      why it is never read alone.
+    source: >-
+      scripts/run_evaluation.py, on the sixty hand-written cases of
+      data/processed/clinical_eval.jsonl
+    uncertainty: >-
+      95% Wilson interval on the proportion, published beside it as `accuracy_ci95`. It covers
+      the sampling of the sixty cases and nothing else: one training run, one seed, and no
+      estimate of what another seed would have given.
+
+  undertriage:
+    definition: >-
+      Among the urgent cases alone, the share sent to a level below the reference one. An
+      unparsable answer counts as an undertriage: it sends nobody anywhere.
+    unit: "proportion of urgent cases, 0 to 1"
+    direction: lower_is_better
+    anchor: "0.275 — reports/evaluation_results.json#clinical_set.models.dpo-merged.undertriage"
+    business_reading: >-
+      Out of forty patients who needed to be seen now or within hours, eleven were filed lower
+      than that. This is the failure that costs a patient rather than a waiting-room place, and
+      it is the number the project is judged on.
+    source: >-
+      scripts/run_evaluation.py, on the forty urgent cases of the same evaluation set; the
+      count of missed cases is published beside it as `undertriage_detail`
+    uncertainty: >-
+      95% exact (Clopper-Pearson) interval, published as `undertriage_ci95`. Exact rather than
+      Wilson because the effective is forty, and smaller still by subgroup. Comparisons against
+      another system are paired on the same cases (McNemar), never read from two intervals.
+
+  overtriage:
+    definition: >-
+      Over all cases, the share sent to a level above the reference one.
+    unit: "proportion of all cases, 0 to 1"
+    direction: lower_is_better
+    anchor: "0.117 — reports/evaluation_results.json#clinical_set.models.dpo-merged.overtriage"
+    business_reading: >-
+      Out of a hundred patients, twelve are placed ahead of where they belong. Each one costs a
+      place in the queue, which is a real cost and a recoverable one — it is the price of
+      caution, and the baseline that always answers "critical" pays it sixty-seven times.
+    source: "scripts/run_evaluation.py, on the same sixty cases"
+    uncertainty: >-
+      Published without an interval, deliberately: it is not the safety metric, and a figure
+      that draws an interval on everything teaches the reader to ignore them. The comparison
+      that matters for overtriage is against the always-critical baseline, and it is not close.
+
+  format_compliance:
+    definition: >-
+      The share of answers the information system can parse: three labelled lines, a level
+      taken from the closed list, and a clean stop.
+    unit: "proportion, 0 to 1"
+    direction: higher_is_better
+    anchor: >-
+      1.0 — reports/evaluation_results.json#clinical_set.models.dpo-merged.format_compliance
+    business_reading: >-
+      Every answer reaches the reception screen as a level, a justification and a course of
+      action. The base model reaches it for a third of them, which is the difference between a
+      demonstration and something an integrator can call.
+    source: "scripts/run_evaluation.py, parsing each answer with the service's own parser"
+    uncertainty: >-
+      A proportion on the same sixty cases. No interval is published: at 1.0 on sixty cases the
+      exact interval runs from 0.94 to 1.00, and what the number is used for — "the format
+      holds" — is not a claim an interval sharpens.
+
+  # --- What the extraction funnel counts ------------------------------------
+  #
+  # The four public corpora are filtered in stages, and each stage is counted. Read as a set,
+  # these numbers are what justifies the project's least obvious decision: that the ground
+  # truth had to be written rather than found.
+
+  entries_read:
+    definition: "The number of rows read from a corpus, before any filter."
+    unit: "entries"
+    direction: higher_is_better
+    anchor: "3,075 — data/processed/metadata.json#statistics.corpus_yield.mediqal.entries_read"
+    business_reading: >-
+      The raw material a corpus offers. It is the denominator of everything below, and the
+      reason MedMCQA is read at all: a hundred and eighty thousand rows for twelve hundred
+      usable cases is still the second contribution of the set.
+    source: "scripts/build_dataset.py, counted while loading each corpus from the Hub"
+    uncertainty: "An exhaustive count of a frozen corpus release. Nothing is estimated."
+
+  no_patient_described:
+    definition: >-
+      Entries discarded because they describe no patient: an examination question, a
+      definition, a fact sheet about a condition.
+    unit: "entries"
+    direction: lower_is_better
+    anchor: >-
+      1,407 —
+      data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.no_patient_presentation
+    business_reading: >-
+      The first and largest loss, and the one that answers "why not just use a public corpus":
+      medical corpora are written to test students, not to describe arrivals at a desk.
+    source: "scripts/build_dataset.py, through the patient-presentation marker"
+    uncertainty: "An exhaustive count. The marker is deterministic and covered by its own tests."
+
+  outside_length_bounds:
+    definition: >-
+      Entries discarded because the description they yield is shorter than the floor or longer
+      than what the service agrees to read.
+    unit: "entries"
+    direction: lower_is_better
+    anchor: >-
+      514 —
+      data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.outside_length_bounds
+    business_reading: >-
+      A case the service would truncate is a case the model would be trained to answer on a
+      narrative it will never see whole. The bound is the service's, not a round number.
+    source: "scripts/build_dataset.py, against MAX_LENGTH and the measured token budget"
+    uncertainty: "An exhaustive count. The bound is checked in tokens at every build."
+
+  no_sign_identified:
+    definition: >-
+      Entries discarded because no clinical sign could be recognised in them, so no triage
+      level could be attached with any confidence.
+    unit: "entries"
+    direction: lower_is_better
+    anchor: >-
+      792 —
+      data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.no_identified_sign
+    business_reading: >-
+      The stage that keeps the corpus contribution honest: a case nobody can label is dropped
+      rather than guessed at.
+    source: "scripts/build_dataset.py, through the triage rule's sign lexicon"
+    uncertainty: "An exhaustive count."
+
+  duplicates:
+    definition: "Entries discarded because an identical case was already kept."
+    unit: "entries"
+    direction: lower_is_better
+    anchor: "0 — data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.duplicates"
+    business_reading: >-
+      A duplicate across splits is a leak: the same patient turns up in training and in
+      evaluation, and the evaluation reads high for a reason that has nothing to do with
+      triage.
+    source: "scripts/build_dataset.py, on the fingerprint of each case"
+    uncertainty: "An exhaustive count."
+
+  cases_extracted:
+    definition: "Cases that survived every filter, before the per-cell and global caps."
+    unit: "cases"
+    direction: higher_is_better
+    anchor: "362 — data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.kept"
+    business_reading: >-
+      What the corpus could have contributed. The gap with the line below is what the balance
+      of the set costs.
+    source: "scripts/build_dataset.py"
+    uncertainty: "An exhaustive count."
+
+  cases_delivered:
+    definition: >-
+      Cases actually delivered in the training set, after the per-cell cap that keeps levels
+      and languages balanced and the global cap that keeps corpus cases a minority.
+    unit: "cases"
+    direction: higher_is_better
+    anchor: "313 — data/processed/metadata.json#statistics.corpus_yield.mediqal.cases_kept"
+    business_reading: >-
+      What the corpus really weighs in what the model was trained on. Read against the entries
+      read, it is the measurement that decided the project's data strategy.
+    source: "scripts/build_dataset.py, after both caps"
+    uncertainty: >-
+      An exhaustive count, but not a reproducible one down to the case: which cases survive the
+      caps depends on a shuffle, seeded at 42. The count is stable, the selection is stable
+      under that seed, and another seed would keep other cases.

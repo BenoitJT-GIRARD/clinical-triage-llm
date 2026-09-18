@@ -194,3 +194,5 @@ def test_the_card_publishes_the_counts_of_the_build_that_wrote_it(
     assert "**313** | **313 / 3,075**" in written  # the best yield is set in bold
     assert "**0** | **0 / 4,183**" in written  # and so is the corpus that gave nothing
     assert "| 120 | 120 / 16,407 |" in written
+    # The caption a reader needs to read the rows, written with the table rather than after.
+    assert "n = 25,665 entries read across the four corpora, 488 cases delivered." in written

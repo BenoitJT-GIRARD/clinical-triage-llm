@@ -82,7 +82,7 @@ Sixty cases written by hand, forty of them urgent, none of them seen during trai
 labelled by the rule that is compared against here.
 
 <!-- source: reports/evaluation_results.json -->
-| system | accuracy | undertriage of urgent cases | overtriage | answers the information system can parse |
+| system | accuracy | undertriage | overtriage | format compliance |
 |---|---|---|---|---|
 | majority class | 0.333 | 0.500 | 0.333 | 1.000 |
 | always critical | 0.333 | 0.000 | 0.667 | 1.000 |
@@ -91,21 +91,23 @@ labelled by the rule that is compared against here.
 | `Qwen3-1.7B-Base` | 0.083 | 0.700 | 0.267 | 0.367 |
 | SFT + LoRA | 0.683 | 0.300 | 0.117 | 1.000 |
 | SFT + DPO, merged | 0.700 | 0.275 | 0.117 | 1.000 |
-What each column measures, and with which estimator, is in [`metrics.yaml`](metrics.yaml).
+n = 60 cases, of which n = 40 are urgent: undertriage is counted on those forty alone,
+everything else on all sixty. What each column measures, and with which estimator, is in
+[`metrics.yaml`](metrics.yaml).
 
 <!-- source: reports/figures/MANIFEST.json -->
 ![Accuracy, undertriage and overtriage for every system on the same hand-written cases, each proportion with its 95% interval, n = 60 cases of which 40 are urgent](reports/figures/systems_comparison.png)
 
 <!-- source: reports/evaluation_results.json -->
-Against the rule it would replace, the shipped model halves the failure that matters: **11**
-urgent cases missed out of **40**, against **22**. Read as a paired test on the same cases —
-which is the only honest way to read it, the two systems having seen the same patients — that
-gap is **p = 0.019**.
+Against the rule it would replace, the shipped model halves the failure that matters, on the
+n = 40 urgent cases of that set: **11** missed, against **22**. Read as a paired test on the
+same cases — the only honest way to read it, the two systems having seen the same patients —
+that gap is **p = 0.019**.
 
 <!-- source: reports/evaluation_results.json -->
 Against the ordinary classifier it is a different story, and this is the finding the project
-publishes rather than buries: both miss **11** of the same forty urgent cases, and the paired
-test gives **p = 1.0**. Four months of fine-tuning buy an answer a nurse can read and a format
+publishes rather than buries: on the same n = 40 urgent cases both miss **11**, and the
+paired test gives **p = 1.0**. Four months of fine-tuning buy an answer a nurse can read and a format
 the information system can parse — not a better triage decision than n-grams and a logistic
 regression.
 
@@ -115,16 +117,17 @@ regression.
 ![Accuracy on the internal test split against the hand-written clinical set, for each system, with the difference and its interval on the right, n = 120 internal cases and 60 clinical cases](reports/figures/recall_versus_transfer.png)
 
 <!-- source: reports/evaluation_results.json -->
-On the internal test split the model scores **1.000**. That number measures restatement, not
-triage: every presentation in that split was seen during training under another wording. The
-clinical set is the one that measures transfer, and the distance between the two — **0.300** —
-is the size of the illusion a single-set evaluation would have produced.
+On the internal test split, n = 120 cases, the model scores **1.000**. That number measures
+restatement, not triage: every presentation in that split was seen during training under
+another wording. The clinical set, n = 60, is the one that measures transfer, and the distance
+between the two — **0.300** — is the size of the illusion a single-set evaluation would have
+produced.
 
 ### The alignment did not transfer
 
 <!-- source: reports/evaluation_results.json -->
-On an external preference set the aligned model orders **0.353** of the pairs correctly, which is
-below chance, and the supervised model does the same. On the project's own pairs the alignment
+On an external preference set of n = 150 pairs, the aligned model orders **0.353** of them
+correctly — below chance — and the supervised model does the same. On the project's own pairs the alignment
 works; asked to prefer the better of two answers it never saw in training, it has learnt nothing
 transferable. Its benefit here is narrow and real — the format holds and the undertriage moves —
 and the repository says where it stops.

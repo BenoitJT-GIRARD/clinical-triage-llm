@@ -193,9 +193,9 @@ data_file = "var/.coverage"
 # covers them: they need the Hub or a served endpoint, not a card, and their 0% has to
 # be visible.
 #
-# Two more, of another kind. `figure_style.py` is a copy of a shared figure module,
-# vendored rather than imported so that a clone needs nothing extra; it is tested where it is
-# written, and measuring it here would report someone else's coverage as this project's.
+# Two more, of another kind. `figure_style.py` is a copy of a shared figure module, vendored
+# rather than imported so that a clone needs nothing extra; it is tested where it is written,
+# and measuring it here would report someone else's coverage as this project's.
 # `scripts/capture.py` drives a browser against a served product: what it writes is the image
 # manifest, and that is what says whether it ran.
 omit = [
