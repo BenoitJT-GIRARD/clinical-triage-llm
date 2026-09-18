@@ -13,8 +13,8 @@ reception desk / hospital IS  ──HTTPS──▶  FastAPI gateway  ──HTTP�
                                           anonymisation and audit
 ```
 
-The split is deliberate. The gateway is light — no torch, no weights — and redeploys in seconds;
-the inference server updates without touching the business logic. The OpenAPI contract makes the
+The split is deliberate. The gateway is light, carrying neither torch nor weights, and redeploys
+in seconds; the inference server updates without touching the business logic. The OpenAPI contract makes the
 integration independent of both.
 
 ## 1. Preparing the model
@@ -115,7 +115,7 @@ TRIAGE_RATE_LIMIT=6000 docker compose -f infra/docker-compose.yml up -d
 ## 3. A demonstration without a GPU and without Docker
 
 vLLM does not run natively on Windows. For a local demonstration the gateway can load the model
-itself with `transformers` — slower, but enough to show the behaviour.
+itself with `transformers`, which is slower but enough to show the behaviour.
 
 ```powershell
 $env:TRIAGE_BACKEND = "transformers"
@@ -134,11 +134,11 @@ as if they were.
 
 [Modal](https://modal.com) allocates a GPU on demand, bills by the second and shuts the container
 down when nothing asks for it. The free account receives 30 $ of credit renewed every month,
-without a card: a demonstration consumes less than an hour of L4, about 0.80 $.
+without a card; a demonstration consumes less than an hour of L4, about 0.80 $.
 
-`modal_app.py` raises the same two pieces as the Docker stack of this folder — a GPU container
+`modal_app.py` raises the same two pieces as the Docker stack of this folder: a GPU container
 serving the merged model under vLLM, and the project's FastAPI gateway exposed as is. That is the
-project's own split, not an adaptation to the host: not a line of the service code changes.
+project's own split, not an adaptation to the host, and not a line of the service code changes.
 
 ```bash
 uv run modal setup                      # authentication, opens the browser
@@ -170,8 +170,8 @@ re-download three gigabytes.
 
 The repository and the revision are chosen through `HF_NAMESPACE`, `TRIAGE_MODEL_ID` and
 `TRIAGE_MODEL_REVISION`, set in the shell at `modal deploy` time: `infra/modal_app.py` runs on the
-workstation and reads its environment at import, before the project's package — and therefore
-`.env` — is loaded. Without them, the deployment serves the model and the revision pinned in the
+workstation and reads its environment at import, before the project's package, and therefore
+`.env`, is loaded. Without them, the deployment serves the model and the revision pinned in the
 file.
 
 **On the day of a demonstration**, wake the endpoint five minutes before going on: a cold start
@@ -188,9 +188,9 @@ takes a minute when the cache is warm, and a minute of silence in front of an au
    ```
 2. Create an inference endpoint at the host, choosing the model repository, an L4-class GPU or
    equivalent, and the vLLM container.
-3. Deploy the gateway — the image the pipeline publishes to GHCR — on a container service without
-   a GPU, with `TRIAGE_VLLM_URL` pointing at the inference endpoint and `TRIAGE_API_KEY` as a
-   secret.
+3. Deploy the gateway, which is the image the pipeline publishes to GHCR, on a container service
+   without a GPU, with `TRIAGE_VLLM_URL` pointing at the inference endpoint and `TRIAGE_API_KEY`
+   as a secret.
 
 ### Option B — a virtual machine with a GPU
 
@@ -202,7 +202,7 @@ takes a minute when the cache is warm, and a minute of silence in front of an au
 
 ### Shipping a new model version
 
-The weights are uploaded from the training machine — they do not travel through continuous
+The weights are uploaded from the training machine; they do not travel through continuous
 integration. The **version tag** is what ties the two together.
 
 ```bash
@@ -222,9 +222,9 @@ vllm serve <account>/qwen3-1.7b-clinical-triage --revision model-v1.0.0 \
   --served-model-name qwen3-1.7b-clinical-triage --max-model-len 1024
 ```
 
-Pinning the revision rather than the default branch is what makes a deployment reproducible:
+Pinning the revision instead of the default branch is what makes a deployment reproducible:
 `main` designates content that changes at every publication, `model-v1.0.0` always designates the
-same weights. It is also what makes rolling back trivial — redeploy the previous tag.
+same weights. Rolling back becomes trivial too: redeploy the previous tag.
 
 The four cards published beside the weights are versioned here, and the continuous-deployment job
 is what substitutes the evaluation figures and the served revision into them:

@@ -11,7 +11,7 @@ Two applications, exactly like the local stack of ``docker-compose.yml``:
 The separation is not a Modal-specific choice: it is the project's own. Nothing is rewritten,
 only rewired.
 
-## Why load the weights from the Hub rather than bake them in
+## Why the weights come from the Hub, and are not baked in
 
 The model already lives on the Hugging Face Hub, tagged by the continuous-deployment pipeline.
 The container reads it at a **specific revision**: the demonstration stays reproducible even if
@@ -62,7 +62,7 @@ secret = modal.Secret.from_name("clinical-triage")
 hf_cache = modal.Volume.from_name("clinical-triage-cache-hf", create_if_missing=True)
 vllm_cache = modal.Volume.from_name("clinical-triage-cache-vllm", create_if_missing=True)
 
-# Environment baked into the engine image. Both model references are there rather than read by
+# Environment baked into the engine image. Both model references are written there, not read by
 # the container: it reimports this file at startup, in an environment that holds nothing of the
 # deployment's. What is not baked in here would be lost.
 ENGINE_ENVIRONMENT = {

@@ -33,9 +33,9 @@ that matters is the original's. Both are recorded in `metadata.json` under `lice
 
 **The clinical catalogue is the only source of triage levels.** Seventy presentations, each
 written with its complaint, its signs, its history, a vital-sign profile and the clinical reason
-for its level. A generator draws vignettes from it — varying the wording, the patient's age, the
-measured vitals, the language — and the level travels with the presentation rather than being
-read back out of the text. That is what makes it ground truth: no rule, no model and no keyword
+for its level. A generator draws vignettes from it, varying the wording, the patient's age, the
+measured vitals and the language, and the level travels with the presentation: it is never read
+back out of the text. That is what makes it ground truth: no rule, no model and no keyword
 decides it.
 
 **MediQAl is the only source corpus that describes patients.** Its clinical-case column carries
@@ -44,8 +44,8 @@ authentic French material of the set.
 
 **MedMCQA was added, and the addition is a decision.** The other source corpora hold no
 English clinical vignette at all. Without a second language the dataset would have been French
-only, and the service reads both. MedMCQA's yield is poor — a hundred and eighty
-thousand rows for twelve hundred cases — but those cases are real presentations written by
+only, and the service reads both. MedMCQA's yield is poor, a hundred and eighty
+thousand rows for twelve hundred cases, but those cases are real presentations written by
 someone else, which is exactly what a catalogue cannot provide.
 
 **FrenchMedMCQA gave nothing, and that is the finding.** Its questions are pharmacy questions:

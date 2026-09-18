@@ -2,7 +2,7 @@
 
 The corpus contribution is the part of the set nobody chose case by case: it comes from four
 public corpora, it concentrates on the urgent levels and on English, and its label is put there
-by a keyword rule rather than read from a catalogue. Two bounds keep it from deciding what the
+by a keyword rule, never read from a catalogue. Two bounds keep it from deciding what the
 set is, and both are computed here.
 
 The yield table of ``data/README.md`` is written by the same script, from the same counts: the
@@ -54,7 +54,7 @@ def _cases(level: str, lang: str, count: int) -> list[Case]:
 
 
 def test_the_targets_sum_exactly_to_the_volume_asked_for(build_dataset):
-    """The remainder of the division is spread rather than dropped."""
+    """Pins the arithmetic: the targets of the six cells add up to the volume asked for."""
     for size in (4998, 5000, 1, 7):
         grid = build_dataset._grid(size)
         assert sum(target for _, _, target in grid) == size

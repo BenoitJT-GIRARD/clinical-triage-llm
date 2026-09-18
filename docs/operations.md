@@ -19,7 +19,7 @@ every failure is one of them being up while the other is not.
 
 The gateway **refuses to start** without `TRIAGE_API_KEY`, unless open mode is asked for
 explicitly. A check that disappears when its setting does is not a check at all, and refusing to
-start is the only way to show that at deployment rather than at the first request.
+start is the only way to show that at deployment, before the first request.
 
 It also opens the audit log at startup, empty, and refuses to serve if it cannot. Tracing every
 interaction is one of this service's obligations, and answering without being able to write down
@@ -93,7 +93,7 @@ nurse wrote, so a name removed from the description would walk back in through t
 a setting. A setting can name one model while another answers, and a trace that can say the wrong
 thing is not a trace.
 
-**The retention is written into every line**, so the obligation travels with the data rather than
+**The retention is written into every line**, so the obligation travels with the data and not
 living in a document beside it.
 
 In the container the log is a named volume. A host folder is mounted as root, and the service
@@ -113,9 +113,9 @@ runs unprivileged: every request then failed on the write, after having produced
 
 The last one deserves its sentence. Cutting a patient's story without saying so is the one thing
 a system of this kind must never do, so the gateway bounds the description, announces the bound
-in its reply, and records it in the audit line. The bound is in characters because the gateway carries no tokenizer —
-that is the point of a thin gateway — and the character figure is set from the measured token
-budget.
+in its reply, and records it in the audit line. The bound is in characters because the gateway
+carries no tokenizer, which is the point of a thin gateway, and the character figure is set from
+the measured token budget.
 
 ## What is deployed, and what is not
 

@@ -4,7 +4,7 @@ Every figure here reads ``reports/`` and ``data/processed/``. Re-run the evaluat
 figures move with it; nothing is copied by hand, so nothing can drift.
 
 Three rules hold across the nine, and they are the reason most of these figures are bars
-rather than clouds of points:
+and not clouds of points:
 
 - **almost everything plotted here is a binomial proportion on a few dozen cases.** The usual
   "mean ± standard error" does not apply: the normal approximation leaves [0, 1] — two
@@ -91,7 +91,7 @@ SOURCE_LABELS = {
 
 CONFIDENCE_LABELS = {"high": "high (catalogue)", "medium": "medium (corpus)"}
 
-#: Said in words on every figure whose bars are counted rather than estimated.
+#: Said in words on every figure whose bars are counted, never estimated.
 COUNTED = "exhaustive counts, no estimation"
 
 #: Hatch of a bar whose effective forbids publishing a rate. Colour alone would not do: it
@@ -149,7 +149,7 @@ def dataset_composition(statistics: dict, destination: Path) -> Path:
     """What the training corpus is made of: source, triage level, language, label confidence.
 
     Four exhaustive counts. Nothing here is a sample of anything, so nothing carries an
-    interval — and the figure says so rather than letting the absence read as an omission.
+    interval, and the figure says so; an unexplained absence would read as an omission.
     """
 
     panels = [
@@ -199,8 +199,8 @@ def hyperparameter_tuning(comparison: dict, destination: Path) -> Path:
     """The four LoRA settings put in competition, on the validation split.
 
     Accuracy is a proportion on a few dozen cases, so it carries its interval; the validation
-    loss is a single number per run and carries none. Two panels rather than two vertical
-    axes: quantities of different natures do not share a scale.
+    loss is a single number per run and carries none. Two panels, and no second vertical
+    axis: quantities of different natures do not share a scale.
     """
 
     variants = list(comparison["variants"])
@@ -734,7 +734,7 @@ def subgroup_undertriage(by_subgroup: dict[str, dict], destination: Path) -> Pat
     means no interval; here it means the opposite, because this is the number patients pay for.
     """
 
-    # Declared order rather than the artefact's: a chart sorted by name would put "discordant
+    # The declared order, not the artefact's: a chart sorted by name would put "discordant
     # vitals" between "direct" and "falsely alarming", and the reader would look for a meaning
     # in a sequence that has none.
     names = [n for n in CASE_TYPE_LABELS if n in by_subgroup]

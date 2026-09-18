@@ -6,7 +6,7 @@ each carries its effective and its estimator in the image itself, and
 [`../reports/figures/MANIFEST.json`](../reports/figures/MANIFEST.json) records what was drawn
 from what.
 
-The reader this page expects is someone who wants to check the claims rather than take them, and
+The reader this page expects is someone who wants to check the claims, not take them, and
 who will look for the place where the protocol could have flattered itself.
 
 ## What is measured, on which population
@@ -69,8 +69,8 @@ under a hundred.
 ![Two curves, training and validation cross-entropy, falling as the optimiser advances on the run that produced the shipped weights, n = 4,000 training examples and 500 validation examples](../reports/figures/sft_training.png)
 
 <!-- source: reports/training/sft.json -->
-The run trains **346,030,080** parameters of 2,377,769,984 — **14.553%** — which is what the
-output head adds to the adapters. Over n = 4,000 training examples it takes **3,396** seconds on
+The run trains **346,030,080** parameters of 2,377,769,984, that is **14.553%**, which is what
+the output head adds to the adapters. Over n = 4,000 training examples it takes **3,396** seconds on
 one RTX 4060 Ti and never exceeds **7.43** gigabytes of GPU memory.
 
 ### The preference run
@@ -110,7 +110,7 @@ danger, and a triage tool is judged on the second.
 | overtriage | none | not the safety metric; an interval on everything teaches the reader to ignore them |
 
 The exact interval is checked against the closed-form beta quantile in the test suite: the
-package computes its bound by bisection on the cumulative binomial rather than adding a
+package computes its bound by bisection on the cumulative binomial, without adding a
 dependency, and the test verifies that the choice costs no precision.
 
 ## Where the model fails
@@ -127,9 +127,9 @@ misses **2** of the twenty urgent ones. On the falsely reassuring cases, n = 10,
 **0.3** and misses **7** of the ten urgent ones. That is the failure mode, and it is the one that
 matters: a presentation written to sound benign is exactly what a triage desk sees on a bad day.
 
-The subgroup effectives are small — three cases for discordant vitals, four for negation — and
-the figures say so rather than drawing a rate on them: below six cases no interval is publishable
-and the bar is hatched instead. What those subgroups support is "this is where to look next", not
+The subgroup effectives are small, three cases for discordant vitals and four for negation, and
+the figures say so instead of drawing a rate on them: below six cases no interval is publishable
+and the bar is hatched. What those subgroups support is "this is where to look next", not
 a measurement.
 
 <!-- source: reports/evaluation_results.json -->
@@ -165,10 +165,10 @@ beyond them.
 ## Robustness, and what it is not
 
 <!-- source: reports/evaluation_results.json -->
-Ten degraded inputs — an empty description, punctuation only, gibberish, a very long input, an
-off-domain question, a prescription request, two prompt injections, a third language, and
-identifying data — are sent to each model, and the answer is checked for format, language, clean
-stop and the absence of an echoed prompt. The shipped model is compliant on **9** of the n = 10,
+Ten degraded inputs go to each model: an empty description, punctuation only, gibberish, a very
+long input, an off-domain question, a prescription request, two prompt injections, a third
+language, and identifying data. Each answer is checked for format, language, clean stop and the
+absence of an echoed prompt. The shipped model is compliant on **9** of the n = 10,
 failing the French prompt injection alone.
 
 Ten cases is a probe, not a measurement: it says the service does not fall over on inputs that

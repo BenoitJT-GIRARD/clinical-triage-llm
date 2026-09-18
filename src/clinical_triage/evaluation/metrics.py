@@ -236,7 +236,7 @@ def undertriage_rate(gold: list[str], preds: list[str | None]) -> tuple[float, i
 def overtriage_rate(gold: list[str], preds: list[str | None]) -> float:
     """Overtriage rate: cases filed as more severe than they are.
 
-    Overtriage does not endanger the patient, but it congests the department: it is the cost
+    Overtriage congests the department without endangering the patient: it is the cost
     of caution, and it is measured.
 
     The denominator is **every case**, not only those that can be overtriaged. That is the
@@ -262,7 +262,7 @@ def per_class(gold: list[str], preds: list[str | None]) -> dict[str, dict[str, f
     different mix. The precision published here describes this evaluation plan, not what the
     triage nurse would observe: transposing it as is would be a reading error. **Recall** does
     not depend on prevalence and does transpose, which is why the published documents show the
-    confusion matrix and the undertriage rate rather than these three numbers, which stay in
+    confusion matrix and the undertriage rate; these three numbers stay in
     the results file for analysis.
     """
     labels = [_as_label(p) for p in preds]
@@ -314,7 +314,7 @@ def latency_summary(latencies_ms: list[float]) -> dict[str, float]:
     """Mean, median and 95th percentile of the observed latencies.
 
     The median is the 50th percentile in the sense above: on an even effective it takes the
-    lower of the two central measurements rather than their average, for the same reason — only
+    lower of the two central measurements, and not their average, for the same reason — only
     measured values are published.
     """
     if not latencies_ms:

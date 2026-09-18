@@ -91,7 +91,7 @@ def _write_yield_into_the_card(corpus_yield: dict) -> None:
     """Rewrite the yield table of ``data/README.md`` from the counts.
 
     That card is published as is on the Hub, next to ``metadata.json``. The rows of the table are
-    therefore written from the counts of the current build rather than typed by hand: the card
+    therefore written from the counts of the current build, never typed by hand: the card
     and the metadata file published together describe the same set.
     """
     card = PATHS.data / "README.md"
@@ -113,7 +113,7 @@ def _write_yield_into_the_card(corpus_yield: dict) -> None:
         measure = corpus_yield[key]
         read, kept = measure["entries_read"], measure["cases_kept"]
         lost = measure["funnel"]
-        # The yield as a fraction of two counted numbers rather than as a rate. A rate is
+        # The yield as a fraction of two counted numbers, and not as a rate. A rate is
         # computed here and exists nowhere else: a reader who wants to check it has nothing to
         # check it against, and the number would be the only one in this card that no artefact
         # carries.
@@ -240,10 +240,10 @@ def _check_description_budget(cases: list) -> dict:
     the two lies a density, which depends on the language and the vocabulary and which a change
     of corpus can move. So the check runs on the cases actually kept, at every build: if one of
     them exceeds the budget, the model would train on a narrative the service would truncate,
-    and ``MAX_LENGTH`` must come down rather than the problem be discovered in production.
+    and ``MAX_LENGTH`` must come down, so that production is not where the problem is found.
 
     Returns the measurement, which the dataset card publishes: the published protocol reads the
-    budget and the length actually observed there instead of copying them.
+    budget and the length actually observed there, with nothing copied across.
     """
     from transformers import AutoTokenizer
 

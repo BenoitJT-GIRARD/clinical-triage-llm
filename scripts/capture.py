@@ -131,7 +131,7 @@ SERVE_COMMAND: tuple[str, ...] = (
 #: The route that answers once the product is ready. ``None`` when there is nothing to start
 #: and nothing to wait for — a page served from the filesystem.
 #:
-#: The contract rather than `/health`: this service's probe questions the inference engine
+#: The contract, and not `/health`: this service's probe questions the inference engine
 #: before answering, so it measures the engine's readiness and not the gateway's. Waiting on
 #: it would wait for something no capture needs.
 HEALTH_ROUTE: str | None = "/openapi.json"
@@ -229,7 +229,7 @@ CAPTURES: tuple[Capture, ...] = (
             "red-flag answers"
         ),
         demonstrates_behaviour=(
-            "the questionnaire adapts to the complaint rather than reading a fixed list: the "
+            "the questionnaire adapts to the complaint instead of reading a fixed list: the "
             "chest theme is detected and the next question asked is the one about radiating "
             "pain. Nothing here goes through the model — the answer is the explicit rule's, "
             "computed in the gateway"

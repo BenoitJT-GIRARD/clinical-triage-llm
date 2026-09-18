@@ -27,8 +27,8 @@ model, with no adapter library.
 
 ## What the model does
 
-From a patient description — complaint, symptoms, history, vital signs taken at the desk, in
-French or in English — it produces an answer in French, always shaped like this:
+From a patient description, complaint, symptoms, history and vital signs taken at the desk, in
+French or in English, it produces an answer in French, always shaped like this:
 
 ```
 Niveau de priorité : URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE

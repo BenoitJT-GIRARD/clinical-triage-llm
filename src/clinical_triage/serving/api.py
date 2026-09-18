@@ -8,7 +8,7 @@ interchangeable inference engines behind one contract:
 - ``transformers`` — the demonstration mode. The model is loaded in-process, which lets the
   demonstration run on a machine without vLLM.
 
-The operational precautions are gathered at startup rather than scattered across the entry
+The operational precautions are gathered at startup, never scattered across the entry
 points:
 
 - **the API key is mandatory.** The service refuses to start without one, unless the operator
@@ -161,7 +161,7 @@ async def lifespan(app: FastAPI):
     if not settings.api_key:
         logger.warning("Service started without an API key: open mode, demonstration only.")
 
-    # The audit log is opened here, empty, so that its unavailability stops startup rather than
+    # The audit log is opened here, empty, so that its unavailability stops startup and not
     # the first request.
     logger.info("Audit log: %s", path_for_log(check_log_is_writable()))
 

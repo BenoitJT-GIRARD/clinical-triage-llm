@@ -52,15 +52,14 @@ Three routes, and the third is the point.
 <!-- source: docs/images/MANIFEST.json -->
 ![The published contract of the running service: three routes, the two that need a key marked with a padlock, and the schemas generated from the Pydantic models](docs/images/api-contract.png)
 
-A decision-support agent that hides its disagreement is worse than no agent: the nurse reads a
-level and has no way of knowing that the rule, which never hallucinates, would have sent that
-patient elsewhere. So `rule_level`, `rule_reasons` and `agreement` travel in every reply, beside
-the model's own answer.
+Hide that disagreement and the nurse reads a level without knowing that the rule, which never
+hallucinates, would have sent the patient elsewhere. So `rule_level`, `rule_reasons` and
+`agreement` travel in every reply, beside the model's own answer.
 
 ### How it is built
 
-`Qwen3-1.7B-Base` is fine-tuned with LoRA on the project's bilingual set — **PyTorch** under
-Unsloth's kernels — then aligned on preference pairs that each carry one deliberate defect. Every
+`Qwen3-1.7B-Base` is fine-tuned with LoRA on the project's bilingual set, on **PyTorch** under
+Unsloth's kernels, then aligned on preference pairs that each carry one deliberate defect. Every
 run writes to a local **MLflow** store, which is what makes the four LoRA settings comparable
 after the fact rather than from memory. The ordinary baseline is a **scikit-learn** linear
 classifier over n-grams, trained on the same pairs, and it is the demanding comparison.
@@ -101,8 +100,8 @@ everything else on all sixty. What each column measures, and with which estimato
 <!-- source: reports/evaluation_results.json -->
 Against the rule it would replace, the shipped model halves the failure that matters, on the
 n = 40 urgent cases of that set: **11** missed, against **22**. Read as a paired test on the
-same cases — the only honest way to read it, the two systems having seen the same patients —
-that gap is **p = 0.019**.
+same cases, which is the only honest way to read two systems that saw the same patients, that
+gap is **p = 0.019**.
 
 <!-- source: reports/evaluation_results.json -->
 Against the ordinary classifier it is a different story, and this is the finding the project
@@ -120,17 +119,17 @@ regression.
 On the internal test split, n = 120 cases, the model scores **1.000**. That number measures
 restatement, not triage: every presentation in that split was seen during training under
 another wording. The clinical set, n = 60, is the one that measures transfer, and the distance
-between the two — **0.300** — is the size of the illusion a single-set evaluation would have
+between the two, **0.300**, is the size of the illusion a single-set evaluation would have
 produced.
 
 ### The alignment did not transfer
 
 <!-- source: reports/evaluation_results.json -->
 On an external preference set of n = 150 pairs, the aligned model orders **0.353** of them
-correctly — below chance — and the supervised model does the same. On the project's own pairs the alignment
-works; asked to prefer the better of two answers it never saw in training, it has learnt nothing
-transferable. Its benefit here is narrow and real — the format holds and the undertriage moves —
-and the repository says where it stops.
+correctly, below chance, and the supervised model does the same. On the project's own pairs the
+alignment works; asked to prefer the better of two answers it never saw in training, it has
+learnt nothing transferable. Its benefit here is narrow and real, the format holds and the
+undertriage moves, and the repository says where it stops.
 
 ## Why these numbers can be believed
 
@@ -139,7 +138,7 @@ recorded beside it. It never passed through the triage rule, which is what makes
 against that rule meaningful: on the corpus part of the training data the rule recovers its own
 labels by construction, and measuring it there would measure the filter.
 
-Every proportion carries an interval — Wilson for accuracy, exact for undertriage, where the
+Every proportion carries an interval: Wilson for accuracy, exact for undertriage, where the
 effectives are smallest. Every comparison between two systems is a paired test on the same cases,
 never an overlap of two intervals, because overlap proves nothing and on paired data it is
 systematically too cautious. The protocol, the estimators and what each of them can and cannot
@@ -152,8 +151,8 @@ from a number read elsewhere.
 
 ## Running it
 
-Requirements: [uv](https://docs.astral.sh/uv/) and Python 3.12. Training needs an NVIDIA GPU —
-Unsloth demands one at import — and serving the model needs Docker.
+Requirements: [uv](https://docs.astral.sh/uv/) and Python 3.12. Training needs an NVIDIA GPU,
+which Unsloth demands at import, and serving the model needs Docker.
 
 ```bash
 uv sync

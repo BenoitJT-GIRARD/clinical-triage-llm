@@ -34,7 +34,7 @@ class PreferenceScore:
     """The likelihoods assigned to the two answers of a pair.
 
     ``truncated_sides`` counts how many of the two answers the model window cut short — 0, 1 or
-    2. It travels with the score rather than staying in a log line, because the share of
+    2. It travels with the score, where a log line would bury it, because the share of
     truncated answers is published next to the result and qualifies how it must be read.
     """
 
@@ -56,7 +56,7 @@ def _log_likelihood(model, tokenizer, prompt: str, answer: str, device: str) -> 
     """Mean per-token log-likelihood of ``answer``, given ``prompt``.
 
     Normalised by length: without that, the comparison would mechanically favour the shorter
-    answer, and length would be measured again instead of substance.
+    answer, and length would be measured a second time, substance never.
     """
     import torch
 
@@ -98,7 +98,7 @@ def truncated_sides(tokenizer, pair, prompt: str) -> int:
     UltraMedical's essays regularly exceed the window. The comparison stays fair — the same
     bound applies to the preferred and to the rejected answer, and the score is normalised by
     length — but it then covers the **beginning** of each answer. The published result must be
-    able to say so with a number rather than pass over it in silence.
+    able to say so with a number, and not pass over it in silence.
     """
     bounded, _ = bound_description(prompt, tokenizer, MODEL.max_seq_length // 2)
     return sum(
