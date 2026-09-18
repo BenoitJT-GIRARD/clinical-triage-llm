@@ -1,0 +1,30 @@
+{
+  "command": "uv run python scripts/smoke.py",
+  "ran_at": "2026-09-18",
+  "git_revision": "ab613da6023416b6e77bee5d34179bacbe55cc3c",
+  "tool_versions": {
+    "python": "3.12.12",
+    "matplotlib": "3.11.0",
+    "numpy": "2.1.3",
+    "scikit-learn": "1.9.0",
+    "fastapi": "0.138.2",
+    "pydantic": "2.13.4",
+    "uv": "uv 0.11.6 (65950801c 2026-04-09 x86_64-pc-windows-msvc)",
+    "docker": "Docker version 29.2.0, build 0b9d198"
+  },
+  "duration_seconds": 2.7,
+  "key_output": [
+    "reports/figures/accuracy_by_case_type.png",
+    "reports/figures/confusion_matrices.png",
+    "reports/figures/dataset_composition.png",
+    "reports/figures/dpo_alignment.png",
+    "reports/figures/endpoint_latency.png",
+    "reports/figures/hyperparameter_tuning.png",
+    "reports/figures/recall_versus_transfer.png",
+    "reports/figures/sft_training.png",
+    "reports/figures/systems_comparison.png",
+    "reports/figures/undertriage_by_case_type.png",
+    "reports/figures/MANIFEST.json"
+  ],
+  "workflow_run_url": null
+}
