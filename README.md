@@ -149,6 +149,29 @@ The figures are drawn from the committed result files by `scripts/build_figures.
 effective, its estimator and the digest of the image. Nothing in this README is typed by hand
 from a number read elsewhere.
 
+The last check that closed this work found five defects, and the useful half of that result is
+what it failed to find: no published figure moved. Four of the five were about how a measurement
+gets written down. A count that was missing came out as `0`, so a report regenerated from a fresh
+clone could read that the "0 distinct presentations it holds have all been seen in training". The
+share of preference pairs clipped by the context window was typed into the report by hand while
+the function that measures it only logged the value. The endpoint bench published
+`"tokens_per_s": 0.0` for a gateway that counts no token at all. And the global accuracy built its
+interval with Wilson directly, going around the single gate that picks the estimator from the
+effective: on 60 and 120 cases the two paths agree, on a three-case subgroup they would not.
+
+The fifth defect was the serious one. Four tests of the tracking module failed in the environment
+continuous integration installs, because `describe_environment()` imported torch with no guard.
+Those four tests are precisely the ones that exercise what the module promises, that tracking
+never brings down a run.
+
+Each correction was made where the defect lived. The count moved into `metadata.json`, which is
+versioned, and reads `None` when it is absent, so the sentence loses its number. The clipped share
+is written into the results file and read back from there. The throughput appears only when at
+least one measurement carries a token count, the condition the gateway overhead already had. The
+accuracy interval goes through `interval_for_proportion`. The environment description degrades to
+`unavailable` when a library is missing. After that, the suite passes whole without the training
+group, 0 failures, and the four tests exercise the path they describe.
+
 ## Running it
 
 Requirements: [uv](https://docs.astral.sh/uv/) and Python 3.12. Training needs an NVIDIA GPU,
