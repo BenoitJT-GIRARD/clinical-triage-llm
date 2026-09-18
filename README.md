@@ -56,6 +56,16 @@ Hide that disagreement and the nurse reads a level without knowing that the rule
 hallucinates, would have sent the patient elsewhere. So `rule_level`, `rule_reasons` and
 `agreement` travel in every reply, beside the model's own answer.
 
+```mermaid
+flowchart LR
+    Q["questionnaire<br/>stops as soon as a vital sign appears"] --> DESC["Compiled description<br/>each answer turned into a sentence"]
+    DESC --> MODEL["Fine-tuned model<br/>generation delegated to vLLM"]
+    DESC --> RULE["Explicit rule<br/>runs in the gateway, never hallucinates"]
+    MODEL --> REPLY["One reply: level, reason, what to do<br/>and rule_level, rule_reasons, agreement"]
+    RULE --> REPLY
+    REPLY --> LOG["Audit line<br/>anonymised by the module that writes it"]
+```
+
 ### How it is built
 
 `Qwen3-1.7B-Base` is fine-tuned with LoRA on the project's bilingual set, on **PyTorch** under
