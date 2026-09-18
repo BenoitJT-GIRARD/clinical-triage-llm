@@ -18,6 +18,10 @@ figure from the committed results and refuses to write anything if one of them c
 different. Pushes and pull requests still set the workflows off; the day this repository is
 archived, they fall back to a manual trigger.
 
+**This is not a medical device, and nothing it returns is clinical advice.** It is a
+demonstration built to study how a small language model can be fine-tuned and aligned for a
+structured task. No patient should be routed on what it outputs.
+
 ## The problem
 
 A triage nurse decides, from a narrative and a couple of minutes, whether a patient is seen now,
