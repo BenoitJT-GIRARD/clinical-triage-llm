@@ -1,19 +1,18 @@
-# Normalisation des fins de ligne : le dépôt est écrit sous Windows et
-# l'intégration continue tourne sous Linux.
+# Line endings are normalised: the repository is written on Windows and continuous integration
+# runs on Linux.
 * text=auto eol=lf
 
-# Fichiers binaires : ni conversion, ni différence ligne à ligne.
+# Binary files: neither converted nor diffed line by line.
 *.png binary
 *.jpg binary
 *.pdf binary
-*.pptx binary
 *.safetensors binary
 *.db binary
 
-# Le dataset est versionné. Le marquer comme généré garde les
-# différences repliées par défaut dans les revues, sans l'exclure des recherches.
+# The dataset is published with the repository. Marking it generated keeps its differences
+# folded by default in reviews, without excluding it from searches.
 data/processed/*.jsonl text eol=lf linguist-generated=true
 
-# Les notebooks se lisent en JSON : fins de ligne fixes, et pas de détection
-# automatique de type qui les rendrait illisibles dans les différences.
+# Notebooks are read as JSON: fixed line endings, and no automatic type detection that would
+# make them unreadable in a diff.
 *.ipynb text eol=lf linguist-language=Python

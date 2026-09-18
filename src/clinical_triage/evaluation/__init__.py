@@ -1,11 +1,11 @@
-"""Évaluation du modèle : qualité des décisions, sécurité, robustesse et performance.
+"""Evaluating the model: decision quality, safety, robustness and performance.
 
-- `metrics`    : exactitude, sous-triage, F1 par niveau, intervalles de confiance ;
-- `safety`     : contrôles du contenu généré (recommandation, diagnostic, langue) ;
-- `robustness` : comportement sur des entrées dégradées ou détournées ;
-- `baselines`  : références auxquelles comparer le modèle ;
-- `runner`     : exécution d'une évaluation complète sur un jeu de cas ;
-- `latency`    : latence perçue et débit de l'endpoint d'inférence.
+- ``metrics``    : accuracy, undertriage, per-level F1, confidence intervals;
+- ``safety``     : checks on the generated content (recommendation, diagnosis, language);
+- ``robustness`` : behaviour on degraded or hijacked inputs;
+- ``baselines``  : the references the model is compared against;
+- ``runner``     : running a full evaluation over a set of cases;
+- ``latency``    : perceived latency and throughput of the inference endpoint.
 """
 
 from __future__ import annotations

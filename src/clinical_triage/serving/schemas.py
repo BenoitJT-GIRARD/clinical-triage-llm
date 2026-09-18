@@ -1,14 +1,13 @@
-"""Contrats d'API — le point d'intégration au système d'information hospitalier.
+"""API contracts — the integration point with the hospital information system.
 
-Ces schémas définissent un format d'échange stable et documenté. Le SIH n'a pas
-à connaître le modèle, ni le moteur d'inférence : il envoie une description de
-patient et reçoit un niveau de priorité, sa justification, la conduite à tenir et
-l'identifiant d'audit correspondant.
+These schemas define a stable, documented exchange format. The information system needs to know
+neither the model nor the inference engine: it sends a patient description and receives a
+priority level, its justification, what to do next, and the matching audit id.
 
-La réponse expose aussi le niveau qu'aurait retenu la **règle explicite**. Ce
-n'est pas un détail d'implémentation qui fuit : c'est un garde-fou. Quand les
-deux divergent, l'interface d'accueil peut le signaler à l'infirmière, qui
-tranche. Un agent d'aide à la décision doit rendre son désaccord visible.
+The reply also exposes the level the **explicit rule** would have chosen. That is not an
+implementation detail leaking out: it is a guard rail. When the two diverge, the reception
+screen can flag it to the nurse, who decides. A decision-support agent must make its
+disagreement visible.
 """
 
 from __future__ import annotations
@@ -21,91 +20,92 @@ from clinical_triage.config import TRIAGE
 
 
 class TriageRequest(BaseModel):
-    """Demande de triage à partir d'une description de patient."""
+    """A triage request built from a patient description."""
 
     symptoms: str = Field(
         ...,
         min_length=3,
         max_length=4000,
-        description="Description libre des symptômes, antécédents et constantes du patient.",
+        description="Free-text description of the patient's symptoms, history and vital signs.",
         examples=[
             "Homme de 62 ans, douleur thoracique et sueurs depuis 20 minutes. TA 148/92, FC 102."
         ],
     )
     patient_age: int | None = Field(
-        None, ge=0, le=120, description="Âge du patient, s'il n'est pas dans la description."
+        None, ge=0, le=120, description="Patient age, when it is not in the description."
     )
 
 
 class TriageReply(BaseModel):
-    """Réponse de triage structurée."""
+    """A structured triage answer."""
 
-    level: str | None = Field(..., description=f"Niveau prédit parmi {', '.join(TRIAGE.levels)}.")
-    level_label: str | None = Field(None, description="Libellé lisible du niveau prédit.")
-    justification: str | None = Field(None, description="Explication clinique de la décision.")
-    recommendation: str | None = Field(None, description="Conduite à tenir proposée.")
+    level: str | None = Field(
+        ..., description=f"Predicted level, one of {', '.join(TRIAGE.levels)}."
+    )
+    level_label: str | None = Field(None, description="Human-readable label of the level.")
+    justification: str | None = Field(None, description="Clinical explanation of the decision.")
+    recommendation: str | None = Field(None, description="Suggested course of action.")
     rule_level: str | None = Field(
-        None, description="Niveau retenu par la règle explicite, pour comparaison."
+        None, description="Level chosen by the explicit rule, for comparison."
     )
     rule_reasons: list[str] = Field(
-        default_factory=list, description="Signes ayant motivé la décision de la règle."
+        default_factory=list, description="Signs that drove the rule's decision."
     )
     agreement: bool = Field(
-        ..., description="Vrai si le modèle et la règle explicite retiennent le même niveau."
+        ..., description="True when the model and the explicit rule choose the same level."
     )
-    raw_response: str = Field(..., description="Réponse complète du modèle, après troncature.")
+    raw_response: str = Field(..., description="The model's full answer, after truncation.")
     description_truncated: bool = Field(
         False,
         description=(
-            "Vrai si la description reçue dépassait la fenêtre du modèle et a été bornée. "
-            "Le triage n'a alors pas lu la totalité du récit : seul un soignant peut juger "
-            "si ce qui manque comptait."
+            "True when the description received exceeded the model window and was bounded. "
+            "The triage then did not read the whole narrative: only a clinician can judge "
+            "whether what is missing mattered."
         ),
     )
-    latency_ms: float = Field(..., description="Durée de l'inférence, en millisecondes.")
-    request_id: str = Field(..., description="Identifiant de traçabilité de l'interaction.")
-    model_version: str = Field(..., description="Modèle ayant réellement produit la réponse.")
+    latency_ms: float = Field(..., description="Inference duration, in milliseconds.")
+    request_id: str = Field(..., description="Traceability id of the interaction.")
+    model_version: str = Field(..., description="The model that actually produced the answer.")
 
 
 class QuestionnaireRequest(BaseModel):
-    """État courant du questionnaire adaptatif."""
+    """Current state of the adaptive questionnaire."""
 
     chief_complaint: str = Field(
-        ..., min_length=2, max_length=500, description="Motif principal de consultation."
+        ..., min_length=2, max_length=500, description="Main reason for the visit."
     )
-    # Ce champ est borné comme les autres champs de texte. Sans ces bornes, un
-    # dictionnaire de taille arbitraire à valeurs arbitraires serait désérialisé
-    # entier en mémoire, puis concaténé en une seule chaîne par la synthèse, qui
-    # la donne à lire à la règle de triage : une requête suffirait à saturer le
-    # conteneur. Trente-deux entrées couvrent largement le plan le plus long,
-    # qui en compte six.
+    # This field is bounded like every other text field. Without those bounds an arbitrarily
+    # large dictionary with arbitrary values would be deserialised whole into memory, then
+    # concatenated into a single string by the summary, which hands it to the triage rule: one
+    # request would be enough to saturate the container. Thirty-two entries cover the longest
+    # plan by a wide margin — it has six.
     answers: dict[
         Annotated[str, StringConstraints(max_length=64)],
         Annotated[str, StringConstraints(max_length=1000)],
     ] = Field(
         default_factory=dict,
         max_length=32,
-        description="Réponses déjà collectées, par identifiant de question.",
+        description="Answers already collected, by question id.",
     )
 
 
 class QuestionnaireReply(BaseModel):
-    """Prochaine question, ou signal de fin de collecte."""
+    """The next question, or the signal that collection is over."""
 
-    next_question_id: str | None = Field(None, description="Identifiant de la prochaine question.")
-    next_question: str | None = Field(None, description="Texte de la prochaine question.")
-    theme: str = Field(..., description="Thème clinique détecté à partir du motif.")
-    finished: bool = Field(..., description="Vrai si la collecte est terminée.")
+    next_question_id: str | None = Field(None, description="Id of the next question.")
+    next_question: str | None = Field(None, description="Text of the next question.")
+    theme: str = Field(..., description="Clinical theme detected from the complaint.")
+    finished: bool = Field(..., description="True when collection is over.")
     compiled_symptoms: str = Field(
-        ..., description="Synthèse des informations collectées, prête pour le triage."
+        ..., description="Summary of what was collected, ready for triage."
     )
 
 
 class HealthReply(BaseModel):
-    """État de santé du service."""
+    """Health of the service."""
 
-    status: str = Field(..., description="ok si le service peut répondre, degraded sinon.")
-    backend: str = Field(..., description="Moteur d'inférence : transformers ou vllm.")
-    model_loaded: bool = Field(..., description="Vrai si le moteur d'inférence répond.")
-    model_version: str = Field(..., description="Modèle servi.")
-    detail: str | None = Field(None, description="Cause de l'indisponibilité, le cas échéant.")
+    status: str = Field(..., description="ok when the service can answer, degraded otherwise.")
+    backend: str = Field(..., description="Inference engine: transformers or vllm.")
+    model_loaded: bool = Field(..., description="True when the inference engine responds.")
+    model_version: str = Field(..., description="The model being served.")
+    detail: str | None = Field(None, description="Cause of the unavailability, when there is one.")

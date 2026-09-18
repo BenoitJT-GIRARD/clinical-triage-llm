@@ -1,9 +1,8 @@
-"""Agent IA de triage médical du service des urgences.
+"""Emergency triage assistant.
 
-Le paquet regroupe toute la logique réutilisable du POC : configuration,
-préparation des données, entraînement (SFT puis DPO), évaluation clinique et
-service d'inférence. Les scripts de `scripts/` orchestrent ces briques dans
-l'ordre du pipeline, et les notebooks de `notebooks/` les commentent.
+The package holds every reusable piece: configuration, data preparation, training (SFT then
+DPO), clinical evaluation and the inference service. The scripts under ``scripts/`` chain
+those pieces in pipeline order, and the notebooks under ``notebooks/`` walk through them.
 """
 
 from __future__ import annotations
@@ -14,33 +13,31 @@ import warnings
 
 __version__ = "1.0.0"
 
-# MLflow écrit à son premier import un message d'accueil qui cite ses chemins
-# d'installation. Il n'a rien à faire dans les sorties d'un carnet, qui sont
-# versionnées et livrées. La variable est posée ici, à l'import du paquet : dans
-# un carnet, MLflow arrive en cascade derrière Unsloth, bien avant que le module
-# de suivi ne soit sollicité.
+# On its first import MLflow prints a greeting that quotes its installation paths. It has no
+# business in a notebook output, which is versioned and published. The variable is set at
+# package import: inside a notebook MLflow arrives behind Unsloth, long before the tracking
+# module is asked for anything.
 os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
 
-# Un avertissement de bibliothèque s'affiche précédé du fichier qui l'émet,
-# chemin d'installation compris : les sorties de carnet, versionnées et livrées,
-# portent alors l'arborescence du poste qui les a produites. Le préfixe jusqu'au
-# répertoire d'installation est retiré à l'affichage, et rien d'autre : la
-# catégorie, le texte et la ligne de code en cause restent tels quels, et aucun
-# avertissement n'est supprimé. Le formateur est remplacé pour tout le processus,
-# ce qui est le seul niveau où un carnet en profite sans avoir à s'en occuper.
-_MARQUEUR_D_INSTALLATION = "/site-packages/"
-_format_d_origine = warnings.formatwarning
+# A library warning prints the file that raised it, installation path included: notebook
+# outputs, which are versioned and published, would then carry the directory tree of the
+# machine that produced them. Only the prefix up to the installation directory is dropped from
+# the display — the category, the text and the offending line stay exactly as they are, and no
+# warning is silenced. The formatter is replaced process-wide, which is the only level where a
+# notebook benefits without having to do anything.
+_INSTALL_MARKER = "/site-packages/"
+_original_format = warnings.formatwarning
 
 
-def _avertissement_sans_chemin_d_installation(message, category, filename, lineno, line=None):
-    """Formate un avertissement en nommant le module, sans son chemin d'installation."""
-    emplacement = filename.replace("\\", "/")
-    if _MARQUEUR_D_INSTALLATION in emplacement:
-        # La ligne en cause est lue tant que le chemin complet est connu : le
-        # formateur ne saurait plus la retrouver à partir du chemin raccourci.
+def _warning_without_install_path(message, category, filename, lineno, line=None):
+    """Format a warning by naming the module, without its installation path."""
+    location = filename.replace("\\", "/")
+    if _INSTALL_MARKER in location:
+        # The offending line is read while the full path is still known: the formatter could
+        # no longer find it from the shortened one.
         line = line or linecache.getline(filename, lineno)
-        emplacement = emplacement.split(_MARQUEUR_D_INSTALLATION)[-1]
-    return _format_d_origine(message, category, emplacement, lineno, line)
+        location = location.split(_INSTALL_MARKER)[-1]
+    return _original_format(message, category, location, lineno, line)
 
 
-warnings.formatwarning = _avertissement_sans_chemin_d_installation
+warnings.formatwarning = _warning_without_install_path

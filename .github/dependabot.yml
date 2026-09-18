@@ -1,5 +1,5 @@
-# Mises a jour de dependances proposees automatiquement, en demandes de fusion
-# que la CI valide avant toute integration.
+# Dependency updates proposed automatically, as pull requests that continuous integration
+# validates before anything is merged.
 version: 2
 updates:
   - package-ecosystem: "uv"
@@ -18,8 +18,8 @@ updates:
       prefix: "ci"
 
   - package-ecosystem: "docker"
-    directory: "/deploy"
+    directory: "/infra"
     schedule:
       interval: "monthly"
     commit-message:
-      prefix: "deploy"
+      prefix: "infra"

@@ -1,20 +1,22 @@
-"""Métriques d'évaluation du triage.
+"""Triage evaluation metrics.
 
-Quatre familles, dans l'ordre d'importance pour un service d'urgences :
+Four families, in the order that matters to an emergency department:
 
-1. **sécurité clinique** — le taux de sous-triage : proportion de cas réellement
-   urgents que le modèle classe à un niveau de gravité inférieur. C'est la faute
-   qui tue, et elle ne se lit pas dans l'exactitude globale ;
-2. **performance** — exactitude et F1 par niveau, avec l'intervalle de confiance.
-   Sur soixante cas, un écart de trois points n'est pas un écart : donner
-   l'exactitude sans son intervalle laisse croire le contraire ;
-3. **format** — proportion de réponses exploitables par le système d'information,
-   et proportion de générations qui se terminent d'elles-mêmes ;
-4. **latence** — moyenne, médiane et 95ᵉ centile.
+1. **clinical safety** — the undertriage rate: the share of genuinely urgent cases the model
+   files at a lower severity. That is the failure that kills, and it does not show up in
+   overall accuracy;
+2. **performance** — accuracy and per-level F1, with their confidence intervals. On sixty
+   cases a three-point gap is not a gap; publishing accuracy without its interval lets a
+   reader believe otherwise;
+3. **format** — the share of answers the hospital information system can parse, and the share
+   of generations that stop on their own;
+4. **latency** — mean, median and 95th percentile.
 
-La matrice de confusion comporte une colonne supplémentaire, `HORS_FORMAT`. Une
-réponse illisible n'est pas une prédiction : la ranger dans une classe de triage
-fausserait la lecture, dans un sens ou dans l'autre.
+The confusion matrix carries an extra ``HORS_FORMAT`` column. An unreadable answer is not a
+prediction: filing it under a triage class would bend the reading one way or the other.
+
+Level names are French because they are the model's own output contract, written into the
+dataset, the prompt and every published artefact. They are values, not prose.
 """
 
 from __future__ import annotations
@@ -26,377 +28,362 @@ from clinical_triage.config import TRIAGE
 HORS_FORMAT = "HORS_FORMAT"
 
 
-def wilson_interval(succes: int, total: int, z: float = 1.96) -> tuple[float, float]:
-    """Intervalle de confiance à 95 % d'une proportion, méthode de Wilson.
+def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float, float]:
+    """95% confidence interval for a proportion, Wilson's method.
 
-    On préfère Wilson à l'approximation normale — ±SEM — parce qu'il reste
-    correct sur de petits effectifs et près de 0 ou de 1, exactement le régime
-    d'un jeu d'évaluation clinique de quelques dizaines de cas. L'approximation
-    normale y produit des bornes hors de [0, 1] : sur 2 sous-triages pour 40 cas
-    urgents, elle donne [-1,8 % ; 11,8 %], une borne négative sur un taux.
+    Wilson is preferred over the normal approximation — ±SEM — because it stays correct on
+    small effectives and near 0 or 1, which is exactly the regime of a clinical evaluation set
+    of a few dozen cases. The normal approximation produces bounds outside [0, 1] there: on 2
+    undertriages out of 40 urgent cases it gives [-1.8%, 11.8%], a negative lower bound on a
+    rate.
 
-    Sans observation, l'intervalle est **[0 ; 1]** et non [0 ; 0] : zéro mesure
-    n'établit pas une proportion nulle, elle n'établit rien. Un intervalle de
-    largeur nulle affirmerait une certitude absolue tirée du vide — la faute même
-    que cette fonction existe pour éviter.
+    With no observation the interval is **[0, 1]** and not [0, 0]: zero measurements do not
+    establish a null proportion, they establish nothing. A zero-width interval would claim
+    absolute certainty drawn from nothing — the very mistake this function exists to avoid.
     """
     if total == 0:
         return (0.0, 1.0)
-    proportion = succes / total
-    denominateur = 1 + z**2 / total
-    centre = (proportion + z**2 / (2 * total)) / denominateur
-    demi_largeur = (
-        z * sqrt(proportion * (1 - proportion) / total + z**2 / (4 * total**2)) / denominateur
+    proportion = successes / total
+    denominator = 1 + z**2 / total
+    centre = (proportion + z**2 / (2 * total)) / denominator
+    half_width = (
+        z * sqrt(proportion * (1 - proportion) / total + z**2 / (4 * total**2)) / denominator
     )
-    return (round(max(0.0, centre - demi_largeur), 4), round(min(1.0, centre + demi_largeur), 4))
+    return (round(max(0.0, centre - half_width), 4), round(min(1.0, centre + half_width), 4))
 
 
-# Effectif en dessous duquel aucun taux n'est publiable.
+# The effective below which no rate is publishable.
 #
-# Sur trois cas, l'intervalle exact d'une réussite parfaite est [0,29 ; 1,00] :
-# il couvre 71 % de l'échelle. Une barre surmontée d'une moustache pareille se
-# lit « mesuré avec incertitude » alors que la lecture juste est « non
-# mesurable ». En dessous de ce seuil, on publie la fraction brute.
-EFFECTIF_MINIMUM_POUR_UN_TAUX = 6
+# On three cases the exact interval of a perfect score is [0.29, 1.00]: it covers 71% of the
+# scale. A bar topped by a whisker like that reads as "measured with uncertainty" when the
+# correct reading is "not measurable". Below this threshold the caller publishes the raw
+# fraction instead.
+MINIMUM_FOR_A_RATE = 6
 
 
-def _binomiale_cumulee(k: int, n: int, p: float) -> float:
-    """P(X <= k) pour X ~ Binomiale(n, p), calculée exactement.
+def _binomial_cdf(k: int, n: int, p: float) -> float:
+    """P(X <= k) for X ~ Binomial(n, p), computed exactly.
 
-    Somme directe des termes : `n` ne dépasse pas quelques centaines dans ce
-    projet, et une somme exacte évite d'avoir à justifier une approximation.
+    A direct sum of terms: ``n`` never exceeds a few hundred in this project, and an exact sum
+    saves having to justify an approximation.
     """
     return sum(comb(n, i) * p**i * (1 - p) ** (n - i) for i in range(k + 1))
 
 
-def clopper_pearson(succes: int, total: int, alpha: float = 0.05) -> tuple[float, float]:
-    """Intervalle **exact** d'une proportion, méthode de Clopper-Pearson.
+def clopper_pearson(successes: int, total: int, alpha: float = 0.05) -> tuple[float, float]:
+    """**Exact** interval for a proportion, Clopper-Pearson.
 
-    Wilson est le bon choix par défaut : plus court, et de couverture correcte en
-    moyenne. Deux situations demandent mieux, et c'est ce que cette fonction
-    apporte — une couverture garantie ≥ 95 % pour **toute** valeur de p, au prix
-    d'un intervalle plus large :
+    Wilson is the right default: shorter, and with correct coverage on average. Two situations
+    ask for more, and that is what this function provides — coverage guaranteed at 95% or
+    better for **every** value of p, at the price of a wider interval:
 
-    - **la métrique de sécurité.** Sur le sous-triage, une couverture qui descend
-      sous 95 % pour certaines valeurs de p n'est pas acceptable : c'est la seule
-      mesure du rapport dont une sous-estimation se paie en patients ;
-    - **les tout petits effectifs.** Wilson y est nettement anticonservateur à la
-      frontière : sur 3 réussites en 3 essais il annonce une borne basse de 0,44
-      là où l'exact donne 0,29. Quinze points de fausse précision sur le
-      sous-groupe le plus dangereux du jeu d'évaluation.
+    - **the safety metric.** On undertriage, coverage dropping below 95% for some values of p
+      is not acceptable: it is the one measure in this repository whose underestimation is
+      paid in patients;
+    - **very small effectives.** Wilson is markedly anticonservative at the boundary there: on
+      3 successes out of 3 it announces a lower bound of 0.44 where the exact method gives
+      0.29. Fifteen points of false precision on the most dangerous subgroup of the evaluation
+      set.
 
-    Les bornes se cherchent par dichotomie sur la loi binomiale cumulée, ce qui
-    évite d'introduire une dépendance à une bibliothèque de statistiques pour
-    deux appels — et se relit sans connaître la fonction bêta incomplète.
+    The bounds are found by bisection on the cumulative binomial, which avoids adding a
+    dependency on a statistics library for two calls — and reads without knowing the
+    incomplete beta function.
     """
     if total == 0:
         return (0.0, 1.0)
 
-    def _dichotomie(cible, croissante: bool) -> float:
-        basse, haute = 0.0, 1.0
+    def _bisect(target, increasing: bool) -> float:
+        low, high = 0.0, 1.0
         for _ in range(60):
-            milieu = (basse + haute) / 2
-            if (cible(milieu) > 0) == croissante:
-                haute = milieu
+            middle = (low + high) / 2
+            if (target(middle) > 0) == increasing:
+                high = middle
             else:
-                basse = milieu
-        return (basse + haute) / 2
+                low = middle
+        return (low + high) / 2
 
-    # Borne basse : le p pour lequel observer au moins `succes` succès n'a plus
-    # que alpha/2 de chance. Borne haute : le p pour lequel en observer au plus
-    # `succes` n'a plus que alpha/2 de chance.
-    basse = (
+    # Lower bound: the p at which observing at least `successes` successes has only alpha/2
+    # chance left. Upper bound: the p at which observing at most `successes` has only alpha/2.
+    low = (
         0.0
-        if succes == 0
-        else _dichotomie(lambda p: (1 - _binomiale_cumulee(succes - 1, total, p)) - alpha / 2, True)
+        if successes == 0
+        else _bisect(lambda p: (1 - _binomial_cdf(successes - 1, total, p)) - alpha / 2, True)
     )
-    haute = (
+    high = (
         1.0
-        if succes == total
-        else _dichotomie(lambda p: _binomiale_cumulee(succes, total, p) - alpha / 2, False)
+        if successes == total
+        else _bisect(lambda p: _binomial_cdf(successes, total, p) - alpha / 2, False)
     )
-    return (round(basse, 4), round(haute, 4))
+    return (round(low, 4), round(high, 4))
 
 
 def difference_newcombe(
-    succes_a: int, total_a: int, succes_b: int, total_b: int, z: float = 1.96
+    successes_a: int, total_a: int, successes_b: int, total_b: int, z: float = 1.96
 ) -> tuple[float, float, float]:
-    """Écart entre deux proportions **indépendantes**, avec son intervalle.
+    """Difference between two **independent** proportions, with its interval.
 
-    Renvoie (écart, borne basse, borne haute). L'écart est `a - b`.
+    Returns (difference, lower bound, upper bound). The difference is ``a - b``.
 
-    Cette fonction existe parce que lire deux intervalles marginaux et regarder
-    s'ils se recouvrent est un **sophisme**, et qu'il donne ici la conclusion
-    inverse de la bonne. Le non-recouvrement prouve une différence ; le
-    recouvrement ne prouve rien. Sur les chiffres du projet — 465/500 contre
-    51/60 — les deux intervalles de Wilson se chevauchent largement, et pourtant
-    l'intervalle de l'écart exclut zéro.
+    This function exists because reading two marginal intervals and checking whether they
+    overlap is a **fallacy**, and here it gives the opposite of the right answer.
+    Non-overlap proves a difference; overlap proves nothing. On this project's numbers —
+    465/500 against 51/60 — the two Wilson intervals overlap widely, and yet the interval on
+    the difference excludes zero.
 
-    Quand l'écart est la question posée, c'est l'écart qu'il faut estimer. La
-    méthode est celle de Newcombe, qui compose les intervalles de Wilson des deux
-    proportions : elle hérite de leur bon comportement près de 0 et de 1, là où
-    l'approximation normale sur la différence échoue.
+    When the difference is the question, the difference is what must be estimated. The method
+    is Newcombe's, which composes the Wilson intervals of both proportions: it inherits their
+    good behaviour near 0 and 1, where the normal approximation on the difference fails.
 
-    Les deux échantillons doivent être **indépendants**. Deux systèmes évalués
-    sur les mêmes cas ne le sont pas : c'est `mcnemar_exact` qu'il leur faut.
+    The two samples must be **independent**. Two systems evaluated on the same cases are not:
+    they need :func:`mcnemar_exact`.
     """
-    proportion_a = succes_a / total_a if total_a else 0.0
-    proportion_b = succes_b / total_b if total_b else 0.0
-    basse_a, haute_a = wilson_interval(succes_a, total_a, z)
-    basse_b, haute_b = wilson_interval(succes_b, total_b, z)
+    proportion_a = successes_a / total_a if total_a else 0.0
+    proportion_b = successes_b / total_b if total_b else 0.0
+    low_a, high_a = wilson_interval(successes_a, total_a, z)
+    low_b, high_b = wilson_interval(successes_b, total_b, z)
 
-    ecart = proportion_a - proportion_b
-    vers_le_bas = sqrt((proportion_a - basse_a) ** 2 + (haute_b - proportion_b) ** 2)
-    vers_le_haut = sqrt((haute_a - proportion_a) ** 2 + (proportion_b - basse_b) ** 2)
-    return (round(ecart, 4), round(ecart - vers_le_bas, 4), round(ecart + vers_le_haut, 4))
+    difference = proportion_a - proportion_b
+    downward = sqrt((proportion_a - low_a) ** 2 + (high_b - proportion_b) ** 2)
+    upward = sqrt((high_a - proportion_a) ** 2 + (proportion_b - low_b) ** 2)
+    return (round(difference, 4), round(difference - downward, 4), round(difference + upward, 4))
 
 
-def intervalle_de_proportion(succes: int, total: int) -> tuple[float, float] | None:
-    """Intervalle à publier pour une proportion, ou `None` si l'effectif l'interdit.
+def interval_for_proportion(successes: int, total: int) -> tuple[float, float] | None:
+    """The interval to publish for a proportion, or ``None`` if the effective forbids one.
 
-    Une seule porte d'entrée, pour que le choix de l'estimateur soit pris au même
-    endroit partout et puisse être relu :
+    One door, so that the choice of estimator is made in the same place everywhere and can be
+    re-read:
 
-    - moins de six observations : **rien**. L'intervalle exact y couvre les deux
-      tiers de l'échelle ; le publier donnerait à une non-mesure l'apparence
-      d'une mesure. L'appelant écrit la fraction brute ;
-    - jusqu'à trente : **Clopper-Pearson**, exact, parce que Wilson est encore
-      anticonservateur près des bornes sur ces effectifs ;
-    - au-delà : **Wilson**, plus court et de couverture correcte.
+    - fewer than six observations: **nothing**. The exact interval covers two thirds of the
+      scale there; publishing it would give a non-measurement the appearance of a measurement.
+      The caller writes the raw fraction;
+    - up to thirty: **Clopper-Pearson**, exact, because Wilson is still anticonservative near
+      the bounds at those effectives;
+    - beyond: **Wilson**, shorter and with correct coverage.
     """
-    if total < EFFECTIF_MINIMUM_POUR_UN_TAUX:
+    if total < MINIMUM_FOR_A_RATE:
         return None
     if total <= 30:
-        return clopper_pearson(succes, total)
-    return wilson_interval(succes, total)
+        return clopper_pearson(successes, total)
+    return wilson_interval(successes, total)
 
 
-def mcnemar_exact(seulement_a: int, seulement_b: int) -> float:
-    """Test de McNemar exact sur deux mesures **appariées**, bilatéral.
+def mcnemar_exact(only_a: int, only_b: int) -> float:
+    """Exact two-sided McNemar test on two **paired** measurements.
 
-    Deux systèmes évalués sur les mêmes cas ne se comparent pas comme deux
-    proportions indépendantes : ce qui porte l'information, ce sont les seuls cas
-    où ils divergent. `seulement_a` compte ceux que le premier réussit et que le
-    second manque, `seulement_b` l'inverse ; les accords n'entrent pas dans le
-    calcul.
+    Two systems evaluated on the same cases do not compare like two independent proportions:
+    what carries the information is the cases where they disagree. ``only_a`` counts those the
+    first gets right and the second misses, ``only_b`` the reverse; agreements do not enter the
+    computation.
 
-    Sous l'hypothèse qu'aucun des deux n'est meilleur, chaque désaccord tombe
-    d'un côté ou de l'autre à pile ou face. On lit donc directement la loi
-    binomiale, sans approximation : sur une poignée de désaccords, la correction
-    de continuité du χ² n'a pas de sens.
+    Under the hypothesis that neither is better, each disagreement falls one way or the other
+    on a coin toss. The binomial law is therefore read directly, without approximation: on a
+    handful of disagreements, the continuity correction of the chi-square makes no sense.
 
-    Renvoie 1.0 quand les deux systèmes ne divergent nulle part : il n'y a alors
-    rien à départager.
+    Returns 1.0 when the two systems never diverge: there is nothing to separate.
     """
-    discordants = seulement_a + seulement_b
-    if discordants == 0:
+    discordant = only_a + only_b
+    if discordant == 0:
         return 1.0
-    plus_rare = min(seulement_a, seulement_b)
-    queue = sum(comb(discordants, k) for k in range(plus_rare + 1)) / 2**discordants
-    return min(1.0, 2 * queue)
+    rarer = min(only_a, only_b)
+    tail = sum(comb(discordant, k) for k in range(rarer + 1)) / 2**discordant
+    return min(1.0, 2 * tail)
 
 
 def _as_label(prediction: str | None) -> str:
-    """Ramène une prédiction à une classe, `HORS_FORMAT` compris."""
+    """Reduce a prediction to a class, ``HORS_FORMAT`` included."""
     return prediction if prediction in TRIAGE.levels else HORS_FORMAT
 
 
 def format_compliance(preds: list[str | None]) -> float:
-    """Proportion de réponses dont le niveau de priorité est extractible."""
+    """Share of answers whose triage level can be extracted."""
     if not preds:
         return 0.0
     return sum(p in TRIAGE.levels for p in preds) / len(preds)
 
 
 def accuracy(gold: list[str], preds: list[str | None]) -> float:
-    """Exactitude du niveau de triage. Une réponse hors format compte comme fausse."""
+    """Triage-level accuracy. An off-format answer counts as wrong."""
     if not gold:
         return 0.0
     return sum(g == p for g, p in zip(gold, preds, strict=True)) / len(gold)
 
 
 def undertriage_rate(gold: list[str], preds: list[str | None]) -> tuple[float, int, int]:
-    """Taux de sous-triage, avec le détail (taux, nombre de fautes, cas concernés).
+    """Undertriage rate, with its detail (rate, number of misses, cases concerned).
 
-    Parmi les cas réellement urgents — vitaux ou modérés — proportion de ceux que
-    le modèle classe à un niveau strictement moins grave. Une réponse hors format
-    y compte comme un sous-triage : elle ne déclenche aucune prise en charge.
+    Among genuinely urgent cases — immediate or urgent — the share the model files at a
+    strictly lower severity. An off-format answer counts as an undertriage here: it triggers
+    no care at all.
 
-    Sur un cas **non urgent**, en revanche, une réponse illisible n'entre dans
-    aucun des deux taux de faute : le sous-triage ne regarde pas ces cas-là, et
-    le surclassement les écarte aussi. Elle n'apparaît alors que dans le respect
-    du format et dans l'exactitude — c'est pourquoi le tableau du rapport publie
-    ces colonnes côte à côte, un surclassement à 0 % pouvant sinon se lire comme
-    une qualité alors qu'il décrit un système muet.
+    On a **non-urgent** case, by contrast, an unreadable answer enters neither failure rate:
+    undertriage does not look at those cases, and overtriage excludes them too. It then shows
+    up only in format compliance and in accuracy — which is why the published table puts those
+    columns side by side, an overtriage of 0% otherwise reading as a quality when it describes
+    a mute system.
     """
-    urgents = [(g, p) for g, p in zip(gold, preds, strict=True) if TRIAGE.severity[g] >= 1]
-    if not urgents:
+    urgent = [(g, p) for g, p in zip(gold, preds, strict=True) if TRIAGE.severity[g] >= 1]
+    if not urgent:
         return (0.0, 0, 0)
-    fautes = 0
-    for attendu, predit in urgents:
-        rang_predit = TRIAGE.severity.get(predit, -1) if predit is not None else -1
-        if rang_predit < TRIAGE.severity[attendu]:
-            fautes += 1
-    return (fautes / len(urgents), fautes, len(urgents))
+    misses = 0
+    for expected, predicted in urgent:
+        predicted_rank = TRIAGE.severity.get(predicted, -1) if predicted is not None else -1
+        if predicted_rank < TRIAGE.severity[expected]:
+            misses += 1
+    return (misses / len(urgent), misses, len(urgent))
 
 
 def overtriage_rate(gold: list[str], preds: list[str | None]) -> float:
-    """Taux de surclassement : cas classés plus graves qu'ils ne le sont.
+    """Overtriage rate: cases filed as more severe than they are.
 
-    Le surclassement n'est pas dangereux pour le patient, mais il engorge le
-    service : c'est le coût de la prudence, et il se mesure.
+    Overtriage congests the department without endangering the patient: it is the cost
+    of caution, and it is measured.
 
-    Le dénominateur est **l'ensemble des cas**, pas seulement ceux qui peuvent
-    être surclassés. C'est la convention des échelles de triage, et c'est aussi
-    la seule qui rende le chiffre directement lisible par un chef de service :
-    « sur cent patients présentés, tant sont envoyés plus haut qu'il ne fallait ».
-    Une réponse hors format ne compte pas ici — elle est déjà comptée comme un
-    sous-triage.
+    The denominator is **every case**, not only those that can be overtriaged. That is the
+    convention of triage scales, and it is also the only one a head of department can read
+    directly: "out of a hundred patients presenting, this many are sent higher than needed".
+    An off-format answer does not count here — it is already counted as an undertriage.
     """
     if not gold:
         return 0.0
-    fautes = 0
-    for attendu, predit in zip(gold, preds, strict=True):
-        if predit in TRIAGE.levels and TRIAGE.severity[predit] > TRIAGE.severity[attendu]:
-            fautes += 1
-    return fautes / len(gold)
+    misses = 0
+    for expected, predicted in zip(gold, preds, strict=True):
+        if predicted in TRIAGE.levels and TRIAGE.severity[predicted] > TRIAGE.severity[expected]:
+            misses += 1
+    return misses / len(gold)
 
 
 def per_class(gold: list[str], preds: list[str | None]) -> dict[str, dict[str, float]]:
-    """Précision, rappel, F1 et effectif pour chaque niveau de triage.
+    """Precision, recall, F1 and effective for each triage level.
 
-    Une réserve à connaître avant de citer la **précision** : c'est une valeur
-    prédictive positive, et elle dépend entièrement de la prévalence du jeu sur
-    lequel on la mesure. Le jeu d'évaluation clinique est équilibré à dessein —
-    vingt cas par niveau — alors qu'un service d'urgences voit une toute autre
-    répartition. La précision publiée ici décrit donc ce plan d'évaluation, pas
-    ce que l'infirmière d'accueil observerait : la transposer telle quelle à un
-    service réel serait une faute de lecture. Le **rappel**, lui, ne dépend pas
-    de la prévalence et se transpose ; c'est la raison pour laquelle le rapport
-    publie la matrice de confusion et le sous-triage plutôt que ces trois
-    nombres, qui restent dans le fichier de résultats pour l'analyse.
+    One caveat before quoting **precision**: it is a positive predictive value, and it depends
+    entirely on the prevalence of the set it is measured on. The clinical evaluation set is
+    balanced by design — twenty cases per level — whereas an emergency department sees a very
+    different mix. The precision published here describes this evaluation plan, not what the
+    triage nurse would observe: transposing it as is would be a reading error. **Recall** does
+    not depend on prevalence and does transpose, which is why the published documents show the
+    confusion matrix and the undertriage rate; these three numbers stay in
+    the results file for analysis.
     """
-    etiquettes = [_as_label(p) for p in preds]
-    resultat: dict[str, dict[str, float]] = {}
-    for niveau in TRIAGE.levels:
-        vrais_positifs = sum(
-            g == niveau and p == niveau for g, p in zip(gold, etiquettes, strict=True)
-        )
-        predits = sum(p == niveau for p in etiquettes)
-        reels = sum(g == niveau for g in gold)
-        precision = vrais_positifs / predits if predits else 0.0
-        rappel = vrais_positifs / reels if reels else 0.0
-        f1 = 2 * precision * rappel / (precision + rappel) if precision + rappel else 0.0
-        resultat[niveau] = {
+    labels = [_as_label(p) for p in preds]
+    result: dict[str, dict[str, float]] = {}
+    for level in TRIAGE.levels:
+        true_positives = sum(g == level and p == level for g, p in zip(gold, labels, strict=True))
+        predicted = sum(p == level for p in labels)
+        actual = sum(g == level for g in gold)
+        precision = true_positives / predicted if predicted else 0.0
+        recall = true_positives / actual if actual else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        result[level] = {
             "precision": round(precision, 4),
-            "rappel": round(rappel, 4),
+            "recall": round(recall, 4),
             "f1": round(f1, 4),
-            "effectif": reels,
+            "n": actual,
         }
-    return resultat
+    return result
 
 
 def confusion(gold: list[str], preds: list[str | None]) -> dict:
-    """Matrice de confusion : lignes = vérité, colonnes = prédiction et hors format.
+    """Confusion matrix: rows = truth, columns = prediction plus off-format.
 
-    Renvoie trois clés : `lignes` et `colonnes` donnent l'ordre d'affichage, et
-    `matrice[reel][predit]` donne l'effectif. Les en-têtes voyagent avec les
-    chiffres parce que le résultat finit en JSON puis en figure : les relire
-    depuis la configuration ferait dépendre un rapport archivé d'un ordre de
-    niveaux susceptible de changer.
+    Returns three keys: ``rows`` and ``columns`` give the display order, and
+    ``matrix[true][predicted]`` gives the count. The headers travel with the numbers because
+    the result ends up in JSON and then in a figure: re-reading them from the configuration
+    would make an archived artefact depend on a level order that may change.
     """
-    colonnes = [*TRIAGE.levels, HORS_FORMAT]
-    matrice = {niveau: dict.fromkeys(colonnes, 0) for niveau in TRIAGE.levels}
-    for attendu, predit in zip(gold, preds, strict=True):
-        matrice[attendu][_as_label(predit)] += 1
-    return {"lignes": list(TRIAGE.levels), "colonnes": colonnes, "matrice": matrice}
+    columns = [*TRIAGE.levels, HORS_FORMAT]
+    matrix = {level: dict.fromkeys(columns, 0) for level in TRIAGE.levels}
+    for expected, predicted in zip(gold, preds, strict=True):
+        matrix[expected][_as_label(predicted)] += 1
+    return {"rows": list(TRIAGE.levels), "columns": columns, "matrix": matrix}
 
 
-def _centile(triees: list[float], part: float) -> float:
-    """Centile par rang le plus proche : la plus petite mesure sous laquelle
-    tombe au moins `part` des observations.
+def _percentile(sorted_values: list[float], share: float) -> float:
+    """Nearest-rank percentile: the smallest measurement below which at least ``share`` of the
+    observations fall.
 
-    Cette convention n'interpole jamais entre deux mesures : le chiffre publié
-    est toujours une latence réellement observée. C'est ce qu'on veut d'un
-    rapport de performance, où une valeur inventée entre deux points de mesure
-    serait invérifiable.
+    This convention never interpolates between two measurements: the published number is
+    always a latency that was actually observed. That is what a performance report wants,
+    where a value invented between two measured points would be uncheckable.
     """
-    rang = ceil(part * len(triees))
-    return triees[min(len(triees) - 1, max(0, rang - 1))]
+    rank = ceil(share * len(sorted_values))
+    return sorted_values[min(len(sorted_values) - 1, max(0, rank - 1))]
 
 
-def latency_summary(latences_ms: list[float]) -> dict[str, float]:
-    """Moyenne, médiane et 95ᵉ centile des latences observées.
+def latency_summary(latencies_ms: list[float]) -> dict[str, float]:
+    """Mean, median and 95th percentile of the observed latencies.
 
-    La médiane est le centile 50 au sens ci-dessus : sur un effectif pair, elle
-    vaut la mesure du bas du couple central plutôt que leur moyenne, pour la
-    même raison — on ne publie que des valeurs mesurées.
+    The median is the 50th percentile in the sense above: on an even effective it takes the
+    lower of the two central measurements, and not their average, for the same reason — only
+    measured values are published.
     """
-    if not latences_ms:
-        return {"moyenne_ms": 0.0, "p50_ms": 0.0, "p95_ms": 0.0}
-    triees = sorted(latences_ms)
+    if not latencies_ms:
+        return {"mean_ms": 0.0, "p50_ms": 0.0, "p95_ms": 0.0}
+    ordered = sorted(latencies_ms)
     return {
-        "moyenne_ms": round(sum(triees) / len(triees), 1),
-        "p50_ms": round(_centile(triees, 0.50), 1),
-        "p95_ms": round(_centile(triees, 0.95), 1),
+        "mean_ms": round(sum(ordered) / len(ordered), 1),
+        "p50_ms": round(_percentile(ordered, 0.50), 1),
+        "p95_ms": round(_percentile(ordered, 0.95), 1),
     }
 
 
 def summarize(
     gold: list[str],
     preds: list[str | None],
-    latences_ms: list[float] | None = None,
-    arrets_propres: list[bool] | None = None,
+    latencies_ms: list[float] | None = None,
+    clean_stops: list[bool] | None = None,
 ) -> dict:
-    """Agrège toutes les métriques en un dictionnaire, intervalles compris."""
+    """Aggregate every metric into one dictionary, intervals included."""
     n = len(gold)
-    justes = sum(g == p for g, p in zip(gold, preds, strict=True))
-    taux_sous_triage, fautes, urgents = undertriage_rate(gold, preds)
-    resume = {
+    correct = sum(g == p for g, p in zip(gold, preds, strict=True))
+    undertriage, misses, urgent = undertriage_rate(gold, preds)
+    summary = {
         "n": n,
-        "exactitude": round(accuracy(gold, preds), 4),
-        "exactitude_ic95": wilson_interval(justes, n),
-        "sous_triage": round(taux_sous_triage, 4),
-        # Clopper-Pearson et non Wilson : c'est la seule mesure du rapport dont
-        # une sous-estimation se paie en patients, et l'exact garantit sa
-        # couverture pour toute valeur du taux, là où Wilson ne la tient qu'en
-        # moyenne. L'intervalle est un peu plus large ; c'est le prix juste.
-        "sous_triage_ic95": clopper_pearson(fautes, urgents),
-        "sous_triage_detail": {"fautes": fautes, "cas_urgents": urgents},
-        "surclassement": round(overtriage_rate(gold, preds), 4),
-        "respect_format": round(format_compliance(preds), 4),
-        "par_niveau": per_class(gold, preds),
+        "accuracy": round(accuracy(gold, preds), 4),
+        # Through the single door rather than a hard-wired Wilson. On sixty cases the two
+        # agree, but this same function is called on subgroups whose effectives fall to three,
+        # and a published interval that stops following the written rule is exactly the kind
+        # of drift nothing would report.
+        "accuracy_ci95": interval_for_proportion(correct, n),
+        "undertriage": round(undertriage, 4),
+        # Clopper-Pearson and not Wilson: this is the one measure whose underestimation is
+        # paid in patients, and the exact method guarantees its coverage for every value of
+        # the rate where Wilson holds it only on average. The interval is a little wider;
+        # that is the right price.
+        "undertriage_ci95": clopper_pearson(misses, urgent),
+        "undertriage_detail": {"misses": misses, "urgent_cases": urgent},
+        "overtriage": round(overtriage_rate(gold, preds), 4),
+        "format_compliance": round(format_compliance(preds), 4),
+        "per_level": per_class(gold, preds),
         "confusion": confusion(gold, preds),
     }
-    if arrets_propres is not None:
-        resume["arrets_propres"] = round(sum(arrets_propres) / max(1, len(arrets_propres)), 4)
-    if latences_ms is not None:
-        resume["latence"] = latency_summary(latences_ms)
-    return resume
+    if clean_stops is not None:
+        summary["clean_stops"] = round(sum(clean_stops) / max(1, len(clean_stops)), 4)
+    if latencies_ms is not None:
+        summary["latency"] = latency_summary(latencies_ms)
+    return summary
 
 
 def subgroup_accuracy(
-    gold: list[str], preds: list[str | None], groupes: list[str]
+    gold: list[str], preds: list[str | None], groups: list[str]
 ) -> dict[str, dict]:
-    """Exactitude et sous-triage détaillés par sous-groupe (langue, type de piège...)."""
-    resultat: dict[str, dict] = {}
-    for nom in sorted(set(groupes)):
-        indices = [i for i, g in enumerate(groupes) if g == nom]
-        sous_gold = [gold[i] for i in indices]
-        sous_preds = [preds[i] for i in indices]
-        justes = sum(g == p for g, p in zip(sous_gold, sous_preds, strict=True))
-        taux, fautes, urgents = undertriage_rate(sous_gold, sous_preds)
-        resultat[nom or "presentation_directe"] = {
+    """Accuracy and undertriage broken down by subgroup (language, kind of difficulty...)."""
+    result: dict[str, dict] = {}
+    for name in sorted(set(groups)):
+        indices = [i for i, g in enumerate(groups) if g == name]
+        subgroup_gold = [gold[i] for i in indices]
+        subgroup_preds = [preds[i] for i in indices]
+        correct = sum(g == p for g, p in zip(subgroup_gold, subgroup_preds, strict=True))
+        rate, misses, urgent = undertriage_rate(subgroup_gold, subgroup_preds)
+        result[name or "direct_presentation"] = {
             "n": len(indices),
-            "exactitude": round(accuracy(sous_gold, sous_preds), 4),
-            "exactitude_ic95": intervalle_de_proportion(justes, len(indices)),
-            "sous_triage": round(taux, 4),
-            # Clopper-Pearson directement, sans passer par
-            # `intervalle_de_proportion` : le sous-triage est la mesure de
-            # sécurité, et c'est par sous-groupe que ses effectifs sont les plus
-            # faibles. L'intervalle exact y est publié même sous l'effectif
-            # minimum.
-            "sous_triage_ic95": clopper_pearson(fautes, urgents),
-            "sous_triage_detail": {"fautes": fautes, "cas_urgents": urgents},
+            "accuracy": round(accuracy(subgroup_gold, subgroup_preds), 4),
+            "accuracy_ci95": interval_for_proportion(correct, len(indices)),
+            "undertriage": round(rate, 4),
+            # Clopper-Pearson directly, without going through interval_for_proportion:
+            # undertriage is the safety metric, and it is by subgroup that its effectives are
+            # smallest. The exact interval is published here even below the minimum.
+            "undertriage_ci95": clopper_pearson(misses, urgent),
+            "undertriage_detail": {"misses": misses, "urgent_cases": urgent},
         }
-    return resultat
+    return result

@@ -1,29 +1,29 @@
-"""Questionnaire de symptômes adaptatif.
+"""Adaptive symptom questionnaire.
 
-L'agent doit collecter les symptômes « via un questionnaire intelligent
-adaptatif ». Adaptatif veut dire deux choses ici :
+The agent collects symptoms through a questionnaire that adapts, and adapting means two things
+here:
 
-- **les questions dépendent du motif.** Un patient qui arrive pour une douleur
-  thoracique et un patient qui arrive pour une plaie ne doivent pas se voir poser
-  les mêmes questions. Le motif est rattaché à un thème clinique, et chaque thème
-  a sa propre liste de questions ciblées ;
-- **la collecte s'arrête dès qu'elle n'est plus utile.** Si un signe de détresse
-  vitale apparaît dans une réponse, on cesse d'interroger et on déclenche le
-  triage immédiatement : faire patienter un infarctus le temps de cinq questions
-  serait absurde.
+- **the questions depend on the complaint.** A patient arriving with chest pain and a patient
+  arriving with a wound must not be asked the same things. The complaint is mapped to a
+  clinical theme, and each theme has its own list of targeted questions;
+- **collection stops as soon as it is no longer useful.** If a sign of life-threatening
+  distress appears in an answer, questioning stops and triage fires immediately: making a heart
+  attack wait through five questions would be absurd.
 
-La logique est déterministe et lisible : chaque question posée est justifiable
-devant une équipe soignante, ce qui n'est pas accessoire en contexte clinique.
+The logic is deterministic and readable: every question asked can be justified to a clinical
+team, which is not incidental in this context.
 
-Un point qui paraît mineur et ne l'est pas : la synthèse transmise au modèle ne
-recopie **jamais** la question devant sa réponse. Chaque réponse devient une
-phrase déclarative écrite d'avance (table `RAPPORTS`), parce que le texte des
-questions porte tout le vocabulaire des signes de gravité, et que cette synthèse
-est ensuite relue par `classify`. Recopiée telle quelle, « Y a-t-il une
-difficulté à respirer ? non » s'y lit comme le signe lui-même : un rhume dont
-tout est nié ressortirait en urgence vitale. Concaténer les seules réponses ne
-marche pas davantage — « oui. non. depuis hier » est une suite de mots sans
-référent. La phrase déclarative garde le sens et ne transporte pas la question.
+One point that looks minor and is not: the summary handed to the model **never** copies the
+question in front of its answer. Each answer becomes a declarative sentence written in advance
+(the ``STATEMENTS`` table), because the text of the questions carries the whole vocabulary of
+severity signs, and that summary is then read back by ``classify``. Copied verbatim, "Y a-t-il
+une difficulté à respirer ? non" reads as the sign itself: a common cold with everything denied
+would come out as life-threatening. Concatenating the answers alone does not work either —
+"oui. non. depuis hier" is a run of words with no referent. The declarative sentence keeps the
+meaning and does not carry the question.
+
+The questions and the canonical sentences are French: they are spoken to French-speaking staff
+and read back by the French triage rule. They are data, not prose about the project.
 """
 
 from __future__ import annotations
@@ -33,15 +33,15 @@ from dataclasses import dataclass
 
 from clinical_triage.data.triage_rules import VITAL, classify, normalize
 
-# Questions de dépistage des signes de gravité, posées quel que soit le motif.
-QUESTIONS_DE_GRAVITE: tuple[tuple[str, str], ...] = (
+# Red-flag screening questions, asked whatever the complaint.
+RED_FLAG_QUESTIONS: tuple[tuple[str, str], ...] = (
     ("conscience", "Le patient est-il pleinement conscient et orienté ?"),
     ("respiration", "Y a-t-il une difficulté à respirer ou un essoufflement au repos ?"),
     ("saignement", "Existe-t-il un saignement actif ou important ?"),
 )
 
-# Questions propres à chaque thème clinique.
-QUESTIONS_PAR_THEME: dict[str, tuple[tuple[str, str], ...]] = {
+# Questions specific to each clinical theme.
+QUESTIONS_BY_THEME: dict[str, tuple[tuple[str, str], ...]] = {
     "douleur_thoracique": (
         ("irradiation", "La douleur irradie-t-elle vers le bras, la mâchoire ou le dos ?"),
         ("sueurs", "Y a-t-il des sueurs, des nausées ou un malaise associés ?"),
@@ -79,26 +79,24 @@ QUESTIONS_PAR_THEME: dict[str, tuple[tuple[str, str], ...]] = {
     ),
 }
 
-# Thème retenu quand le motif ne correspond à aucune famille identifiée.
-QUESTIONS_GENERALES: tuple[tuple[str, str], ...] = (
+# Theme used when the complaint matches no identified family.
+GENERAL_QUESTIONS: tuple[tuple[str, str], ...] = (
     ("anciennete", "Depuis combien de temps les symptômes sont-ils présents ?"),
     ("evolution", "Les symptômes s'aggravent-ils, stagnent-ils ou s'améliorent-ils ?"),
     ("antecedents", "Le patient a-t-il des antécédents ou des traitements en cours ?"),
 )
 
-# Comment la réponse à chaque question est reportée dans la description transmise
-# au modèle : un intitulé court pour les réponses libres, et — pour les questions
-# qui attendent oui ou non — la phrase à écrire dans chacun des deux cas.
+# How the answer to each question is reported in the description handed to the model: a short
+# label for free-text answers, and — for yes/no questions — the sentence to write in each case.
 #
-# Recopier la question serait plus simple, et serait faux. Elle contient par
-# construction le vocabulaire des signes de gravité, et la description compilée
-# est ensuite relue par la règle de triage : « Y a-t-il une difficulté à
-# respirer ? non » se classe urgence vitale, avec « difficulté à respirer » en
-# justification, pour un patient qui vient de la nier. La règle sait en revanche
-# traiter une négation antéposée — « Pas de difficulté à respirer » — d'où ces
-# formulations écrites une par une.
-RAPPORTS: dict[str, tuple[str, str, str]] = {
-    # identifiant : (intitulé si réponse libre, phrase si oui, phrase si non)
+# Copying the question would be simpler, and would be wrong. By construction it contains the
+# vocabulary of severity signs, and the compiled description is then read back by the triage
+# rule: "Y a-t-il une difficulté à respirer ? non" classifies as life-threatening, with
+# "difficulté à respirer" as the justification, for a patient who has just denied it. The rule,
+# on the other hand, does handle a leading negation — "Pas de difficulté à respirer" — hence
+# these wordings, written one by one.
+STATEMENTS: dict[str, tuple[str, str, str]] = {
+    # id: (label for a free-text answer, sentence if yes, sentence if no)
     "conscience": (
         "Conscience",
         "Patient conscient et orienté.",
@@ -166,12 +164,11 @@ RAPPORTS: dict[str, tuple[str, str, str]] = {
         "Ni déformation, ni plaie, ni perte de sensibilité.",
     ),
     "temperature": ("Température mesurée", "", ""),
-    # L'intitulé de réponse libre est notre vocabulaire, pas celui du patient, et
-    # la synthèse est relue par la règle de triage : un intitulé « Frissons »
-    # suivi de « je ne sais pas » ferait apparaître « frissons » dans les raisons
-    # affichées au soignant, alors que personne ne les a décrits. Les intitulés
-    # restent donc hors du lexique de gravité ; les phrases canoniques, qui
-    # rapportent une réponse réellement donnée, gardent le mot juste.
+    # A free-text label is our vocabulary, not the patient's, and the summary is read back by
+    # the triage rule: a label "Frissons" followed by "je ne sais pas" would make "frissons"
+    # appear among the reasons shown to the nurse, when nobody described any. Labels therefore
+    # stay outside the severity lexicon; the canonical sentences, which report an answer
+    # actually given, keep the precise word.
     "frissons": (
         "Signes cutanés et thermiques",
         "Frissons intenses ou éruption cutanée.",
@@ -199,8 +196,8 @@ RAPPORTS: dict[str, tuple[str, str, str]] = {
 }
 
 
-# Mots-clés rattachant un motif à un thème. Le premier thème trouvé l'emporte,
-# les familles étant ordonnées de la plus grave à la plus banale.
+# Keywords attaching a complaint to a theme. The first theme found wins, the families being
+# ordered from the most serious to the most ordinary.
 THEMES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("douleur_thoracique", ("thorax", "thoracique", "poitrine", "coeur", "cardiaque", "chest")),
     ("respiratoire", ("respir", "souffle", "essouffl", "asthme", "toux", "breath")),
@@ -241,88 +238,83 @@ THEMES: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 @dataclass(frozen=True)
 class NextQuestion:
-    """Prochaine étape du questionnaire."""
+    """The next step of the questionnaire."""
 
-    identifiant: str | None
-    texte: str | None
-    termine: bool
+    identifier: str | None
+    text: str | None
+    finished: bool
     theme: str
 
 
 def detect_theme(chief_complaint: str) -> str:
-    """Rattache un motif de consultation à un thème clinique."""
-    motif = normalize(chief_complaint)
-    for theme, mots_cles in THEMES:
-        if any(mot in motif for mot in mots_cles):
+    """Attach a presenting complaint to a clinical theme."""
+    complaint = normalize(chief_complaint)
+    for theme, keywords in THEMES:
+        if any(word in complaint for word in keywords):
             return theme
     return "general"
 
 
 def plan(chief_complaint: str) -> list[tuple[str, str]]:
-    """Liste ordonnée des questions à poser pour ce motif."""
+    """The ordered list of questions to ask for this complaint."""
     theme = detect_theme(chief_complaint)
-    specifiques = QUESTIONS_PAR_THEME.get(theme, QUESTIONS_GENERALES)
-    return [*QUESTIONS_DE_GRAVITE, *specifiques]
+    specific = QUESTIONS_BY_THEME.get(theme, GENERAL_QUESTIONS)
+    return [*RED_FLAG_QUESTIONS, *specific]
 
 
 def compile_symptoms(chief_complaint: str, answers: dict[str, str]) -> str:
-    """Compile le motif et les réponses en une description exploitable.
+    """Compile the complaint and the answers into a usable description.
 
-    Chaque réponse devient une **phrase**, jamais une question suivie de son
-    réponse. C'est ce qui permet au modèle de distinguer « pas de saignement »
-    de « pas de difficulté à respirer », et c'est surtout ce qui évite que le
-    vocabulaire des questions ne soit relu comme des symptômes par la règle de
-    triage, qui s'applique ensuite à ce texte.
+    Each answer becomes a **sentence**, never a question followed by its answer. That is what
+    lets the model tell "no bleeding" from "no breathing difficulty", and above all what keeps
+    the vocabulary of the questions from being read as symptoms by the triage rule, which is
+    applied to this text next.
     """
-    morceaux = [f"Motif : {chief_complaint.strip()}"]
-    for identifiant, reponse in answers.items():
-        phrase = _enoncer(identifiant, reponse)
-        if phrase:
-            morceaux.append(phrase)
-    return " ".join(morceaux)
+    parts = [f"Motif : {chief_complaint.strip()}"]
+    for identifier, answer in answers.items():
+        sentence = _as_statement(identifier, answer)
+        if sentence:
+            parts.append(sentence)
+    return " ".join(parts)
 
 
-def _enoncer(identifiant: str, reponse: str) -> str:
-    """Transforme une réponse en phrase, ou renvoie une chaîne vide si elle est vide.
+def _as_statement(identifier: str, answer: str) -> str:
+    """Turn an answer into a sentence, or return an empty string if it is empty.
 
-    Une réponse binaire prend la formulation écrite pour elle. Une réponse libre
-    est reportée derrière son intitulé, qui est un groupe nominal neutre et non
-    la question posée.
+    A binary answer takes the wording written for it. A free-text answer is reported behind its
+    label, which is a neutral noun phrase and not the question that was asked.
     """
-    texte = reponse.strip()
-    if not texte:
+    text = answer.strip()
+    if not text:
         return ""
-    intitule, affirmatif, negatif = RAPPORTS.get(identifiant, (identifiant, "", ""))
-    binaire = _reponse_binaire(texte)
-    if binaire == "oui" and affirmatif:
-        return affirmatif
-    if binaire == "non" and negatif:
-        return negatif
-    return f"{intitule} : {texte}."
+    label, affirmative, negative = STATEMENTS.get(identifier, (identifier, "", ""))
+    binary = _binary_answer(text)
+    if binary == "oui" and affirmative:
+        return affirmative
+    if binary == "non" and negative:
+        return negative
+    return f"{label} : {text}."
 
 
-# Réponse qui, pour une question de gravité, constitue un signe d'alerte.
-# « Le patient est-il conscient ? non » et « Y a-t-il une difficulté à respirer ?
-# oui » sont tous deux alarmants, mais l'un par la négative et l'autre par
-# l'affirmative : le sens de chaque question doit être écrit, pas deviné.
-REPONSE_ALARMANTE = {
+# The answer that, for a red-flag question, constitutes an alert. "Is the patient conscious?
+# no" and "Is there any breathing difficulty? yes" are both alarming, but one in the negative
+# and the other in the affirmative: the polarity of each question must be written, not guessed.
+ALARMING_ANSWER = {
     "conscience": "non",
     "respiration": "oui",
     "saignement": "oui",
-    # Un « oui » à la question du déficit décrit un accident vasculaire en cours,
-    # un « oui » à la céphalée en coup de tonnerre une hémorragie méningée, un
-    # « non » à la parole une détresse respiratoire, un « non » à la nuque souple
-    # un syndrome méningé. Continuer à poser des questions après l'une de ces
-    # réponses n'a pas de sens.
+    # A "yes" to the deficit question describes a stroke in progress, a "yes" to the
+    # thunderclap headache a subarachnoid haemorrhage, a "no" to speech a respiratory distress,
+    # a "no" to a supple neck a meningeal syndrome. Carrying on asking questions after one of
+    # those answers makes no sense.
     "deficit": "oui",
     "cephalee": "oui",
     "intention": "oui",
     "parole": "non",
     "nuque": "non",
-    # `vomissements` en est absent à dessein : la question est double
-    # (« y a-t-il des vomissements, et contiennent-ils du sang ? »), et un « oui »
-    # nu ne dit pas lequel des deux. C'est le texte libre qui tranche, et la
-    # règle de triage le relit.
+    # `vomissements` is deliberately absent: the question is double ("is there vomiting, and
+    # does it contain blood?"), and a bare "yes" does not say which. The free text decides, and
+    # the triage rule reads it back.
 }
 
 AFFIRMATIONS = frozenset({"oui", "yes", "présent", "present", "positif", "positive"})
@@ -330,72 +322,67 @@ NEGATIONS = frozenset(
     {"non", "no", "aucun", "aucune", "absent", "absente", "négatif", "negatif", "rien"}
 )
 
-_MOTS = re.compile(r"[^\W\d_]+")
+_WORDS = re.compile(r"[^\W\d_]+")
 
 
-def _reponse_binaire(reponse: str) -> str | None:
-    """Ramène une réponse à « oui », « non », ou rien si elle n'est pas binaire.
+def _binary_answer(answer: str) -> str | None:
+    """Reduce an answer to "oui", "non", or nothing when it is not binary.
 
-    Deux précautions, et elles sont toutes les deux nées d'un contre-exemple.
+    Two precautions, both born of a counter-example.
 
-    La comparaison porte sur un **mot entier**, jamais sur un préfixe : « no »
-    est une négation en anglais, et le début de « Notre », « Nous » et
-    « Normalement » en français. Lire « Notre fille saigne du nez » comme un
-    « non » inverse une réponse clinique sans que rien ne le signale.
+    The comparison is on a **whole word**, never a prefix: "no" is a negation in English, and
+    the start of "Notre", "Nous" and "Normalement" in French. Reading "Notre fille saigne du
+    nez" as a "no" inverts a clinical answer with nothing to report it.
 
-    Et seule une réponse **réduite à ce seul mot** est traitée comme binaire.
-    Dès qu'un soignant écrit autre chose, son texte est repris tel quel plus
-    loin : c'est toujours le choix le plus sûr, puisque le texte part alors mot
-    pour mot au modèle et que la règle de triage le relit, là où une réponse
-    ramenée à « oui » ou « non » perd tout ce qu'elle portait.
+    And only an answer **reduced to that single word** is treated as binary. As soon as a nurse
+    writes anything else, their text is carried through verbatim further down: that is always
+    the safer choice, since the text then goes word for word to the model and the triage rule
+    reads it back, where an answer collapsed to "oui" or "non" loses everything it carried.
     """
-    mots = _MOTS.findall(reponse.strip().lower())
-    if len(mots) != 1:
+    words = _WORDS.findall(answer.strip().lower())
+    if len(words) != 1:
         return None
-    if mots[0] in AFFIRMATIONS:
+    if words[0] in AFFIRMATIONS:
         return "oui"
-    if mots[0] in NEGATIONS:
+    if words[0] in NEGATIONS:
         return "non"
     return None
 
 
 def has_red_flag(chief_complaint: str, answers: dict[str, str]) -> bool:
-    """Dit si un signe de détresse vitale ressort déjà de la collecte.
+    """Say whether a sign of life-threatening distress already shows in the collection.
 
-    Attention au piège : appliquer la règle de triage à la synthèse complète
-    reviendrait à la lui appliquer sur le **texte des questions**, qui contient
-    par construction le vocabulaire des signes graves (« Y a-t-il une difficulté
-    à respirer ? »). Le questionnaire s'arrêterait alors systématiquement dès la
-    première question. On examine donc le motif et les réponses, jamais les
-    questions.
+    Watch the trap: applying the triage rule to the full summary would amount to applying it to
+    the **text of the questions**, which by construction contains the vocabulary of serious
+    signs ("Y a-t-il une difficulté à respirer ?"). The questionnaire would then stop
+    systematically at the first question. So the complaint and the answers are examined, never
+    the questions.
     """
     if classify(chief_complaint) == VITAL:
         return True
-    for identifiant, reponse in answers.items():
-        # Les deux valeurs sont comparées seulement si la question attend
-        # réellement une réponse binaire. Sans cette garde, une question qui n'en
-        # attend pas — le mécanisme d'un traumatisme, la localisation d'une
-        # douleur — confronterait deux `None` : toute réponse en texte libre y
-        # passerait pour un signe de détresse vitale et arrêterait la collecte.
-        attendue = REPONSE_ALARMANTE.get(identifiant)
-        if attendue is not None and _reponse_binaire(reponse) == attendue:
+    for identifier, answer in answers.items():
+        # The two values are compared only when the question really expects a binary answer.
+        # Without this guard, a question that does not — the mechanism of a trauma, the
+        # location of a pain — would confront two `None`: any free-text answer would pass for a
+        # sign of life-threatening distress and stop the collection.
+        expected = ALARMING_ANSWER.get(identifier)
+        if expected is not None and _binary_answer(answer) == expected:
             return True
-        # La règle s'applique à **toute** réponse, y compris à celle qui commence
-        # par « oui » : « oui, hémiplégie droite depuis trente minutes » porte le
-        # signe dans ce qui suit le « oui », et le réserver aux réponses non
-        # binaires reviendrait à ne jamais le lire.
-        if classify(reponse) == VITAL:
+        # The rule applies to **every** answer, including one that starts with "oui": "oui,
+        # hémiplégie droite depuis trente minutes" carries the sign in what follows the "oui",
+        # and reserving this to non-binary answers would amount to never reading it.
+        if classify(answer) == VITAL:
             return True
     return False
 
 
 def next_question(chief_complaint: str, answers: dict[str, str]) -> NextQuestion:
-    """Détermine la prochaine question, ou signale la fin de la collecte."""
+    """Determine the next question, or signal the end of collection."""
     theme = detect_theme(chief_complaint)
     if has_red_flag(chief_complaint, answers):
-        # Un signe de détresse vitale est apparu : on arrête d'interroger.
+        # A sign of life-threatening distress has appeared: stop questioning.
         return NextQuestion(None, None, True, theme)
-    for identifiant, texte in plan(chief_complaint):
-        if identifiant not in answers:
-            return NextQuestion(identifiant, texte, False, theme)
+    for identifier, text in plan(chief_complaint):
+        if identifier not in answers:
+            return NextQuestion(identifier, text, False, theme)
     return NextQuestion(None, None, True, theme)

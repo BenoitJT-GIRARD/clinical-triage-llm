@@ -1,38 +1,33 @@
-"""Chargement des corpus médicaux publics exigés par le cahier des charges.
+"""Loading the public medical corpora.
 
-Quatre corpus sont demandés : MediQAl, FrenchMedMCQA, MedQuAD et
-UltraMedical-Preference. Ce module se contente de les télécharger et de les
-ramener à un format commun ; le tri de ce qui est réellement exploitable pour du
-triage se fait dans `corpus_cases`.
+Four corpora are required: MediQAl, FrenchMedMCQA, MedQuAD and UltraMedical-Preference. This
+module only downloads them and brings them to a common shape; sorting what is genuinely usable
+for triage happens in ``corpus_cases``.
 
-Trois constats de terrain, vérifiés sur les corpus eux-mêmes, expliquent la suite :
+Three findings, checked on the corpora themselves, explain what follows:
 
-- **MediQAl est le seul à contenir de vraies vignettes cliniques.** Sa colonne
-  `clinical_case` décrit un patient, son motif, ses antécédents et souvent ses
-  constantes d'entrée. 3 075 vignettes distinctes, en français, dont 569 dont on
-  sait lire au moins une constante. C'est la seule source authentique francophone.
-- **FrenchMedMCQA compte 1 080 questions** sur ses trois découpages, et six
-  d'entre elles seulement décrivent un patient : c'est un jeu de questions
-  d'examen de pharmacie.
-- **MedQuAD pose des questions générales sur des pathologies**, pas sur des
-  patients. Il sert à varier le vocabulaire clinique anglophone, pas à fournir
-  des cas.
+- **MediQAl is the only one containing real clinical vignettes.** Its ``clinical_case`` column
+  describes a patient, their complaint, their history and often their vital signs on arrival.
+  3,075 distinct vignettes, in French, 569 of which carry at least one readable vital sign. It
+  is the only authentic French-language source.
+- **FrenchMedMCQA holds 1,080 questions** across its three splits, and only six of them describe
+  a patient: it is a set of pharmacy exam questions.
+- **MedQuAD asks general questions about conditions**, not about patients. It serves to vary the
+  English clinical vocabulary, not to supply cases.
 
-MedMCQA complète le volume anglophone de vignettes, puisque les trois corpus
-exploitables du cahier des charges sont soit francophones, soit sans patient.
+MedMCQA completes the English vignette volume, since the three usable source corpora are
+either French-language or patient-free.
 
-**Les corpus sont lus intégralement.** Une lecture partielle donnerait un
-rendement qui ne décrit pas la source mais le plafond qu'on s'est fixé, et le
-rapport en tirerait des conclusions fausses sur ce que les corpus permettent.
-Le paramètre `limit` existe pour les essais rapides ; à zéro, il ne borne rien.
+**The corpora are read in full.** A partial read would give a yield that describes not the
+source but the ceiling we set ourselves, and the published protocol would draw false conclusions
+about what the corpora allow. The ``limit`` parameter exists for quick trials; at zero it bounds
+nothing.
 
-Deux pannes, deux conduites. **Une source injoignable à l'ouverture** est
-signalée et ignorée ; le script de préparation vérifie ensuite que chaque corpus
-attendu a bien fourni des entrées, et refuse de construire un dataset amputé sans
-le dire. **Une lecture interrompue en route**, elle, arrête tout : le rendement
-publié se calcule sur le nombre d'entrées lues, et une lecture partielle absorbée
-en silence produirait un tableau qui décrit la moitié d'un corpus en la présentant
-comme le corpus entier.
+Two failures, two behaviours. **A source unreachable at opening** is reported and skipped; the
+preparation script then checks that each expected corpus did supply entries, and refuses to
+build a truncated dataset silently. **A read interrupted mid-way** stops everything: the
+published yield is computed on the number of entries read, and a partial read absorbed in
+silence would produce a table describing half a corpus while presenting it as the whole.
 """
 
 from __future__ import annotations
@@ -45,10 +40,9 @@ from clinical_triage.utils import get_logger
 logger = get_logger(__name__)
 
 
-# Noms lisibles des corpus, dans l'ordre ou les livrables les presentent.
-# Partages par le script de construction et par celui du rapport : deux listes
-# auraient fini par diverger.
-NOMS_DE_CORPUS = (
+# Readable corpus names, in the order the published documents present them. Shared by the build
+# script and by the figure script: two lists would have drifted apart.
+CORPUS_NAMES = (
     ("mediqal", "MediQAl"),
     ("medquad", "MedQuAD"),
     ("medmcqa", "MedMCQA"),
@@ -58,117 +52,113 @@ NOMS_DE_CORPUS = (
 
 @dataclass(frozen=True)
 class CorpusEntry:
-    """Entrée d'un corpus public, ramenée à un format commun."""
+    """One entry of a public corpus, brought to a common shape."""
 
-    text: str  # énoncé brut (question, vignette ou description de symptômes)
-    answer: str  # réponse ou explication associée, quand elle existe
-    lang: str  # "fr" ou "en"
-    source: str  # nom court du corpus d'origine
-    topic: str  # discipline ou pathologie, quand le corpus la fournit
+    text: str  # raw statement (question, vignette or symptom description)
+    answer: str  # associated answer or explanation, when there is one
+    lang: str  # "fr" or "en"
+    source: str  # short name of the source corpus
+    topic: str  # discipline or condition, when the corpus supplies one
 
 
 def _clean(value: object) -> str:
-    """Nettoyage minimal : espaces multiples et retours à la ligne."""
+    """Minimal cleaning: repeated whitespace and line breaks."""
     if not value:
         return ""
     return " ".join(str(value).split()).strip()
 
 
 def _stream(repo: str, split: str = "train"):
-    """Ouvre un jeu Hugging Face en streaming, ou renvoie None s'il est indisponible."""
+    """Open a Hugging Face dataset in streaming mode, or return None when unavailable."""
     from datasets import load_dataset
 
     try:
         return load_dataset(repo, split=split, streaming=True)
-    except Exception as exc:  # noqa: BLE001 - une source absente ne doit pas tout arrêter
-        logger.warning("Corpus %s indisponible (%s) — source ignorée.", repo, exc)
+    except Exception as exc:  # noqa: BLE001 - a missing source must not stop everything
+        logger.warning("Corpus %s unavailable (%s) — source skipped.", repo, exc)
         return None
 
 
-def _stream_tous_les_decoupages(repo: str):
-    """Enchaîne les lignes de tous les découpages d'un dépôt.
+def _stream_all_splits(repo: str):
+    """Chain the rows of every split of a repository.
 
-    Un corpus d'examen répartit ses questions entre `train`, `validation` et
-    `test` pour ses propres besoins d'évaluation. Ce découpage n'a aucun sens
-    ici : on cherche des descriptions de patients, et s'arrêter au découpage
-    d'entraînement reviendrait à en ignorer la moitié sans raison.
+    An exam corpus divides its questions between ``train``, ``validation`` and ``test`` for its
+    own evaluation needs. That split means nothing here: we are looking for patient
+    descriptions, and stopping at the training split would ignore half of them for no reason.
     """
     from datasets import load_dataset
 
     try:
-        jeux = load_dataset(repo, streaming=True)
-    except Exception as exc:  # noqa: BLE001 - une source absente ne doit pas tout arrêter
-        logger.warning("Corpus %s indisponible (%s) — source ignorée.", repo, exc)
+        datasets = load_dataset(repo, streaming=True)
+    except Exception as exc:  # noqa: BLE001 - a missing source must not stop everything
+        logger.warning("Corpus %s unavailable (%s) — source skipped.", repo, exc)
         return
-    for nom in jeux:
-        yield from jeux[nom]
+    for name in datasets:
+        yield from datasets[name]
 
 
-def _plafond_atteint(entrees: list, limite: int) -> bool:
-    """Dit si la lecture doit s'arrêter. Une limite nulle ou négative ne borne rien."""
-    return limite > 0 and len(entrees) >= limite
+def _cap_reached(entries: list, limit: int) -> bool:
+    """Say whether reading must stop. A limit of zero or less bounds nothing."""
+    return limit > 0 and len(entries) >= limit
 
 
-class LectureInterrompue(RuntimeError):
-    """Une lecture en flux s'est arrêtée en route, corpus incomplet."""
+class InterruptedRead(RuntimeError):
+    """A streaming read stopped mid-way, leaving the corpus incomplete."""
 
 
-def _lignes(dataset, repo: str):
-    """Parcourt un flux, et refuse de rendre un corpus tronqué en silence.
+def _rows(dataset, repo: str):
+    """Walk a stream, and refuse to return a silently truncated corpus.
 
-    Le `try` des ouvertures ne couvre que l'ouverture : en streaming, tout le
-    trafic réseau a lieu pendant l'itération. Une coupure à ce moment-là
-    remonterait jusqu'au script de préparation — c'est déjà mieux qu'un corpus
-    amputé, mais l'erreur ne dirait pas où elle s'est produite.
+    The ``try`` on opening covers the opening only: in streaming mode all network traffic happens
+    during iteration. A cut at that point would propagate up to the preparation script — already
+    better than a truncated corpus, but the error would not say where it happened.
 
-    On ne l'absorbe pas pour autant. Le rendement publié dans la carte du
-    dataset est calculé sur le nombre d'entrées lues : absorber la coupure
-    produirait un tableau qui décrit une lecture partielle en la présentant
-    comme complète, et un jeu reconstruit après incident serait indiscernable
-    d'un jeu entier. Mieux vaut une préparation à relancer qu'un chiffre faux.
+    It is not absorbed either. The yield published in the dataset card is computed on the number
+    of entries read: absorbing the cut would produce a table describing a partial read while
+    presenting it as complete, and a set rebuilt after an incident would be indistinguishable
+    from a whole one. Better a preparation to re-run than a false figure.
     """
-    lues = 0
+    read = 0
     try:
-        for ligne in dataset:
-            lues += 1
-            yield ligne
+        for row in dataset:
+            read += 1
+            yield row
     except Exception as exc:
-        raise LectureInterrompue(
-            f"Lecture de {repo} interrompue après {lues} entrées ({exc}). "
-            "Le corpus serait incomplet et le rendement publié, faux : relancez la préparation."
+        raise InterruptedRead(
+            f"Reading {repo} was interrupted after {read} entries ({exc}). The corpus would be "
+            "incomplete and the published yield false: re-run the preparation."
         ) from exc
 
 
 def load_mediqal(limit: int = 0) -> list[CorpusEntry]:
-    """MediQAl : cas cliniques français annotés, issus du projet ANR MALADES.
+    """MediQAl: annotated French clinical cases, from the ANR MALADES project.
 
-    C'est le seul corpus du cahier des charges qui décrive des **patients** :
-    la colonne `clinical_case` porte un motif, des antécédents et, une fois sur
-    cinq, les constantes relevées à l'entrée.
+    It is the only source corpus that describes **patients**: the ``clinical_case`` column
+    carries a complaint, a history and, one time in five, the vital signs recorded on arrival.
 
-    Trois configurations partagent cette colonne — `oeq` (questions ouvertes),
-    `mcqu` et `mcqm` (choix multiples). Une même vignette y sert souvent plusieurs
-    questions : on dédoublonne sur le texte du cas, sans quoi le même patient
-    reviendrait jusqu'à dix fois dans le corpus et fausserait l'équilibre du jeu.
+    Three configurations share that column — ``oeq`` (open questions), ``mcqu`` and ``mcqm``
+    (multiple choice). One vignette often serves several questions: entries are deduplicated on
+    the case text, without which the same patient would come back up to ten times and skew the
+    balance of the set.
     """
     from datasets import load_dataset
 
-    vus: set[str] = set()
+    seen: set[str] = set()
     entries: list[CorpusEntry] = []
     for configuration in ("oeq", "mcqu", "mcqm"):
         try:
-            jeux = load_dataset(DATA.corpora["mediqal"], configuration)
-        except Exception as exc:  # noqa: BLE001 - une source absente ne doit pas tout arrêter
+            datasets = load_dataset(DATA.corpora["mediqal"], configuration)
+        except Exception as exc:  # noqa: BLE001 - a missing source must not stop everything
             logger.warning(
-                "MediQAl/%s indisponible (%s) — configuration ignorée.", configuration, exc
+                "MediQAl/%s unavailable (%s) — configuration skipped.", configuration, exc
             )
             continue
-        for decoupage in jeux.values():
-            for row in decoupage:
+        for split in datasets.values():
+            for row in split:
                 vignette = _clean(row.get("clinical_case"))
-                if not vignette or vignette in vus:
+                if not vignette or vignette in seen:
                     continue
-                vus.add(vignette)
+                seen.add(vignette)
                 entries.append(
                     CorpusEntry(
                         text=vignette,
@@ -178,26 +168,25 @@ def load_mediqal(limit: int = 0) -> list[CorpusEntry]:
                         topic=_clean(row.get("medical_subject")),
                     )
                 )
-                if _plafond_atteint(entries, limit):
-                    logger.info("MediQAl : %d vignettes distinctes chargées.", len(entries))
+                if _cap_reached(entries, limit):
+                    logger.info("MediQAl: %d distinct vignettes loaded.", len(entries))
                     return entries
-    logger.info("MediQAl : %d vignettes distinctes chargées.", len(entries))
+    logger.info("MediQAl: %d distinct vignettes loaded.", len(entries))
     return entries
 
 
 def load_medquad(limit: int = 0) -> list[CorpusEntry]:
-    """MedQuAD : questions-réponses médicales en anglais, issues des sites du NIH.
+    """MedQuAD: English medical question-answer pairs, from the NIH websites.
 
-    Le dépôt désigné par le cahier des charges expose deux colonnes, `Question`
-    et `Answer`, avec une majuscule ; d'autres redistributions du même corpus les
-    nomment en minuscules. On accepte les deux, pour que changer de miroir ne
-    casse pas la préparation.
+    The designated repository exposes two columns, ``Question`` and ``Answer``, capitalised;
+    other redistributions of the same corpus name them in lower case. Both are accepted, so that
+    changing mirror does not break the preparation.
     """
     dataset = _stream(DATA.corpora["medquad"])
     if dataset is None:
         return []
     entries: list[CorpusEntry] = []
-    for row in _lignes(dataset, DATA.corpora["medquad"]):
+    for row in _rows(dataset, DATA.corpora["medquad"]):
         question = _clean(row.get("Question") or row.get("question"))
         answer = _clean(row.get("Answer") or row.get("answer"))
         if question and answer:
@@ -210,58 +199,58 @@ def load_medquad(limit: int = 0) -> list[CorpusEntry]:
                     topic=_clean(row.get("qtype") or row.get("question_type")),
                 )
             )
-        if _plafond_atteint(entries, limit):
+        if _cap_reached(entries, limit):
             break
-    logger.info("MedQuAD : %d entrées chargées.", len(entries))
+    logger.info("MedQuAD: %d entries loaded.", len(entries))
     return entries
 
 
 def load_frenchmedmcqa(limit: int = 0) -> list[CorpusEntry]:
-    """FrenchMedMCQA : questions à choix multiples de pharmacie, en français.
+    """FrenchMedMCQA: French multiple-choice pharmacy questions.
 
-    Les trois découpages sont lus : 595 questions en entraînement, 164 en
-    validation, 321 en test. Se limiter au premier laisserait de côté 485
-    questions du seul autre corpus francophone du cahier des charges.
+    All three splits are read: 595 questions in training, 164 in validation, 321 in test.
+    Stopping at the first would leave out 485 questions of the only other French-language
+    source corpus.
     """
-    # Générateur : une source indisponible n'y produit aucune ligne, et la boucle
-    # ci-dessous se termine d'elle-même en renvoyant une liste vide.
-    dataset = _lignes(
-        _stream_tous_les_decoupages(DATA.corpora["frenchmedmcqa"]),
+    # A generator: an unavailable source produces no row there, and the loop below terminates on
+    # its own, returning an empty list.
+    dataset = _rows(
+        _stream_all_splits(DATA.corpora["frenchmedmcqa"]),
         DATA.corpora["frenchmedmcqa"],
     )
-    # `correct_answers` encode les bonnes options, soit en lettres, soit en chiffres.
-    chiffre_vers_lettre = {"1": "a", "2": "b", "3": "c", "4": "d", "5": "e"}
+    # `correct_answers` encodes the right options, either as letters or as digits.
+    digit_to_letter = {"1": "a", "2": "b", "3": "c", "4": "d", "5": "e"}
     entries: list[CorpusEntry] = []
     for row in dataset:
         question = _clean(row.get("question"))
         if not question:
             continue
-        brut = str(row.get("correct_answers") or "").lower()
-        lettres = [chiffre_vers_lettre.get(c, c) for c in brut if c.isalnum()]
-        bonnes = [_clean(row.get(f"answer_{lettre}")) for lettre in lettres]
+        raw = str(row.get("correct_answers") or "").lower()
+        letters = [digit_to_letter.get(c, c) for c in raw if c.isalnum()]
+        correct = [_clean(row.get(f"answer_{letter}")) for letter in letters]
         entries.append(
             CorpusEntry(
                 text=question,
-                answer="; ".join(a for a in bonnes if a),
+                answer="; ".join(a for a in correct if a),
                 lang="fr",
                 source="frenchmedmcqa",
                 topic="",
             )
         )
-        if _plafond_atteint(entries, limit):
+        if _cap_reached(entries, limit):
             break
-    logger.info("FrenchMedMCQA : %d entrées chargées.", len(entries))
+    logger.info("FrenchMedMCQA: %d entries loaded.", len(entries))
     return entries
 
 
 def load_medmcqa(limit: int = 0) -> list[CorpusEntry]:
-    """MedMCQA : questions à choix multiples d'internat médical, en anglais."""
+    """MedMCQA: English multiple-choice questions from medical entrance exams."""
     dataset = _stream(DATA.corpora["medmcqa"])
     if dataset is None:
         return []
     options = ("opa", "opb", "opc", "opd")
     entries: list[CorpusEntry] = []
-    for row in _lignes(dataset, DATA.corpora["medmcqa"]):
+    for row in _rows(dataset, DATA.corpora["medmcqa"]):
         question = _clean(row.get("question"))
         if not question:
             continue
@@ -269,34 +258,34 @@ def load_medmcqa(limit: int = 0) -> list[CorpusEntry]:
             index = int(row.get("cop"))
         except (TypeError, ValueError):
             index = -1
-        bonne = _clean(row.get(options[index])) if 0 <= index < len(options) else ""
+        correct = _clean(row.get(options[index])) if 0 <= index < len(options) else ""
         entries.append(
             CorpusEntry(
                 text=question,
-                answer=bonne,
+                answer=correct,
                 lang="en",
                 source="medmcqa",
                 topic=_clean(row.get("subject_name")),
             )
         )
-        if _plafond_atteint(entries, limit):
+        if _cap_reached(entries, limit):
             break
-    logger.info("MedMCQA : %d entrées chargées.", len(entries))
+    logger.info("MedMCQA: %d entries loaded.", len(entries))
     return entries
 
 
 @dataclass(frozen=True)
 class PreferencePair:
-    """Paire de préférence annotée, telle que la fournit UltraMedical-Preference."""
+    """An annotated preference pair, as UltraMedical-Preference supplies it."""
 
     prompt: str
     chosen: str
     rejected: str
-    label_type: str  # "hard", "easy" ou "length"
+    label_type: str  # "hard", "easy" or "length"
 
 
 def _last_message(value: object) -> str:
-    """Extrait le contenu du dernier message d'une réponse au format conversation."""
+    """Extract the content of the last message of a conversation-shaped answer."""
     import ast
 
     if isinstance(value, str) and value.strip().startswith("[{"):
@@ -305,33 +294,32 @@ def _last_message(value: object) -> str:
         except (ValueError, SyntaxError):
             return value.strip()
     if isinstance(value, list) and value:
-        dernier = value[-1]
-        if isinstance(dernier, dict):
-            return _clean(dernier.get("content"))
+        last = value[-1]
+        if isinstance(last, dict):
+            return _clean(last.get("content"))
     return _clean(value)
 
 
 def load_ultramedical_preferences(
     limit: int, drop_length_labels: bool = True
 ) -> list[PreferencePair]:
-    """UltraMedical-Preference : paires de réponses médicales annotées par préférence.
+    """UltraMedical-Preference: pairs of medical answers annotated by preference.
 
-    Le corpus indique dans `label_type` sur quel critère la préférence a été
-    établie. Un tiers des paires est étiqueté `length` : la réponse préférée
-    l'est parce qu'elle est plus longue. Entraîner un alignement sur ce signal
-    apprend au modèle que « plus long vaut mieux », ce qui, sur un agent dont la
-    réponse tient en trois lignes, se traduit par une génération qui ne s'arrête
-    plus. On écarte donc ces paires par défaut.
+    The corpus records in ``label_type`` the criterion the preference was established on. A third
+    of the pairs are labelled ``length``: the preferred answer is preferred because it is longer.
+    Training an alignment on that signal teaches the model that "longer is better", which, on an
+    agent whose answer fits in three lines, translates into a generation that never stops. Those
+    pairs are therefore discarded by default.
     """
     dataset = _stream(DATA.corpora["ultramedical_pref"])
     if dataset is None:
         return []
     pairs: list[PreferencePair] = []
-    ecartees = 0
-    for row in _lignes(dataset, DATA.corpora["ultramedical_pref"]):
+    discarded = 0
+    for row in _rows(dataset, DATA.corpora["ultramedical_pref"]):
         label_type = _clean(row.get("label_type"))
         if drop_length_labels and label_type == "length":
-            ecartees += 1
+            discarded += 1
             continue
         prompt = _clean(row.get("prompt"))
         chosen = _last_message(row.get("chosen"))
@@ -341,8 +329,8 @@ def load_ultramedical_preferences(
         if len(pairs) >= limit:
             break
     logger.info(
-        "UltraMedical-Preference : %d paires retenues, %d écartées (préférence de longueur).",
+        "UltraMedical-Preference: %d pairs kept, %d discarded (length preference).",
         len(pairs),
-        ecartees,
+        discarded,
     )
     return pairs

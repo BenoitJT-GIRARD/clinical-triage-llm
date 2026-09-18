@@ -1,40 +1,39 @@
-"""Règle de triage explicite : la référence à battre, et le filet du questionnaire.
+"""The explicit triage rule: the baseline to beat, and the questionnaire's safety net.
 
-Cette règle a quatre usages, et un non-usage qui est la clé de l'évaluation.
+This rule has four uses, and one non-use that is the key to the whole evaluation.
 
-Usages :
+Uses:
 
-1. **Référence d'évaluation.** Une règle lisible de quelques dizaines de lignes
-   est la première chose qu'un service hospitalier peut déployer. Tout modèle de
-   langage doit démontrer qu'il fait mieux : la règle est donc évaluée à côté du
-   modèle, sur le même jeu de test (voir `evaluation/baselines.py`).
-2. **Arrêt anticipé du questionnaire.** Dès qu'un signe vital apparaît dans les
-   réponses du patient, on cesse de poser des questions et on déclenche le triage.
-3. **Second avis à l'appel.** La réponse de `/triage` porte le niveau que la règle
-   aurait donné à côté de celui du modèle : un désaccord est affiché au soignant.
-4. **Étiquetage borné des cas extraits des corpus publics.** Ces textes-là
-   décrivent un patient sans annoncer son niveau de triage ; c'est la règle qui le
-   leur attribue (`corpus_cases`), puis qui vérifie après anonymisation qu'elle
-   donne toujours le même (`scripts/01`). Ces exemples portent pour cette raison
-   `confiance: moyenne` et ne dépassent jamais `DATA.max_corpus_share` du jeu
-   d'entraînement — 35 %, le reste venant du catalogue.
+1. **Evaluation baseline.** A readable rule of a few dozen lines is the first thing a
+   department can deploy. Any language model has to show it does better: the rule is therefore
+   evaluated next to the model, on the same test set (see ``evaluation/baselines.py``).
+2. **Early stop of the questionnaire.** As soon as a life-threatening sign appears in the
+   patient's answers, questioning stops and triage fires.
+3. **Second opinion at call time.** The ``/triage`` reply carries the level the rule would have
+   given next to the model's: a disagreement is shown to the nurse.
+4. **Bounded labelling of cases extracted from the public corpora.** Those texts describe a
+   patient without announcing a triage level; the rule assigns it (``corpus_cases``), then
+   checks after anonymisation that it still gives the same one (``scripts/build_dataset.py``).
+   Those examples carry ``confidence: medium`` for that reason and never exceed
+   ``DATA.max_corpus_share`` of the training set — 35%, the rest coming from the catalogue.
 
-Non-usage : la règle n'étiquette **jamais** les vignettes du catalogue, ni le jeu
-d'évaluation clinique, qui est écrit à la main. Étiqueter par mots-clés puis
-évaluer avec les mêmes mots-clés ne mesure que la capacité du modèle à réapprendre
-la règle ; c'est sur le jeu clinique, hors de sa portée, que la comparaison
-règle/modèle publiée dans le rapport est honnête. Sur le jeu interne, où la
-part corpus a été filtrée par la règle elle-même, elle retrouverait l'étiquette à
-100 % par construction : `scripts/06` l'y écarte donc des références.
+Non-use: the rule **never** labels the catalogue vignettes, nor the clinical evaluation set,
+which is written by hand. Labelling by keyword and then evaluating with the same keywords
+measures only the model's ability to relearn the rule; it is on the clinical set, out of its
+reach, that the published rule-versus-model comparison is honest. On the internal set, where
+the corpus share was filtered by the rule itself, it would recover the label 100% of the time
+by construction, so ``scripts/run_evaluation.py`` drops it from the baselines there.
 
-Trois précautions rendent la règle défendable :
+Three precautions make the rule defensible:
 
-- **les formes fléchies sont reconnues** : « convulsions », « douleurs
-  thoraciques », « hémorragies » déclenchent autant que le singulier ;
-- **la négation est prise en compte** : « sans perte de connaissance » ne
-  déclenche rien ;
-- **les constantes vitales comptent** : une saturation à 88 % suffit à classer en
-  urgence vitale, même si le récit paraît anodin.
+- **inflected forms are recognised**: « convulsions », « douleurs thoraciques »,
+  « hémorragies » fire as readily as the singular;
+- **negation is taken into account**: « sans perte de connaissance » fires nothing;
+- **vital signs count**: a saturation of 88% is enough to classify as life-threatening, even
+  when the narrative sounds unremarkable.
+
+The patterns are French and English clinical vocabulary: they are the data the rule matches
+against, not prose about the project.
 """
 
 from __future__ import annotations
@@ -54,21 +53,20 @@ VITAL = "URGENCE_VITALE"
 MODERATE = "URGENCE_MODEREE"
 DEFERRED = "CONSULTATION_DIFFEREE"
 
-# --- Signes de détresse vitale : prise en charge immédiate ---
-# Les termes sont choisis pour leur spécificité : un mot trop général
-# (« choc », « infection ») déclencherait à tort sur des récits anodins.
+# --- Life-threatening signs: immediate care ---
+# The terms are chosen for their specificity: too general a word (« choc », « infection »)
+# would fire wrongly on unremarkable narratives.
 RED_FLAGS: tuple[str, ...] = (
-    # Français
+    # French
     "douleur thoracique",
     "douleur dans la poitrine",
     "detresse respiratoire",
     "difficulte a respirer",
     "gene respiratoire severe",
-    # Vocabulaire clinique français que la première version ignorait. Ce sont
-    # les mots qu'une infirmière d'accueil écrit réellement — « dyspnée » plutôt
-    # que « difficulté à respirer », « marbrures » plutôt que « signes de choc ».
-    # Les corpus francophones les emploient, et une règle qui ne les connaît pas
-    # laisse passer les présentations qu'elle est censée attraper.
+    # French clinical vocabulary the first version ignored. These are the words a triage nurse
+    # actually writes — « dyspnée » rather than « difficulté à respirer », « marbrures » rather
+    # than « signes de choc ». The French-language corpora use them, and a rule that does not
+    # know them lets through the presentations it is supposed to catch.
     "dyspnee au repos",
     "polypnee",
     "tirage",
@@ -85,18 +83,17 @@ RED_FLAGS: tuple[str, ...] = (
     "perte de connaissance",
     "perdu connaissance",
     "inconscient",
-    # « Ne répond pas » tout court est une tournure clinique courante — « ne
-    # répond pas au traitement antibiotique depuis trois jours » — qui n'a rien
-    # d'une urgence vitale. Seules comptent les formes qui décrivent un patient
-    # aréactif.
+    # « Ne répond pas » on its own is a common clinical turn of phrase — « ne répond pas au
+    # traitement antibiotique depuis trois jours » — which is in no way life-threatening. Only
+    # the forms that describe an unresponsive patient count.
     "ne repond pas aux stimulations",
     "ne repond plus",
     "ne reagit pas",
     "ne reagit plus",
     "ne se reveille pas",
-    # Les mots d'un accompagnant, pas ceux d'un soignant. Le questionnaire
-    # recueille ses phrases telles quelles : une règle qui ne connaît que le
-    # vocabulaire clinique ne lit pas ce qu'on lui donne réellement.
+    # The words of a relative, not of a clinician. The questionnaire collects their sentences
+    # verbatim: a rule that knows only clinical vocabulary does not read what it is actually
+    # given.
     "du mal a respirer",
     "n'arrive pas a respirer",
     "n'arrive plus a respirer",
@@ -104,10 +101,9 @@ RED_FLAGS: tuple[str, ...] = (
     "saigne en abondance",
     "convulsion",
     "etat de mal epileptique",
-    # « Hémorragie » nu couvre aussi l'hémorragie sous-conjonctivale, bénigne et
-    # spectaculaire : c'est exactement le faux positif qu'un service d'accueil
-    # rencontre tous les jours. On garde les formes qui portent la gravité, et
-    # « saigne beaucoup » ci-dessus couvre le récit de l'accompagnant.
+    # « Hémorragie » alone also covers subconjunctival haemorrhage, benign and spectacular:
+    # exactly the false positive a reception desk meets every day. The forms that carry
+    # severity are kept, and « saigne beaucoup » above covers the relative's account.
     "hemorragie active",
     "hemorragie massive",
     "hemorragie abondante",
@@ -155,7 +151,7 @@ RED_FLAGS: tuple[str, ...] = (
     "masse abdominale battante",
     "plaie penetrante",
     "brulure etendue",
-    # Anglais
+    # English
     "chest pain",
     "crushing chest pain",
     "difficulty breathing",
@@ -167,7 +163,7 @@ RED_FLAGS: tuple[str, ...] = (
     "unresponsive",
     "loss of consciousness",
     "seizure",
-    # Même remarque qu'en français : « subconjunctival haemorrhage » est bénin.
+    # Same remark as in French: « subconjunctival haemorrhage » is benign.
     "active haemorrhage",
     "active hemorrhage",
     "massive haemorrhage",
@@ -202,15 +198,15 @@ RED_FLAGS: tuple[str, ...] = (
     "extensive burn",
 )
 
-# --- Signes d'alerte : évaluation médicale sous quelques heures ---
+# --- Warning signs: medical assessment within a few hours ---
 WARNING_FLAGS: tuple[str, ...] = (
-    # Français
+    # French
     "fievre elevee",
     "fievre persistante",
     "frisson",
-    # Mêmes ajouts que côté rouge, au degré qui leur revient : une dyspnée à
-    # l'effort n'est pas une dyspnée au repos, et une syncope demande un bilan
-    # sans relever du déchocage.
+    # The same additions as on the red side, at the degree that belongs to them: dyspnoea on
+    # exertion is not dyspnoea at rest, and a syncope calls for a work-up without belonging in
+    # resuscitation.
     "dyspnee",
     "tachypnee",
     "bradypnee",
@@ -235,11 +231,10 @@ WARNING_FLAGS: tuple[str, ...] = (
     "vertige",
     "palpitation",
     "douleur intense",
-    # « Brûlure » tout court attrapait les brûlures d'estomac et les brûlures
-    # mictionnelles, qui sont des sensations et non des lésions. Le mot est donc
-    # qualifié : une brûlure lésionnelle s'annonce par son mécanisme ou son
-    # degré. La brûlure urinaire garde son entrée propre, quelques lignes plus
-    # bas, parce qu'elle relève bien d'un avis.
+    # « Brûlure » alone caught heartburn and burning on urination, which are sensations and not
+    # lesions. The word is therefore qualified: a burn injury announces itself by its mechanism
+    # or its degree. Urinary burning keeps its own entry a few lines below, because it does
+    # warrant an opinion.
     "brulure thermique",
     "brulure chimique",
     "brulure electrique",
@@ -259,9 +254,9 @@ WARNING_FLAGS: tuple[str, ...] = (
     "diarrhee",
     "toux grasse",
     "essoufflement a l'effort",
-    # Anglais. Quelques mots s'écrivent de la même façon dans les deux langues
-    # — « fracture », « palpitation » — et figurent une seule fois, plus haut :
-    # la liste est un jeu de motifs, pas un dictionnaire par langue.
+    # English. A few words are spelt the same in both languages — « fracture »,
+    # « palpitation » — and appear once, above: the list is a set of patterns, not a dictionary
+    # per language.
     "high fever",
     "persistent fever",
     "shivering",
@@ -288,7 +283,7 @@ WARNING_FLAGS: tuple[str, ...] = (
     "breathless on exertion",
 )
 
-# Marqueurs de négation cherchés juste avant un signe détecté.
+# Negation markers looked for just before a detected sign.
 NEGATIONS: tuple[str, ...] = (
     "pas de",
     "pas d'",
@@ -309,45 +304,42 @@ NEGATIONS: tuple[str, ...] = (
 )
 NEGATION_PATTERN = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in NEGATIONS) + r")\b")
 
-# Fenêtre de texte inspectée avant un signe pour y chercher une négation.
+# Window of text inspected before a sign, to look for a negation there.
 NEGATION_WINDOW = 28
 
-# Frontières au-delà desquelles une négation ne porte plus. Une note d'accueil
-# énumère : « pas de fièvre, douleur thoracique constrictive ». Sans ces
-# frontières, la fenêtre de vingt-huit caractères remonte par-dessus la virgule,
-# trouve « pas de », et annule la douleur thoracique — un infarctus classé en
-# consultation différée, sans rien afficher qui l'explique.
-FIN_DE_PROPOSITION = re.compile(r"[.;:,\n]|\b(?:mais|toutefois|cependant|but|however)\b")
+# Boundaries beyond which a negation no longer carries. A reception note enumerates: « pas de
+# fièvre, douleur thoracique constrictive ». Without these boundaries the twenty-eight-character
+# window reaches back over the comma, finds « pas de », and cancels the chest pain — a heart
+# attack filed as a deferred consultation, with nothing shown to explain it.
+CLAUSE_BOUNDARY = re.compile(r"[.;:,\n]|\b(?:mais|toutefois|cependant|but|however)\b")
 
 
 def normalize(text: str) -> str:
-    """Passe en minuscules et retire les accents, pour une recherche robuste."""
+    """Lower-case and strip accents, for a robust search."""
     lowered = text.lower()
     decomposed = unicodedata.normalize("NFKD", lowered)
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
 def _flexible_pattern(term: str) -> str:
-    """Rend un terme tolérant aux formes fléchies courantes.
+    """Make a term tolerant to the common inflected forms.
 
-    Chaque mot du terme accepte une terminaison optionnelle de pluriel ou de
-    féminin : « convulsion » reconnaît « convulsions », « douleur thoracique »
-    reconnaît « douleurs thoraciques », « inconscient » reconnaît
-    « inconsciente », « seizure » reconnaît « seizures ».
+    Each word of the term accepts an optional plural or feminine ending: « convulsion » matches
+    « convulsions », « douleur thoracique » matches « douleurs thoraciques », « inconscient »
+    matches « inconsciente », « seizure » matches « seizures ».
     """
-    mots = normalize(term).split()
-    return r"\s+".join(re.escape(mot) + r"(?:e|s|es|x|ux)?" for mot in mots)
+    words = normalize(term).split()
+    return r"\s+".join(re.escape(word) + r"(?:e|s|es|x|ux)?" for word in words)
 
 
 def _compile(terms: tuple[str, ...]) -> re.Pattern[str]:
-    """Compile l'ensemble des termes en une seule expression régulière."""
-    # Les termes longs passent en premier pour que « douleur thoracique » soit
-    # préféré à « douleur » lorsque les deux pourraient correspondre. À longueur
-    # égale, l'ordre alphabétique tranche : un `set` n'a pas d'ordre stable d'une
-    # exécution à l'autre, et c'est cet ordre qui décide quel terme `explain`
-    # affiche au soignant quand deux correspondent au même endroit.
-    ordonnes = sorted(dict.fromkeys(terms), key=lambda terme: (-len(terme), terme))
-    return re.compile(r"\b(?:" + "|".join(_flexible_pattern(t) for t in ordonnes) + r")\b")
+    """Compile the whole set of terms into a single regular expression."""
+    # Long terms come first so that « douleur thoracique » is preferred over « douleur » when
+    # both could match. At equal length, alphabetical order decides: a `set` has no stable
+    # order from one run to the next, and it is that order which decides which term `explain`
+    # shows the nurse when two match at the same place.
+    ordered = sorted(dict.fromkeys(terms), key=lambda term: (-len(term), term))
+    return re.compile(r"\b(?:" + "|".join(_flexible_pattern(t) for t in ordered) + r")\b")
 
 
 RED_PATTERN = _compile(RED_FLAGS)
@@ -355,31 +347,31 @@ WARNING_PATTERN = _compile(WARNING_FLAGS)
 
 
 def _is_negated(normalized_text: str, start: int) -> bool:
-    """Dit si le signe qui commence à `start` est précédé d'une négation.
+    """Say whether the sign starting at ``start`` is preceded by a negation.
 
-    La recherche s'arrête à la proposition courante : une négation située avant
-    une virgule, un point ou un « mais » ne porte plus sur ce qui suit.
+    The search stops at the current clause: a negation placed before a comma, a full stop or a
+    « mais » no longer carries over what follows.
     """
-    debut = max(0, start - NEGATION_WINDOW)
-    amont = normalized_text[debut:start]
-    frontieres = [m.end() for m in FIN_DE_PROPOSITION.finditer(amont)]
-    if frontieres:
-        amont = amont[frontieres[-1] :]
-    return NEGATION_PATTERN.search(amont) is not None
+    begin = max(0, start - NEGATION_WINDOW)
+    upstream = normalized_text[begin:start]
+    boundaries = [m.end() for m in CLAUSE_BOUNDARY.finditer(upstream)]
+    if boundaries:
+        upstream = upstream[boundaries[-1] :]
+    return NEGATION_PATTERN.search(upstream) is not None
 
 
 def matched_flags(text: str, level: str) -> list[str]:
-    """Renvoie les signes du niveau demandé réellement affirmés dans le texte."""
+    """Return the signs of the requested level that the text actually asserts."""
     normalized = normalize(text)
     pattern = RED_PATTERN if level == VITAL else WARNING_PATTERN
-    trouves = [
+    found = [
         m.group(0) for m in pattern.finditer(normalized) if not _is_negated(normalized, m.start())
     ]
-    return sorted(set(trouves))
+    return sorted(set(found))
 
 
 def _reading(text: str, vitals: VitalSigns | None, age: int | None) -> tuple[VitalSigns, int]:
-    """Complète le relevé et l'âge à partir du texte quand ils ne sont pas fournis."""
+    """Fill in the reading and the age from the text when they are not provided."""
     return (
         vitals if vitals is not None else parse_vitals(text),
         age if age is not None else parse_age(text),
@@ -391,34 +383,34 @@ def classify(
     vitals: VitalSigns | None = None,
     age: int | None = None,
 ) -> str:
-    """Attribue un niveau de triage à une description de symptômes.
+    """Assign a triage level to a description of symptoms.
 
-    Quand les constantes et l'âge ne sont pas fournis séparément, on les lit dans
-    le texte : les relevés sont souvent écrits dans le récit d'accueil, et une
-    règle qui les ignorerait serait comparée au modèle à armes inégales.
+    When the vital signs and the age are not provided separately, they are read from the text:
+    readings are often written into the reception narrative, and a rule that ignored them would
+    be compared to the model on unequal terms.
 
-    Le surclassement prime : un seul signe de détresse vitale, dans le récit ou
-    dans les constantes, suffit à classer en urgence vitale.
+    Escalation wins: a single life-threatening sign, in the narrative or in the vital signs, is
+    enough to classify as life-threatening.
     """
-    releve, age_patient = _reading(text, vitals, age)
-    if critical_findings(releve, age_patient) or matched_flags(text, VITAL):
+    reading, patient_age = _reading(text, vitals, age)
+    if critical_findings(reading, patient_age) or matched_flags(text, VITAL):
         return VITAL
-    if warning_findings(releve, age_patient) or matched_flags(text, MODERATE):
+    if warning_findings(reading, patient_age) or matched_flags(text, MODERATE):
         return MODERATE
     return DEFERRED
 
 
 def explain(text: str, vitals: VitalSigns | None = None, age: int | None = None) -> list[str]:
-    """Énumère les éléments qui ont motivé la décision, pour l'auditabilité."""
-    releve, age_patient = _reading(text, vitals, age)
-    raisons = critical_findings(releve, age_patient) + matched_flags(text, VITAL)
-    if not raisons:
-        raisons = warning_findings(releve, age_patient) + matched_flags(text, MODERATE)
-    return raisons
+    """List what drove the decision, for auditability."""
+    reading, patient_age = _reading(text, vitals, age)
+    reasons = critical_findings(reading, patient_age) + matched_flags(text, VITAL)
+    if not reasons:
+        reasons = warning_findings(reading, patient_age) + matched_flags(text, MODERATE)
+    return reasons
 
 
-# Conduites à tenir par défaut, utilisées quand aucune recommandation
-# spécifique n'est disponible (cas dérivés des corpus publics).
+# Default courses of action, used when no specific recommendation is available (cases derived
+# from the public corpora).
 RECOMMENDATIONS: dict[str, str] = {
     VITAL: (
         "Prise en charge immédiate. Alerter sans délai le médecin urgentiste et, "
@@ -436,5 +428,5 @@ RECOMMENDATIONS: dict[str, str] = {
 
 
 def recommendation_for(level: str) -> str:
-    """Renvoie la conduite à tenir standard associée à un niveau."""
+    """Return the standard course of action attached to a level."""
     return RECOMMENDATIONS[level]

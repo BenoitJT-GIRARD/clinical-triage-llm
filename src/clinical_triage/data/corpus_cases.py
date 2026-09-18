@@ -1,27 +1,26 @@
-"""Extraction des cas de triage réellement exploitables dans les corpus publics.
+"""Extracting the triage cases that the public corpora can actually supply.
 
-Les corpus médicaux publics ne sont pas des jeux de triage. Les prendre tels
-quels — envelopper « Levamisole is used as all except - » dans « Un patient se
-présente avec : » puis l'étiqueter parce que le mot « infection » apparaît —
-produit des cibles d'entraînement absurdes. Ce module fait le tri.
+Public medical corpora are not triage sets. Taking them as they are — wrapping "Levamisole is
+used as all except -" inside "A patient presents with:" then labelling it because the word
+"infection" appears — produces absurd training targets. This module does the sorting.
 
-Deux transformations seulement, l'une et l'autre vérifiables à la lecture :
+Two transformations only, both verifiable by reading:
 
-1. **Vignettes cliniques d'examen** (MedMCQA, FrenchMedMCQA). Une partie des
-   questions commence par une véritable présentation de patient : « A 60-year-old
-   chronic smoker presents with painless gross hematuria of 1 day duration. » On
-   garde cette présentation et on retire la question d'examen qui la suit.
-2. **Descriptions de symptômes** (MedQuAD). Les entrées de type `symptoms`
-   décrivent les signes d'une pathologie ; on en fait la plainte d'un patient.
+1. **exam clinical vignettes** (MedMCQA, FrenchMedMCQA). Some questions open on a genuine
+   patient presentation: "A 60-year-old chronic smoker presents with painless gross hematuria of
+   1 day duration." That presentation is kept and the exam question that follows it is removed.
+2. **symptom descriptions** (MedQuAD). Entries of type ``symptoms`` describe the signs of a
+   condition; they become a patient's complaint.
 
-L'étiquette vient ensuite de la règle de triage, avec un **niveau de confiance
-`moyenne`** qui la distingue des vignettes du catalogue. Une règle de sécurité
-encadre cette étiquette : **on ne conserve un cas que si la règle identifie
-explicitement un signe**. L'absence de signe détecté ne prouve pas l'absence de
-gravité — « suspected pneumoperitoneum » ne contient aucun mot-clé d'alerte et
-reste une urgence chirurgicale. Fabriquer une étiquette « consultation
-différée » à partir d'un silence de la règle serait dangereux ; les cas non
-urgents viennent donc du catalogue, où ils sont décrits et validés un par un.
+The label then comes from the triage rule, with a **``medium`` confidence level** that
+distinguishes it from the catalogue vignettes. One safety rule frames that label: **a case is
+kept only when the rule explicitly identifies a sign**. The absence of a detected sign does not
+prove the absence of severity — "suspected pneumoperitoneum" contains no alert keyword and
+remains a surgical emergency. Manufacturing a "deferred consultation" label out of the rule's
+silence would be dangerous; the non-urgent cases therefore come from the catalogue, where they
+are described and validated one by one.
+
+The patterns are French and English clinical vocabulary: they are the data being matched.
 """
 
 from __future__ import annotations
@@ -41,18 +40,17 @@ from clinical_triage.data.triage_rules import (
     recommendation_for,
 )
 
-# Une présentation de patient se reconnaît à l'âge, ou à un verbe de présentation.
+# A patient presentation is recognised by an age, or by a presenting verb.
 #
-# Le motif français repère une personne suivie de son âge à moins de quarante
-# caractères, quelle que soit la ponctuation entre les deux. Exiger la tournure
-# « homme **de** 58 ans » écarterait 342 vignettes authentiques de MediQAl, seul
-# corpus imposé qui décrive des patients en français, et qui écrit « Homme,
-# 58 ans, … » ou « M. Dupont, 30 ans. ». Vérifié sur les trois corpus : cette
-# latitude ne gagne aucun faux positif sur MedQuAD ni MedMCQA.
+# The French pattern spots a person followed by their age within forty characters, whatever the
+# punctuation between the two. Requiring the form "homme **de** 58 ans" would discard 342
+# authentic MediQAl vignettes — the only source corpus describing patients in French, and one
+# that writes "Homme, 58 ans, …" or "M. Dupont, 30 ans.". Checked on all three corpora: this
+# latitude gains no false positive on MedQuAD or MedMCQA.
 #
-# L'abréviation « M. » porte son propre point : elle ne peut pas être suivie
-# d'une frontière de mot, d'où son alternative séparée.
-PERSONNE = (
+# The abbreviation "M." carries its own full stop: it cannot be followed by a word boundary,
+# hence its separate alternative.
+PERSON = (
     r"(?:\b(?:monsieur|madame|mademoiselle|mme|mlle|melle|mr"
     r"|homme|femme|patiente?|enfant|nourrisson|gar[cç]on|fille|b[eé]b[eé]"
     r"|adolescente?|jeune|nouveau-n[eé])\b|\bm\.)"
@@ -61,26 +59,24 @@ VIGNETTE_MARKERS = re.compile(
     r"\b\d{1,2}[- ]?(?:year|yr)[- ]?old\b"
     r"|\bpresents? with\b"
     r"|\bbrought to the emergency\b"
-    r"|" + PERSONNE + r"[^.]{0,40}?\b\d{1,2}\s+ans?\b",
+    r"|" + PERSON + r"[^.]{0,40}?\b\d{1,2}\s+ans?\b",
     re.IGNORECASE,
 )
 
-# --- La question d'examen qui suit la vignette, et qu'il faut retirer ---
+# --- The exam question that follows the vignette, and must be removed ---
 #
-# Un seul motif ne suffit pas, parce qu'un même mot joue deux rôles. « Which »
-# ouvre une question posée à l'étudiant, mais sert aussi de pronom relatif au
-# milieu d'un récit : « She had flu like symptoms 20 days ago **which** resolved
-# spontaneously. » S'en remettre aux seuls mots interrogatifs supprimerait cette
-# phrase entière — donc du contenu clinique — et laisserait passer les familles
-# d'énoncés les plus courantes de MedMCQA, qui n'emploient aucun mot
-# interrogatif : « All of the following ... except », « Most appropriate
-# management is ».
+# One pattern is not enough, because the same word plays two roles. "Which" opens a question put
+# to the student, but also serves as a relative pronoun mid-narrative: "She had flu like symptoms
+# 20 days ago **which** resolved spontaneously." Relying on interrogative words alone would
+# delete that whole sentence — clinical content — and would let through the most common families
+# of MedMCQA statements, which use no interrogative word at all: "All of the following ...
+# except", "Most appropriate management is".
 #
-# D'où deux listes et une règle de position.
+# Hence two lists and a rule of position.
 
-# Tournures qui font d'une phrase un énoncé d'examen où qu'elles apparaissent :
-# aucune n'a d'usage narratif.
-ENONCE_D_EXAMEN = re.compile(
+# Turns of phrase that make a sentence an exam statement wherever they appear: none has a
+# narrative use.
+EXAM_STEM = re.compile(
     r"\ball of the following\b"
     r"|\bwhich of the following\b"
     r"|\bnot true\b|\bis not seen\b|\bare seen in\b|\btrue about\b"
@@ -96,35 +92,34 @@ ENONCE_D_EXAMEN = re.compile(
     re.IGNORECASE,
 )
 
-# Mots interrogatifs. Ils ne valent que par leur place : en tête de phrase, ou
-# dans une phrase que sa ponctuation désigne comme une question. Ailleurs, ce
-# sont des relatifs — « la douleur **qui** irradie », « **quel** traitement il
-# prend » — et supprimer leur phrase revient à jeter du contenu clinique.
-MOT_INTERROGATIF = re.compile(
+# Interrogative words. They count only by their position: at the head of a sentence, or in a
+# sentence whose punctuation marks it as a question. Elsewhere they are relatives — "la douleur
+# **qui** irradie", "**quel** traitement il prend" — and deleting their sentence throws away
+# clinical content.
+INTERROGATIVE = re.compile(
     r"\b(?:which|what|how|why|when|whom|whose"
     r"|quel|quelle|quels|quelles|laquelle|lequel|lesquels|lesquelles|combien)\b",
     re.IGNORECASE,
 )
 
 
-def est_une_question_d_examen(phrase: str) -> bool:
-    """Dit si une phrase est la question posée à l'étudiant plutôt que du récit."""
-    texte = phrase.strip()
-    if ENONCE_D_EXAMEN.search(texte):
+def is_an_exam_question(sentence: str) -> bool:
+    """Say whether a sentence is the question put to the student rather than narrative."""
+    text = sentence.strip()
+    if EXAM_STEM.search(text):
         return True
-    motif = MOT_INTERROGATIF.search(texte)
-    if motif is None:
+    match = INTERROGATIVE.search(text)
+    if match is None:
         return False
-    # Une phrase de récit se termine par un point. Une amorce d'examen, non :
-    # « Most appropriate management is », « ... which measure is largest ».
-    if not texte.endswith((".", "!")):
+    # A narrative sentence ends with a full stop. An exam stem does not: "Most appropriate
+    # management is", "... which measure is largest".
+    if not text.endswith((".", "!")):
         return True
-    # Ponctuée en phrase, seule celle qui s'ouvre sur le mot interrogatif est
-    # une question.
-    return motif.start() == 0
+    # Punctuated as a sentence, only one opening on the interrogative word is a question.
+    return match.start() == 0
 
 
-# Passe-partout documentaire de MedQuAD, sans contenu clinique.
+# MedQuAD documentation boilerplate, with no clinical content.
 MEDQUAD_BOILERPLATE = (
     "human phenotype ontology",
     "medlineplus medical dictionary",
@@ -133,24 +128,23 @@ MEDQUAD_BOILERPLATE = (
     "visiting the following link",
 )
 
-# Longueurs acceptables pour une description de patient.
+# Acceptable lengths for a patient description.
 #
-# La borne haute n'est pas un chiffre rond. C'est la plus grande valeur pour
-# laquelle **aucun** cas retenu ne dépasse le budget de description du service :
-# 324 jetons, soit la fenêtre de 768 moins la consigne système et la place
-# réservée à la réponse. À la densité mesurée sur les corpus, 800 caractères y
-# tiennent dans 100 % des cas, 900 dans 99,3 %, 1 200 dans 92,6 %. S'entraîner
-# au-delà apprendrait le modèle sur des récits que le service tronquerait.
-# Descendre la borne à 600 écarterait 635 vignettes MediQAl authentiques sans
-# que rien ne l'impose. `tests/test_corpus_cases.py` refait ce calcul et échoue
-# si la fenêtre du modèle ou le budget de génération changent.
+# The upper bound is not a round number. It is the largest value for which **no** kept case
+# exceeds the service's description budget: 324 tokens, that is the 768 window minus the system
+# prompt and the room reserved for the answer. At the density measured on the corpora, 800
+# characters fit in 100% of cases, 900 in 99.3%, 1,200 in 92.6%. Training beyond that would
+# teach the model on narratives the service would truncate. Lowering the bound to 600 would
+# discard 635 authentic MediQAl vignettes with nothing requiring it.
+# ``tests/unit/data/test_corpus_cases.py`` redoes this computation and fails if the model window
+# or the generation budget changes.
 MIN_LENGTH = 60
 MAX_LENGTH = 800
 
 
 @dataclass(frozen=True)
 class CorpusCase:
-    """Cas de triage dérivé d'un corpus public, avec son étiquette faible."""
+    """A triage case derived from a public corpus, with its weak label."""
 
     description: str
     user_turn: str
@@ -158,94 +152,93 @@ class CorpusCase:
     lang: str
     source: str
     topic: str
-    symptomes: tuple[str, ...]
+    symptoms: tuple[str, ...]
     justification: str
-    recommandation: str
-    confiance: str
+    recommendation: str
+    confidence: str
 
 
 def _sentences(text: str) -> list[str]:
-    """Découpe un texte en phrases, sur la ponctuation forte."""
-    return [phrase.strip() for phrase in re.split(r"(?<=[.!?])\s+", text) if phrase.strip()]
+    """Split a text into sentences, on strong punctuation."""
+    return [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", text) if sentence.strip()]
 
 
-def _recit_de_vignette(question: str) -> str | None:
-    """Le récit du patient, la question d'examen retirée, sans contrôle de longueur.
+def _vignette_narrative(question: str) -> str | None:
+    """The patient narrative, exam question removed, with no length check.
 
-    Séparée de `extract_vignette` pour que `entonnoir` puisse distinguer ce qui
-    n'est pas une présentation de patient de ce qui en est une mais sort des
-    bornes de longueur. Les deux pertes n'ont pas la même signification.
+    Separated from :func:`extract_vignette` so that :func:`funnel` can tell what is not a patient
+    presentation from what is one but falls outside the length bounds. The two losses do not mean
+    the same thing.
     """
     if not VIGNETTE_MARKERS.search(question):
         return None
-    recit = [p for p in _sentences(question) if not est_une_question_d_examen(p)]
-    texte = " ".join(recit).strip(" -–:;,")
-    if not texte or not VIGNETTE_MARKERS.search(texte):
+    narrative = [s for s in _sentences(question) if not is_an_exam_question(s)]
+    text = " ".join(narrative).strip(" -–:;,")
+    if not text or not VIGNETTE_MARKERS.search(text):
         return None
-    # La ponctuation forte existante suffit : ajouter un point derrière un
-    # point d'interrogation produirait « ?. » en fin de description.
-    return texte if texte.endswith((".", "!", "?")) else texte + "."
+    # The existing strong punctuation is enough: adding a full stop behind a question mark would
+    # produce "?." at the end of the description.
+    return text if text.endswith((".", "!", "?")) else text + "."
 
 
 def extract_vignette(question: str) -> str | None:
-    """Isole la présentation du patient dans une question d'examen clinique.
+    """Isolate the patient presentation inside a clinical exam question.
 
-    On retire les phrases qui sont la question posée à l'étudiant et on ne garde
-    que le récit. Si ce qu'il reste ne ressemble plus à une présentation de
-    patient, ou s'il sort des bornes de longueur, on renonce.
+    The sentences that are the question put to the student are removed and only the narrative is
+    kept. If what is left no longer looks like a patient presentation, or falls outside the
+    length bounds, the entry is dropped.
     """
-    texte = _recit_de_vignette(question)
-    if texte is None or not MIN_LENGTH <= len(texte) <= MAX_LENGTH:
+    text = _vignette_narrative(question)
+    if text is None or not MIN_LENGTH <= len(text) <= MAX_LENGTH:
         return None
-    return texte
+    return text
 
 
 def extract_symptom_description(entry: CorpusEntry) -> str | None:
-    """Transforme une fiche de symptômes MedQuAD en plainte de patient."""
+    """Turn a MedQuAD symptom sheet into a patient's complaint."""
     if entry.topic != "symptoms":
         return None
-    reponse = entry.answer
-    minuscule = reponse.lower()
-    if any(passe_partout in minuscule for passe_partout in MEDQUAD_BOILERPLATE):
+    answer = entry.answer
+    lowered = answer.lower()
+    if any(boilerplate in lowered for boilerplate in MEDQUAD_BOILERPLATE):
         return None
-    # La réponse rappelle souvent la question avant de répondre : on la retire.
-    phrases = [p for p in _sentences(reponse) if not p.lower().startswith("what are")]
-    # On empile des phrases entières tant qu'elles tiennent dans la borne : une
-    # cible d'entraînement doit être une phrase entière, alors que couper la
-    # chaîne à `[:MAX_LENGTH]` trancherait en plein mot, sur « Symptoms in
-    # Toddle » ou « a transient is ».
+    # The answer often repeats the question before answering: that is removed.
+    sentences = [s for s in _sentences(answer) if not s.lower().startswith("what are")]
+    # Whole sentences are stacked as long as they fit inside the bound: a training target must be
+    # a complete sentence, whereas cutting the string at `[:MAX_LENGTH]` would slice mid-word, on
+    # "Symptoms in Toddle" or "a transient is".
     #
-    # Le préambule compte dans la borne : c'est lui qui est livré au modèle, et
-    # le laisser hors du calcul livrerait des descriptions plus longues que
-    # MAX_LENGTH, si bien que la borne publiée ne décrirait pas le jeu.
-    pathologie = entry.text.replace("What are the symptoms of", "").strip(" ?")
-    preambule = f"Patient reporting the following complaints, possibly related to {pathologie}: "
-    budget = MAX_LENGTH - len(preambule)
+    # The preamble counts towards the bound: it is what is delivered to the model, and leaving it
+    # out of the computation would deliver descriptions longer than MAX_LENGTH, so that the
+    # published bound would not describe the set.
+    condition = entry.text.replace("What are the symptoms of", "").strip(" ?")
+    preamble = f"Patient reporting the following complaints, possibly related to {condition}: "
+    budget = MAX_LENGTH - len(preamble)
     if budget < MIN_LENGTH:
         return None
 
-    texte = ""
-    for phrase in phrases:
-        candidat = f"{texte} {phrase}" if texte else phrase
-        if len(candidat) > budget:
+    text = ""
+    for sentence in sentences:
+        candidate = f"{text} {sentence}" if text else sentence
+        if len(candidate) > budget:
             break
-        texte = candidat
-    texte = texte.strip()
-    if len(texte) < MIN_LENGTH:
+        text = candidate
+    text = text.strip()
+    if len(text) < MIN_LENGTH:
         return None
-    return preambule + texte
+    return preamble + text
 
 
-def _justification(level: str, signes: tuple[str, ...]) -> str:
-    """Rédige une justification adossée aux signes effectivement repérés."""
-    liste = ", ".join(signes)
+def _justification(level: str, signs: tuple[str, ...]) -> str:
+    """Write a justification anchored in the signs actually spotted."""
+    listed = ", ".join(signs)
     if level == VITAL:
         return (
-            f"Signe(s) de détresse vitale identifié(s) dans la description : {liste}. "
+            f"Signe(s) de détresse vitale identifié(s) dans la description : {listed}. "
             "Toute suspicion de détresse vitale impose une prise en charge immédiate."
         )
     return (
-        f"Signe(s) d'alerte identifié(s) dans la description : {liste}. "
+        f"Signe(s) d'alerte identifié(s) dans la description : {listed}. "
         "Une évaluation médicale rapprochée est justifiée, sans critère de détresse vitale immédiat."
     )
 
@@ -253,15 +246,15 @@ def _justification(level: str, signes: tuple[str, ...]) -> str:
 def build_corpus_case(
     description: str, entry: CorpusEntry, rng: random.Random
 ) -> CorpusCase | None:
-    """Étiquette une description par la règle, et ne la garde que si un signe est trouvé."""
+    """Label a description with the rule, and keep it only when a sign is found."""
 
     level = classify(description)
     if level == DEFERRED:
-        # Aucun signe repéré : on ne fabrique pas une étiquette « non urgent »
-        # à partir du silence de la règle. Le cas est écarté.
+        # No sign spotted: a "non-urgent" label is not manufactured out of the rule's silence.
+        # The case is dropped.
         return None
-    signes = tuple(matched_flags(description, VITAL if level == VITAL else MODERATE))
-    if not signes:
+    signs = tuple(matched_flags(description, VITAL if level == VITAL else MODERATE))
+    if not signs:
         return None
     return CorpusCase(
         description=description,
@@ -270,77 +263,72 @@ def build_corpus_case(
         lang=entry.lang,
         source=entry.source,
         topic=entry.topic,
-        symptomes=signes,
-        justification=_justification(level, signes),
-        recommandation=recommendation_for(level),
-        confiance="moyenne",
+        symptoms=signs,
+        justification=_justification(level, signs),
+        recommendation=recommendation_for(level),
+        confidence="medium",
     )
 
 
 def extract_cases(entries: list[CorpusEntry], rng: random.Random) -> list[CorpusCase]:
-    """Parcourt les entrées d'un corpus et renvoie les cas de triage exploitables."""
+    """Walk the entries of a corpus and return the usable triage cases."""
     cases: list[CorpusCase] = []
-    descriptions_vues: set[str] = set()
+    seen_descriptions: set[str] = set()
     for entry in entries:
         description = extract_vignette(entry.text) or extract_symptom_description(entry)
-        if description is None or description in descriptions_vues:
+        if description is None or description in seen_descriptions:
             continue
         case = build_corpus_case(description, entry, rng)
         if case is None:
             continue
-        descriptions_vues.add(description)
+        seen_descriptions.add(description)
         cases.append(case)
     return cases
 
 
-def entonnoir(entries: list[CorpusEntry]) -> dict[str, int]:
-    """Compte les entrées perdues à chaque étape de l'extraction.
+def funnel(entries: list[CorpusEntry]) -> dict[str, int]:
+    """Count the entries lost at each stage of the extraction.
 
-    Le rendement global d'un corpus — tant d'entrées lues, tant de cas retenus —
-    ne dit pas *où* les entrées sont perdues, et donc ne dit pas si ce qui les
-    écarte tient au corpus ou au filtre. Cette ventilation le dit, et c'est elle
-    que publie la carte du dataset.
+    A corpus's overall yield — so many entries read, so many cases kept — does not say *where*
+    the entries are lost, and therefore does not say whether what discards them belongs to the
+    corpus or to the filter. This breakdown does, and it is what the dataset card publishes.
 
-    Deux étapes n'ont pas le même statut. « Pas une présentation de patient » et
-    « trop long ou trop court » sont des décisions de **forme**, révisables. « La
-    règle n'identifie aucun signe » est une décision de **sécurité** : on refuse
-    d'étiqueter « non urgent » à partir du silence d'une règle à mots-clés, et
-    cette part-là ne se récupère pas en élargissant un motif.
+    Two stages do not have the same status. "Not a patient presentation" and "too long or too
+    short" are decisions of **form**, revisable. "The rule identifies no sign" is a decision of
+    **safety**: labelling "non-urgent" from the silence of a keyword rule is refused, and that
+    share is not recovered by widening a pattern.
     """
-    compte = {
-        "entrees": len(entries),
-        "sans_presentation_de_patient": 0,
-        "hors_bornes_de_longueur": 0,
-        "sans_signe_identifie": 0,
-        "doublons": 0,
-        "retenus": 0,
+    count = {
+        "entries": len(entries),
+        "no_patient_presentation": 0,
+        "outside_length_bounds": 0,
+        "no_identified_sign": 0,
+        "duplicates": 0,
+        "kept": 0,
     }
-    vues: set[str] = set()
+    seen: set[str] = set()
     rng = random.Random(0)
     for entry in entries:
-        # `extract_cases` écrit `extract_vignette(...) or extract_symptom_description(...)` :
-        # une vignette hors bornes ne condamne pas l'entrée, la fiche de symptômes
-        # peut encore la rattraper. L'entonnoir doit suivre le même chemin, sans
-        # quoi il impute à « hors bornes » des entrées que l'extraction retient.
-        recit = _recit_de_vignette(entry.text)
-        hors_bornes = recit is not None and not MIN_LENGTH <= len(recit) <= MAX_LENGTH
-        description = None if hors_bornes else recit
+        # `extract_cases` writes `extract_vignette(...) or extract_symptom_description(...)`: an
+        # out-of-bounds vignette does not condemn the entry, the symptom sheet can still rescue
+        # it. The funnel must follow the same path, failing which it would charge to "out of
+        # bounds" entries that the extraction keeps.
+        narrative = _vignette_narrative(entry.text)
+        out_of_bounds = narrative is not None and not MIN_LENGTH <= len(narrative) <= MAX_LENGTH
+        description = None if out_of_bounds else narrative
         if description is None:
             description = extract_symptom_description(entry)
         if description is None:
-            compte[
-                "hors_bornes_de_longueur" if hors_bornes else "sans_presentation_de_patient"
-            ] += 1
+            count["outside_length_bounds" if out_of_bounds else "no_patient_presentation"] += 1
             continue
-        if description in vues:
-            compte["doublons"] += 1
+        if description in seen:
+            count["duplicates"] += 1
             continue
-        # `extract_cases` n'enregistre une description qu'une fois le cas
-        # conservé : une description rejetée par la règle et rencontrée deux
-        # fois compte deux fois comme « sans signe », jamais comme doublon.
+        # `extract_cases` records a description only once the case is kept: a description
+        # rejected by the rule and met twice counts twice as "no sign", never as a duplicate.
         if build_corpus_case(description, entry, rng) is None:
-            compte["sans_signe_identifie"] += 1
+            count["no_identified_sign"] += 1
             continue
-        vues.add(description)
-        compte["retenus"] += 1
-    return compte
+        seen.add(description)
+        count["kept"] += 1
+    return count

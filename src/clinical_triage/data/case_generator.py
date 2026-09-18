@@ -1,14 +1,15 @@
-"""Génération de vignettes cliniques à partir du catalogue de présentations.
+"""Generating clinical vignettes from the presentation catalogue.
 
-Une vignette, c'est une présentation type du catalogue habillée d'un patient :
-un âge, un sexe, des antécédents, un délai d'installation, un relevé de
-constantes et une formulation. Le niveau de triage vient de la présentation
-d'origine — jamais d'une relecture du texte produit. C'est ce qui rend
-l'évaluation honnête : le modèle ne peut pas se contenter de réapprendre une
-règle lexicale, puisque aucune règle lexicale n'a servi à étiqueter.
+A vignette is a typical presentation from the catalogue dressed as a patient: an age, a sex, a
+medical history, an onset delay, a set of vital signs and a wording. The triage level comes
+from the source presentation — never from re-reading the produced text. That is what makes the
+evaluation honest: the model cannot settle for relearning a lexical rule, since no lexical rule
+was used to label.
 
-Chaque vignette porte les métadonnées demandées par le brief : symptômes,
-antécédents, constantes, source et niveau de confiance.
+Every vignette carries its metadata: symptoms, history, vital signs, source and confidence
+level.
+
+The wordings are French and English clinical text: they are the data being generated.
 """
 
 from __future__ import annotations
@@ -18,20 +19,20 @@ from dataclasses import dataclass
 
 from clinical_triage.data.clinical_catalogue import (
     Presentation,
-    constantes_imposees,
+    altered_consciousness_likely,
+    forced_vitals,
     presentations_by_level,
-    vigilance_alteree_probable,
 )
 from clinical_triage.data.vital_signs import VitalSigns
 from clinical_triage.data.vital_signs import generate as generate_vitals
 
-# Présentations propres à la femme : le tirage du sexe doit en tenir compte.
-PRESENTATIONS_FEMININES = frozenset(
+# Presentations specific to women: the sex draw must take them into account.
+FEMALE_ONLY_PRESENTATIONS = frozenset(
     {"pre_eclampsie_severe", "hemorragie_du_post_partum", "cystite_simple"}
 )
 
-# Formulations du délai d'installation, par échelle de temps.
-DELAIS = {
+# Wordings of the onset delay, by time scale.
+ONSET_PHRASINGS = {
     "minutes": {
         "fr": (
             "depuis dix minutes",
@@ -65,21 +66,21 @@ DELAIS = {
     },
 }
 
-# Gabarits de description du patient. Les champs sont remplis plus bas.
+# Templates for the patient description. The fields are filled in below.
 DESCRIPTION_TEMPLATES = {
     "fr": (
-        "{demographie}, {motif} {delai}, avec {signes}.{antecedents}{constantes}",
-        "Motif d'admission : {motif} {delai}. Patient : {demographie}. Signes associés : {signes}.{antecedents}{constantes}",
-        "{demographie} se présente pour {motif} {delai}. On note {signes}.{antecedents}{constantes}",
+        "{who}, {complaint} {onset}, avec {signs}.{history}{vitals}",
+        "Motif d'admission : {complaint} {onset}. Patient : {who}. Signes associés : {signs}.{history}{vitals}",
+        "{who} se présente pour {complaint} {onset}. On note {signs}.{history}{vitals}",
     ),
     "en": (
-        "{demographie}, {motif} {delai}, with {signes}.{antecedents}{constantes}",
-        "Presenting complaint: {motif} {delai}. Patient: {demographie}. Associated findings: {signes}.{antecedents}{constantes}",
-        "{demographie} presents with {motif} {delai}. Examination shows {signes}.{antecedents}{constantes}",
+        "{who}, {complaint} {onset}, with {signs}.{history}{vitals}",
+        "Presenting complaint: {complaint} {onset}. Patient: {who}. Associated findings: {signs}.{history}{vitals}",
+        "{who} presents with {complaint} {onset}. Examination shows {signs}.{history}{vitals}",
     ),
 }
 
-# Consignes encadrant la description dans le tour utilisateur.
+# Framing around the description in the user turn.
 USER_TEMPLATES = {
     "fr": (
         "Situation clinique à l'accueil des urgences.\n{description}\nQuel est le niveau de priorité de triage ?",
@@ -96,35 +97,35 @@ USER_TEMPLATES = {
 
 @dataclass(frozen=True)
 class ClinicalCase:
-    """Vignette clinique complète, prête à devenir une paire d'entraînement."""
+    """A complete clinical vignette, ready to become a training pair."""
 
     presentation_id: str
     level: str
     lang: str
     age: int
     sex: str
-    symptomes: tuple[str, ...]
-    antecedents: tuple[str, ...]
-    constantes: VitalSigns | None
-    delai: str
+    symptoms: tuple[str, ...]
+    medical_history: tuple[str, ...]
+    vitals: VitalSigns | None
+    onset: str
     description: str
     user_turn: str
     justification: str
-    recommandation: str
-    confiance: str
+    recommendation: str
+    confidence: str
     source: str
 
 
-def _demographie(age: int, sex: str, lang: str) -> str:
-    """Décrit le patient en une formule courte adaptée à son âge.
+def _who(age: int, sex: str, lang: str) -> str:
+    """Describe the patient in a short phrase suited to their age.
 
-    Les âges du catalogue sont en années entières : un âge de 0 ou 1 an décrit un
-    nourrisson, que l'on présente en mois comme le fait un dossier de pédiatrie.
+    Catalogue ages are whole years: an age of 0 or 1 describes an infant, presented in months as
+    a paediatric record would.
     """
-    nourrisson_en_mois = {0: 6, 1: 18}
-    if age in nourrisson_en_mois:
-        mois = nourrisson_en_mois[age]
-        return f"Nourrisson de {mois} mois" if lang == "fr" else f"{mois}-month-old infant"
+    infant_in_months = {0: 6, 1: 18}
+    if age in infant_in_months:
+        months = infant_in_months[age]
+        return f"Nourrisson de {months} mois" if lang == "fr" else f"{months}-month-old infant"
     if age < 15:
         if lang == "fr":
             return f"{'Garçon' if sex == 'M' else 'Fille'} de {age} ans"
@@ -135,11 +136,11 @@ def _demographie(age: int, sex: str, lang: str) -> str:
 
 
 def _join(items: tuple[str, ...], lang: str) -> str:
-    """Énumère des éléments avec la bonne conjonction de coordination."""
+    """List items with the right coordinating conjunction."""
     if len(items) == 1:
         return items[0]
-    conjonction = " et " if lang == "fr" else " and "
-    return ", ".join(items[:-1]) + conjonction + items[-1]
+    conjunction = " et " if lang == "fr" else " and "
+    return ", ".join(items[:-1]) + conjunction + items[-1]
 
 
 def build_case(
@@ -148,50 +149,48 @@ def build_case(
     rng: random.Random,
     with_vitals: bool = True,
 ) -> ClinicalCase:
-    """Compose une vignette clinique à partir d'une présentation type."""
+    """Compose a clinical vignette from a typical presentation."""
     age = rng.randint(*presentation.age_range)
-    feminine = presentation.id in PRESENTATIONS_FEMININES
+    feminine = presentation.id in FEMALE_ONLY_PRESENTATIONS
     sex = "F" if feminine else rng.choice(("M", "F"))
 
-    signes_pool = presentation.signes_fr if lang == "fr" else presentation.signes_en
-    symptomes = tuple(rng.sample(signes_pool, k=rng.randint(2, min(3, len(signes_pool)))))
+    signs_pool = presentation.signs_fr if lang == "fr" else presentation.signs_en
+    symptoms = tuple(rng.sample(signs_pool, k=rng.randint(2, min(3, len(signs_pool)))))
 
-    antecedents_pool = presentation.antecedents_fr if lang == "fr" else presentation.antecedents_en
-    antecedents = tuple(
-        rng.sample(antecedents_pool, k=rng.randint(1, min(2, len(antecedents_pool))))
-    )
+    history_pool = presentation.history_fr if lang == "fr" else presentation.history_en
+    medical_history = tuple(rng.sample(history_pool, k=rng.randint(1, min(2, len(history_pool)))))
 
-    # Les constantes que le récit nomme sont imposées : sans cela, une vignette
-    # « fièvre avec frissons » sort apyrétique et se contredit elle-même.
-    constantes = (
+    # The vital signs the narrative names are forced: without that, a "fever with chills"
+    # vignette comes out afebrile and contradicts itself.
+    vitals = (
         generate_vitals(
             presentation.vitals_profile,
             age,
             rng,
-            constantes_imposees(presentation.id),
-            vigilance_alteree_probable(presentation.id),
+            forced_vitals(presentation.id),
+            altered_consciousness_likely(presentation.id),
         )
         if with_vitals
         else None
     )
 
-    motif = presentation.motif_fr if lang == "fr" else presentation.motif_en
-    delai = rng.choice(DELAIS[presentation.delai][lang])
+    complaint = presentation.complaint_fr if lang == "fr" else presentation.complaint_en
+    onset = rng.choice(ONSET_PHRASINGS[presentation.onset][lang])
 
     if lang == "fr":
-        bloc_antecedents = f" Antécédents : {_join(antecedents, lang)}."
-        bloc_constantes = f" Constantes : {constantes.render(lang)}." if constantes else ""
+        history_block = f" Antécédents : {_join(medical_history, lang)}."
+        vitals_block = f" Constantes : {vitals.render(lang)}." if vitals else ""
     else:
-        bloc_antecedents = f" Past history: {_join(antecedents, lang)}."
-        bloc_constantes = f" Observations: {constantes.render(lang)}." if constantes else ""
+        history_block = f" Past history: {_join(medical_history, lang)}."
+        vitals_block = f" Observations: {vitals.render(lang)}." if vitals else ""
 
     description = rng.choice(DESCRIPTION_TEMPLATES[lang]).format(
-        demographie=_demographie(age, sex, lang),
-        motif=motif,
-        delai=delai,
-        signes=_join(symptomes, lang),
-        antecedents=bloc_antecedents,
-        constantes=bloc_constantes,
+        who=_who(age, sex, lang),
+        complaint=complaint,
+        onset=onset,
+        signs=_join(symptoms, lang),
+        history=history_block,
+        vitals=vitals_block,
     )
     user_turn = rng.choice(USER_TEMPLATES[lang]).format(description=description)
 
@@ -201,16 +200,16 @@ def build_case(
         lang=lang,
         age=age,
         sex=sex,
-        symptomes=symptomes,
-        antecedents=antecedents,
-        constantes=constantes,
-        delai=presentation.delai,
+        symptoms=symptoms,
+        medical_history=medical_history,
+        vitals=vitals,
+        onset=presentation.onset,
         description=description,
         user_turn=user_turn,
         justification=presentation.justification,
-        recommandation=presentation.recommandation,
-        confiance="haute",
-        source="vignette_clinique",
+        recommendation=presentation.recommendation,
+        confidence="high",
+        source="clinical_vignette",
     )
 
 
@@ -222,37 +221,36 @@ def generate_cases(
     vitals_share: float = 0.75,
     exclude: set[str] | None = None,
 ) -> list[ClinicalCase]:
-    """Produit `total` vignettes d'un niveau de triage et d'une langue donnés.
+    """Produce ``total`` vignettes of a given triage level and language.
 
-    Le script de préparation appelle cette fonction case par case de la grille
-    (trois niveaux × deux langues) après avoir compté ce que les corpus ont
-    fourni. C'est ce qui permet d'équilibrer le dataset à une unité près — les
-    volumes cibles ne se divisent pas toujours par trois —, alors
-    que les cas extraits des corpus sont, eux, presque tous urgents.
+    The preparation script calls this function cell by cell of the grid (three levels × two
+    languages) after counting what the corpora supplied. That is what allows the dataset to be
+    balanced to the unit — target volumes do not always divide by three — whereas the cases
+    extracted from the corpora are almost all urgent.
 
-    Une part des vignettes est produite sans constantes vitales : à l'accueil, le
-    relevé n'est pas toujours disponible au moment du tri, et le modèle doit
-    savoir décider sur la seule description clinique.
+    A share of the vignettes is produced without vital signs: at reception the readings are not
+    always available at sorting time, and the model must be able to decide on the clinical
+    description alone.
 
-    `exclude` contient des tours utilisateur déjà produits ailleurs — en premier
-    lieu ceux du jeu d'évaluation clinique, qui ne doivent réapparaître nulle part.
+    ``exclude`` holds user turns already produced elsewhere — first of all those of the clinical
+    evaluation set, which must reappear nowhere.
     """
     presentations = presentations_by_level(level)
     if not presentations:
-        raise ValueError(f"Aucune présentation au catalogue pour le niveau {level!r}")
+        raise ValueError(f"No presentation in the catalogue for level {level!r}")
 
     cases: list[ClinicalCase] = []
-    textes_vus: set[str] = set(exclude or ())
-    tentatives = 0
-    limite_tentatives = max(total * 40, 200)
+    seen_texts: set[str] = set(exclude or ())
+    attempts = 0
+    attempt_limit = max(total * 40, 200)
 
-    while len(cases) < total and tentatives < limite_tentatives:
-        tentatives += 1
+    while len(cases) < total and attempts < attempt_limit:
+        attempts += 1
         presentation = rng.choice(presentations)
         case = build_case(presentation, lang, rng, with_vitals=rng.random() < vitals_share)
-        if case.user_turn in textes_vus:
+        if case.user_turn in seen_texts:
             continue
-        textes_vus.add(case.user_turn)
+        seen_texts.add(case.user_turn)
         cases.append(case)
 
     return cases

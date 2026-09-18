@@ -1,0 +1,65 @@
+{
+  "protocol": {
+    "steps": 75,
+    "validation_cases": 60,
+    "seed": 42
+  },
+  "configurations": [
+    {
+      "configuration": "projections seules",
+      "modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj"
+      ],
+      "trainable_parameters": 17432576,
+      "accuracy": 0.85,
+      "clean_stops": 0.0,
+      "median_tokens": 220,
+      "duration_s": 519.4,
+      "peak_gpu_memory_gb": 4.52
+    },
+    {
+      "configuration": "projections + embeddings",
+      "modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj",
+        "embed_tokens"
+      ],
+      "trainable_parameters": 328597504,
+      "accuracy": 0.85,
+      "clean_stops": 0.0,
+      "median_tokens": 220,
+      "duration_s": 348.2,
+      "peak_gpu_memory_gb": 9.26
+    },
+    {
+      "configuration": "projections + tête de sortie",
+      "modules": [
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "gate_proj",
+        "up_proj",
+        "down_proj",
+        "lm_head"
+      ],
+      "trainable_parameters": 328597504,
+      "accuracy": 0.9,
+      "clean_stops": 1.0,
+      "median_tokens": 97,
+      "duration_s": 362.5,
+      "peak_gpu_memory_gb": 9.03
+    }
+  ]
+}

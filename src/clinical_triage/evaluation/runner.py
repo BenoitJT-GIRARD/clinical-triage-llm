@@ -1,14 +1,13 @@
-"""Exécution de l'évaluation : génération sur le jeu clinique puis métriques.
+"""Running an evaluation: generation over the clinical set, then the metrics.
 
-Le jeu d'évaluation est celui, écrit à la main, que `clinical_eval_set` produit.
-Il n'a jamais servi à l'entraînement, et les réponses attendues n'ont pas été
-fabriquées par la règle à laquelle on compare le modèle.
+The evaluation set is the hand-written one that ``clinical_eval_set`` produces. It never served
+for training, and its expected answers were not manufactured by the rule the model is compared
+against.
 
-La génération se fait par lots, pour que passer soixante cas prenne des minutes
-et non des heures. La latence rapportée à ce titre est donc une latence par cas
-en traitement par lots : elle sert à comparer les modèles entre eux, pas à
-décrire ce que ressent un utilisateur. La latence perçue est mesurée séparément,
-requête par requête, par le banc de performance de `latency.py`.
+Generation runs in batches, so that passing sixty cases takes minutes rather than hours. The
+latency reported on that basis is therefore a per-case latency under batching: it serves to
+compare models with each other, not to describe what a user feels. Perceived latency is
+measured separately, request by request, by the bench in ``latency.py``.
 """
 
 from __future__ import annotations
@@ -24,84 +23,86 @@ logger = get_logger("evaluation")
 
 @dataclass
 class EvaluationOutcome:
-    """Résultat d'une évaluation : prédictions, métriques et contrôles de sécurité."""
+    """The result of one evaluation: predictions, metrics and safety checks."""
 
     predictions: list[str | None]
-    reponses: list[str]
-    metriques: dict
-    securite: dict
-    par_langue: dict
-    par_piege: dict
+    answers: list[str]
+    metrics: dict
+    safety: dict
+    per_language: dict
+    per_case_type: dict
 
 
-def evaluate_predictions(cas: list[dict], predictions: list[str | None]) -> dict:
-    """Calcule les métriques d'une liste de prédictions, sans génération.
+def evaluate_predictions(cases: list[dict], predictions: list[str | None]) -> dict:
+    """Compute the metrics of a list of predictions, with no generation.
 
-    C'est le chemin utilisé pour les références : elles produisent un niveau sans
-    produire de texte, donc sans latence ni contrôle de sécurité.
+    This is the path used by the baselines: they produce a level without producing text, so
+    without latency and without safety checks.
     """
-    attendus = [c["level"] for c in cas]
-    resume = summarize(attendus, predictions)
-    resume["par_langue"] = subgroup_accuracy(attendus, predictions, [c["lang"] for c in cas])
-    resume["par_piege"] = subgroup_accuracy(attendus, predictions, [c["piege"] for c in cas])
-    return resume
+    expected = [c["level"] for c in cases]
+    summary = summarize(expected, predictions)
+    summary["per_language"] = subgroup_accuracy(expected, predictions, [c["lang"] for c in cases])
+    summary["per_case_type"] = subgroup_accuracy(
+        expected, predictions, [c["case_type"] for c in cases]
+    )
+    return summary
 
 
-def evaluate_agent(agent, cas: list[dict], taille_lot: int = 8) -> EvaluationOutcome:
-    """Fait générer l'agent sur tous les cas, puis calcule métriques et sécurité."""
-    descriptions = [c["description"] for c in cas]
-    tours = [c["user_turn"] for c in cas]
-    attendus = [c["level"] for c in cas]
+def evaluate_agent(agent, cases: list[dict], batch_size: int = 8) -> EvaluationOutcome:
+    """Have the agent generate on every case, then compute metrics and safety."""
+    descriptions = [c["description"] for c in cases]
+    turns = [c["user_turn"] for c in cases]
+    expected = [c["level"] for c in cases]
 
-    reponses = []
-    for debut in range(0, len(tours), taille_lot):
-        lot = tours[debut : debut + taille_lot]
-        reponses.extend(agent.generate_batch(lot))
-        logger.info("  %d/%d cas évalués", min(debut + taille_lot, len(tours)), len(tours))
+    answers = []
+    for start in range(0, len(turns), batch_size):
+        batch = turns[start : start + batch_size]
+        answers.extend(agent.generate_batch(batch))
+        logger.info("  %d/%d cases evaluated", min(start + batch_size, len(turns)), len(turns))
 
-    predictions = [r.level for r in reponses]
-    textes = [r.text for r in reponses]
-    metriques = summarize(
-        attendus,
+    predictions = [r.level for r in answers]
+    texts = [r.text for r in answers]
+    metrics = summarize(
+        expected,
         predictions,
-        latences_ms=[r.latency_ms for r in reponses],
-        arrets_propres=[r.arret_propre for r in reponses],
+        latencies_ms=[r.latency_ms for r in answers],
+        clean_stops=[r.clean_stop for r in answers],
     )
-    metriques["tokens_generes_moyen"] = round(
-        sum(r.tokens_generes for r in reponses) / max(1, len(reponses)), 1
+    metrics["mean_generated_tokens"] = round(
+        sum(r.generated_tokens for r in answers) / max(1, len(answers)), 1
     )
 
-    rapports = [
-        safety.check(description, texte, prediction)
-        for description, texte, prediction in zip(descriptions, textes, predictions, strict=True)
+    reports = [
+        safety.check(description, text, prediction)
+        for description, text, prediction in zip(descriptions, texts, predictions, strict=True)
     ]
 
     return EvaluationOutcome(
         predictions=predictions,
-        reponses=textes,
-        metriques=metriques,
-        securite=safety.summarize(rapports),
-        par_langue=subgroup_accuracy(attendus, predictions, [c["lang"] for c in cas]),
-        par_piege=subgroup_accuracy(attendus, predictions, [c["piege"] for c in cas]),
+        answers=texts,
+        metrics=metrics,
+        safety=safety.summarize(reports),
+        per_language=subgroup_accuracy(expected, predictions, [c["lang"] for c in cases]),
+        per_case_type=subgroup_accuracy(expected, predictions, [c["case_type"] for c in cases]),
     )
 
 
-def error_table(cas: list[dict], predictions: list[str | None], reponses: list[str]) -> list[dict]:
-    """Détaille les cas mal classés, pour l'analyse d'erreurs du rapport."""
-    erreurs = []
-    for c, prediction, reponse in zip(cas, predictions, reponses, strict=True):
-        if prediction == c["level"]:
+def error_table(cases: list[dict], predictions: list[str | None], answers: list[str]) -> list[dict]:
+    """Detail the misclassified cases, for the error analysis."""
+    errors = []
+    for case, prediction, answer in zip(cases, predictions, answers, strict=True):
+        if prediction == case["level"]:
             continue
-        erreurs.append(
+        errors.append(
             {
-                "id": c["id"],
-                "langue": c["lang"],
-                "piege": c["piege"],
-                "attendu": c["level"],
-                "predit": prediction,
-                "description": c["description"],
-                "note_clinique": c["note_clinique"],
-                "reponse": reponse,
+                "id": case["id"],
+                "language": case["lang"],
+                "case_type": case["case_type"],
+                "expected": case["level"],
+                "predicted": prediction,
+                "description": case["description"],
+                "clinical_note": case["clinical_note"],
+                "answer": answer,
             }
         )
-    return erreurs
+    return errors

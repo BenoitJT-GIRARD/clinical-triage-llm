@@ -1,7 +1,7 @@
-"""Figures produites à partir des fichiers de résultats.
+"""Producing the published figures.
 
-Aucun chiffre n'est recopié à la main, donc aucun chiffre ne peut se désynchroniser
-du code.
+Every figure is drawn from the versioned result artefacts, never from typed-in values: re-run
+the evaluation and every figure follows.
 """
 
 from __future__ import annotations

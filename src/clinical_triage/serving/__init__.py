@@ -1,9 +1,9 @@
-"""Service d'inférence : API de triage, questionnaire adaptatif et traçabilité.
+"""The inference service: triage API, adaptive questionnaire and traceability.
 
-- `schemas`       : contrats d'échange avec le système d'information hospitalier ;
-- `questionnaire` : collecte des symptômes, adaptée au motif de consultation ;
-- `audit`         : journal anonymisé de chaque interaction, pour les audits médicaux ;
-- `api`           : application FastAPI et garde-fous d'exploitation.
+- ``schemas``       : the exchange contract with the hospital information system;
+- ``questionnaire`` : symptom collection, adapted to the presenting complaint;
+- ``audit``         : an anonymised log of every interaction, for medical audits;
+- ``api``           : the FastAPI application and its operational guard rails.
 """
 
 from __future__ import annotations

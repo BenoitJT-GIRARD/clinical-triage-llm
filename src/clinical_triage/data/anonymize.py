@@ -1,30 +1,27 @@
-"""Anonymisation RGPD des textes cliniques, avec Presidio.
+"""GDPR anonymisation of clinical texts, with Presidio.
 
-Deux usages distincts dans le projet :
+Two distinct uses in this project:
 
-- à la **préparation des données**, sur les textes issus des corpus publics ;
-- au **service**, avant d'écrire quoi que ce soit dans le journal d'audit. C'est
-  là que le besoin est réel : les corpus publics ne contiennent pas de données
-  patient, mais l'API, elle, en recevra le jour où elle sera branchée au système
-  d'information hospitalier.
+- at **data preparation**, on the texts coming from the public corpora;
+- at **serving time**, before writing anything into the audit log. That is where the need is
+  real: the public corpora hold no patient data, but the API will, the day it is plugged into a
+  hospital information system.
 
-Le réglage par défaut de Presidio est inutilisable tel quel sur du texte
-médical. Avec les entités `DATE_TIME`, `LOCATION` et `NRP` actives, il masque
-« depuis trois jours », les noms d'organes et les noms de molécules :
-« inhibiteurs de recapture de la sérotonine » devient « inhibiteurs de
-recapture de la <PERSON> ». Masquer un mot qui n'identifie personne ne protège
-personne et détruit l'information utile au soin.
+Presidio's default setting is unusable as is on medical text. With the ``DATE_TIME``,
+``LOCATION`` and ``NRP`` entities active it masks "depuis trois jours", the names of organs and
+the names of molecules: "inhibiteurs de recapture de la sérotonine" becomes "inhibiteurs de
+recapture de la <PERSON>". Masking a word that identifies nobody protects nobody and destroys
+information the care depends on.
 
-On retient donc trois principes :
+Three principles follow:
 
-1. **seules les entités réellement identifiantes sont masquées** (nom, téléphone,
-   e-mail, identifiants bancaires, adresse IP, numéro de sécurité sociale,
-   date de naissance) ;
-2. **le vocabulaire clinique du projet est protégé** : aucun terme du catalogue
-   de présentations ni du lexique de triage ne peut être masqué ;
-3. **le contrôle qualité est indépendant** : on ne revérifie pas le masquage avec
-   le détecteur qui l'a produit — il ne trouverait évidemment rien. Un jeu
-   d'expressions régulières distinct cherche ce qui aurait pu passer au travers.
+1. **only genuinely identifying entities are masked** (name, phone, email, banking identifiers,
+   IP address, social security number, date of birth);
+2. **the project's clinical vocabulary is protected**: no term of the presentation catalogue or
+   of the triage lexicon can be masked;
+3. **the quality check is independent**: the masking is not re-checked with the detector that
+   produced it — it would obviously find nothing. A separate set of regular expressions looks
+   for what might have slipped through.
 """
 
 from __future__ import annotations
@@ -36,7 +33,7 @@ from clinical_triage.utils import get_logger
 
 logger = get_logger(__name__)
 
-# Entités masquées : uniquement ce qui identifie une personne.
+# Entities masked: only what identifies a person.
 PII_ENTITIES = (
     "PERSON",
     "PHONE_NUMBER",
@@ -48,51 +45,50 @@ PII_ENTITIES = (
     "US_SSN",
 )
 
-# Entités volontairement écartées, et la raison de leur écartement.
-ENTITES_ECARTEES = {
-    "DATE_TIME": "masque les délais d'évolution, qui sont un critère de triage",
-    "LOCATION": "masque les noms d'organes et de services hospitaliers",
-    "NRP": "masque des noms de pathologies et de molécules",
-    "MEDICAL_LICENSE": "déclenche sur des références bibliographiques des corpus",
+# Entities deliberately left out, and the reason for it.
+ENTITIES_LEFT_OUT = {
+    "DATE_TIME": "masks onset delays, which are a triage criterion",
+    "LOCATION": "masks the names of organs and of hospital departments",
+    "NRP": "masks the names of conditions and of molecules",
+    "MEDICAL_LICENSE": "fires on bibliographic references in the corpora",
 }
 
-# Seuil de confiance : en dessous, la détection est trop incertaine pour
-# justifier la destruction d'un mot du récit clinique.
+# Confidence threshold: below it, the detection is too uncertain to justify destroying a word of
+# the clinical narrative.
 SCORE_THRESHOLD = 0.6
 
 
 @lru_cache(maxsize=1)
 def _protected_vocabulary() -> frozenset[str]:
-    """Vocabulaire clinique du projet, qui ne doit jamais être masqué."""
+    """The project's clinical vocabulary, which must never be masked."""
     from clinical_triage.data.clinical_catalogue import PRESENTATIONS
     from clinical_triage.data.triage_rules import RED_FLAGS, WARNING_FLAGS
 
-    mots: set[str] = set()
-    for terme in RED_FLAGS + WARNING_FLAGS:
-        mots.update(terme.lower().split())
+    words: set[str] = set()
+    for term in RED_FLAGS + WARNING_FLAGS:
+        words.update(term.lower().split())
     for presentation in PRESENTATIONS:
-        textes = (
-            presentation.motif_fr,
-            presentation.motif_en,
-            *presentation.signes_fr,
-            *presentation.signes_en,
-            *presentation.antecedents_fr,
-            *presentation.antecedents_en,
+        texts = (
+            presentation.complaint_fr,
+            presentation.complaint_en,
+            *presentation.signs_fr,
+            *presentation.signs_en,
+            *presentation.history_fr,
+            *presentation.history_en,
         )
-        for texte in textes:
-            mots.update(re.findall(r"[\w'-]+", texte.lower()))
-    return frozenset(mots)
+        for text in texts:
+            words.update(re.findall(r"[\w'-]+", text.lower()))
+    return frozenset(words)
 
 
 @lru_cache(maxsize=1)
 def _engines():
-    """Initialise, une seule fois, les moteurs d'analyse et d'anonymisation.
+    """Initialise, once, the analysis and anonymisation engines.
 
-    Le moteur linguistique est bilingue (spaCy français et anglais), comme le
-    recommande l'énoncé. On y ajoute quatre reconnaisseurs absents de Presidio :
-    le numéro de sécurité sociale, le téléphone au format national comme
-    international, et la date de naissance en JJ/MM/AAAA comme en AAAA-MM-JJ.
-    Chacun est enregistré dans les deux langues.
+    The language engine is bilingual (French and English spaCy). Four recognisers absent from
+    Presidio are added: the French social security number, the phone number in national and in
+    international form, and the date of birth in DD/MM/YYYY as well as YYYY-MM-DD. Each is
+    registered in both languages.
     """
     from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
     from presidio_analyzer.nlp_engine import NlpEngineProvider
@@ -108,48 +104,48 @@ def _engines():
     nlp_engine = NlpEngineProvider(nlp_configuration=configuration).create_engine()
     analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=["fr", "en"])
 
-    # Reconnaisseurs propres au contexte français, absents de Presidio :
-    # numéro de sécurité sociale, téléphone au format national, date de naissance.
-    motifs_francais = {
+    # Recognisers specific to the French context, absent from Presidio: social security number,
+    # national phone format, date of birth.
+    french_patterns = {
         "FR_NIR": Pattern(
             "NIR", r"\b[12]\s?\d{2}\s?\d{2}\s?\d{2,3}\s?\d{2,3}\s?\d{3}\s?\d{2}\b", 0.85
         ),
-        # Le numéro national (06 11 22 33 44) et sa forme internationale
-        # (+33 6 11 22 33 44) désignent le même abonné : le motif couvre les deux
-        # écritures, faute de quoi l'une d'elles resterait en clair.
+        # The national number (06 11 22 33 44) and its international form (+33 6 11 22 33 44)
+        # designate the same subscriber: the pattern covers both spellings, failing which one of
+        # them would stay in the clear.
         "FR_TELEPHONE": Pattern(
-            "téléphone",
+            "phone",
             r"\b0[1-9](?:[ .-]?\d{2}){4}\b|\+33[ .-]?[1-9](?:[ .-]?\d{2}){4}\b",
             0.85,
         ),
-        # Deux écritures d'une date de naissance : JJ/MM/AAAA, et la forme ISO
-        # AAAA-MM-JJ qu'emploient les corpus anglophones. Elle identifie une
-        # personne aussi sûrement dans un format que dans l'autre.
+        # Two spellings of a date of birth: DD/MM/YYYY, and the ISO form YYYY-MM-DD the
+        # English-language corpora use. It identifies a person as surely in one format as in the
+        # other.
         "DATE_NAISSANCE": Pattern(
-            "JJ/MM/AAAA",
+            "DD/MM/YYYY",
             r"\b(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-](?:19|20)\d{2}\b",
             0.8,
         ),
         "DATE_NAISSANCE_ISO": Pattern(
-            "AAAA-MM-JJ",
+            "YYYY-MM-DD",
             r"\b(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b",
             0.8,
         ),
     }
-    for entite, motif in motifs_francais.items():
-        for langue in ("fr", "en"):
+    for entity, pattern in french_patterns.items():
+        for language in ("fr", "en"):
             analyzer.registry.add_recognizer(
                 PatternRecognizer(
-                    supported_entity=entite, patterns=[motif], supported_language=langue
+                    supported_entity=entity, patterns=[pattern], supported_language=language
                 )
             )
 
     anonymizer = AnonymizerEngine()
-    logger.info("Moteurs Presidio initialisés (français et anglais).")
+    logger.info("Presidio engines initialised (French and English).")
     return analyzer, anonymizer
 
 
-ENTITES_MASQUEES = PII_ENTITIES + (
+MASKED_ENTITIES = PII_ENTITIES + (
     "FR_NIR",
     "FR_TELEPHONE",
     "DATE_NAISSANCE",
@@ -158,81 +154,80 @@ ENTITES_MASQUEES = PII_ENTITIES + (
 
 
 def _operators():
-    """Chaque entité est remplacée par son type, entre chevrons."""
+    """Each entity is replaced by its type, in angle brackets."""
     from presidio_anonymizer.entities import OperatorConfig
 
     return {
         "DEFAULT": OperatorConfig("replace", {"new_value": "<DONNEE_PERSONNELLE>"}),
-        **{ent: OperatorConfig("replace", {"new_value": f"<{ent}>"}) for ent in ENTITES_MASQUEES},
+        **{ent: OperatorConfig("replace", {"new_value": f"<{ent}>"}) for ent in MASKED_ENTITIES},
     }
 
 
 def analyze_and_anonymize(text: str, lang: str = "fr") -> tuple[str, int]:
-    """Masque les données personnelles et renvoie (texte masqué, nombre d'entités)."""
+    """Mask personal data and return (masked text, number of entities)."""
     if not text:
         return text, 0
     analyzer, anonymizer = _engines()
-    langue = lang if lang in ("fr", "en") else "en"
-    # Toutes les entités ne sont pas reconnues dans les deux langues ; demander
-    # une entité sans reconnaisseur produit un avertissement à chaque appel.
-    disponibles = set(analyzer.get_supported_entities(language=langue))
-    entites = [entite for entite in ENTITES_MASQUEES if entite in disponibles]
-    resultats = analyzer.analyze(
-        text=text, language=langue, entities=entites, score_threshold=SCORE_THRESHOLD
+    language = lang if lang in ("fr", "en") else "en"
+    # Not every entity is recognised in both languages; asking for an entity with no recogniser
+    # produces a warning on every call.
+    available = set(analyzer.get_supported_entities(language=language))
+    entities = [entity for entity in MASKED_ENTITIES if entity in available]
+    results = analyzer.analyze(
+        text=text, language=language, entities=entities, score_threshold=SCORE_THRESHOLD
     )
-    protege = _protected_vocabulary()
-    retenus = [r for r in resultats if text[r.start : r.end].lower() not in protege]
-    if not retenus:
+    protected = _protected_vocabulary()
+    kept = [r for r in results if text[r.start : r.end].lower() not in protected]
+    if not kept:
         return text, 0
-    masque = anonymizer.anonymize(text=text, analyzer_results=retenus, operators=_operators()).text
-    return masque, len(retenus)
+    masked = anonymizer.anonymize(text=text, analyzer_results=kept, operators=_operators()).text
+    return masked, len(kept)
 
 
 def anonymize_text(text: str, lang: str = "fr") -> str:
-    """Masque les données personnelles d'un texte et renvoie le texte masqué."""
+    """Mask the personal data of a text and return the masked text."""
     return analyze_and_anonymize(text, lang)[0]
 
 
-# --- Contrôle qualité indépendant du détecteur ---
+# --- A quality check independent of the detector ---
 
-# Motifs cherchés APRÈS masquage. Ils sont volontairement écrits à la main et
-# n'utilisent pas Presidio : un contrôle qui réutiliserait le détecteur de départ
-# ne pourrait, par construction, jamais rien trouver.
+# Patterns looked for AFTER masking. They are deliberately hand-written and do not use Presidio:
+# a check that reused the original detector could, by construction, never find anything.
 RESIDUAL_PII_PATTERNS = {
-    "adresse e-mail": re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b"),
-    "téléphone français": re.compile(r"\b0[1-9](?:[ .-]?\d{2}){4}\b"),
-    "téléphone international": re.compile(r"\+\d{1,3}[ .-]?\d[\d .-]{7,}\d\b"),
-    "numéro de sécurité sociale": re.compile(
+    "email address": re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.]{2,}\b"),
+    "French phone number": re.compile(r"\b0[1-9](?:[ .-]?\d{2}){4}\b"),
+    "international phone number": re.compile(r"\+\d{1,3}[ .-]?\d[\d .-]{7,}\d\b"),
+    "social security number": re.compile(
         r"\b[12]\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{3}\s?\d{3}\s?\d{2}\b"
     ),
-    "date de naissance": re.compile(
+    "date of birth": re.compile(
         r"\b(?:0?[1-9]|[12]\d|3[01])[/.-](?:0?[1-9]|1[0-2])[/.-](?:19|20)\d{2}\b"
     ),
-    "date de naissance ISO": re.compile(
+    "ISO date of birth": re.compile(
         r"\b(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b"
     ),
-    "civilité suivie d'un nom": re.compile(
+    "title followed by a name": re.compile(
         r"\b(?:M\.|Mme|Mlle|Dr|Docteur|Monsieur|Madame)\s+[A-ZÀ-Ý][\w'-]+"
     ),
-    "carte bancaire": re.compile(r"\b(?:\d{4}[ -]?){3}\d{4}\b"),
+    "payment card": re.compile(r"\b(?:\d{4}[ -]?){3}\d{4}\b"),
     "IBAN": re.compile(r"\b[A-Z]{2}\d{2}[A-Z0-9]{10,30}\b"),
 }
 
 
 def residual_pii(text: str) -> dict[str, int]:
-    """Cherche, dans un texte déjà masqué, ce qui ressemble encore à une donnée personnelle."""
-    trouvailles: dict[str, int] = {}
-    for nom, motif in RESIDUAL_PII_PATTERNS.items():
-        occurrences = len(motif.findall(text))
+    """Look, in an already masked text, for what still resembles personal data."""
+    findings: dict[str, int] = {}
+    for name, pattern in RESIDUAL_PII_PATTERNS.items():
+        occurrences = len(pattern.findall(text))
         if occurrences:
-            trouvailles[nom] = occurrences
-    return trouvailles
+            findings[name] = occurrences
+    return findings
 
 
-def audit_corpus(textes: list[str]) -> dict[str, int]:
-    """Agrège le contrôle qualité sur un ensemble de textes masqués."""
+def audit_corpus(texts: list[str]) -> dict[str, int]:
+    """Aggregate the quality check over a set of masked texts."""
     total: dict[str, int] = {}
-    for texte in textes:
-        for nom, occurrences in residual_pii(texte).items():
-            total[nom] = total.get(nom, 0) + occurrences
+    for text in texts:
+        for name, occurrences in residual_pii(text).items():
+            total[name] = total.get(name, 0) + occurrences
     return total

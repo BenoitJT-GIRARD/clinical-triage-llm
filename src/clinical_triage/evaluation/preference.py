@@ -1,23 +1,21 @@
-"""Mesure indépendante de l'alignement, sur un jeu de préférences externe.
+"""An independent measurement of the alignment, on an external preference set.
 
-Le jeu clinique dit si le modèle trie juste. Il ne dit pas grand-chose de ce que
-l'alignement par préférences a changé : sur trois classes, deux modèles proches
-produisent souvent les mêmes décisions, et l'écart se noie dans l'incertitude.
+The clinical set says whether the model triages correctly. It says little about what preference
+alignment changed: on three classes, two close models often produce the same decisions, and the
+gap drowns in the uncertainty.
 
-On mesure donc l'alignement là où il s'exprime : **sur des préférences**. Pour
-chaque paire de réponses annotée par des humains, on compare la vraisemblance
-que le modèle attribue à la réponse préférée et à la réponse rejetée. Un modèle
-mieux aligné classe plus souvent la bonne réponse devant l'autre.
+So the alignment is measured where it expresses itself: **on preferences**. For each pair of
+answers annotated by humans, the likelihood the model assigns to the preferred answer is
+compared with the one it assigns to the rejected answer. A better-aligned model ranks the good
+answer first more often.
 
-Le jeu utilisé est **UltraMedical-Preference**, le corpus de préférences
-médicales du cahier des charges. Il est délibérément tenu **hors de
-l'entraînement** : ses réponses sont de longues dissertations en anglais, qui
-apprendraient au modèle à violer le contrat de sortie du triage. Réservé à la
-mesure, il fournit en revanche une évaluation de l'alignement qui ne dépend ni
-de nos données, ni de nos étiquettes.
+The set used is **UltraMedical-Preference**. It is deliberately kept **out of training**: its
+answers are long English essays, which would teach the model to violate the triage output
+contract. Reserved for measurement, it provides an evaluation of the alignment that depends
+neither on our data nor on our labels.
 
-Les paires étiquetées par la seule longueur de la réponse sont écartées : elles
-mesureraient la verbosité, pas la préférence clinique.
+Pairs labelled by answer length alone are discarded: they would measure verbosity, not clinical
+preference.
 """
 
 from __future__ import annotations
@@ -25,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from clinical_triage.config import MODEL
-from clinical_triage.prompts import borner_la_description
+from clinical_triage.prompts import bound_description
 from clinical_triage.utils import get_logger
 
 logger = get_logger("preference")
@@ -33,137 +31,139 @@ logger = get_logger("preference")
 
 @dataclass(frozen=True)
 class PreferenceScore:
-    """Vraisemblances attribuées aux deux réponses d'une paire."""
+    """The likelihoods assigned to the two answers of a pair.
+
+    ``truncated_sides`` counts how many of the two answers the model window cut short — 0, 1 or
+    2. It travels with the score, where a log line would bury it, because the share of
+    truncated answers is published next to the result and qualifies how it must be read.
+    """
 
     chosen: float
     rejected: float
     label_type: str
+    truncated_sides: int = 0
 
     @property
-    def bien_ordonnee(self) -> bool:
+    def correctly_ordered(self) -> bool:
         return self.chosen > self.rejected
 
     @property
-    def marge(self) -> float:
+    def margin(self) -> float:
         return self.chosen - self.rejected
 
 
-def _log_vraisemblance(model, tokenizer, prompt: str, reponse: str, device: str) -> float:
-    """Log-vraisemblance moyenne par jeton de `reponse`, sachant `prompt`.
+def _log_likelihood(model, tokenizer, prompt: str, answer: str, device: str) -> float:
+    """Mean per-token log-likelihood of ``answer``, given ``prompt``.
 
-    On normalise par la longueur : sans cela, la comparaison favoriserait
-    mécaniquement la réponse la plus courte, et l'on mesurerait encore la
-    longueur au lieu du fond.
+    Normalised by length: without that, the comparison would mechanically favour the shorter
+    answer, and length would be measured a second time, substance never.
     """
     import torch
 
-    # Les bornes sont tirées de la fenêtre réelle du modèle. Au-delà, le passage
-    # avant tronquerait les logits à la fenêtre pendant que les cibles
-    # garderaient leur longueur d'origine, et la lecture des vraisemblances
-    # échouerait sur un écart de dimension — les dissertations d'UltraMedical
-    # dépassent régulièrement cette fenêtre.
+    # The bounds come from the model's real window. Beyond it, the forward pass would truncate
+    # the logits to the window while the targets kept their original length, and reading the
+    # likelihoods would fail on a dimension mismatch — UltraMedical's essays regularly exceed
+    # that window.
     #
-    # L'invite est bornée à la moitié de la fenêtre pour qu'il reste toujours de
-    # la place à la réponse, qui est l'objet de la mesure. La borne s'applique au
-    # **texte**, et non à la suite de jetons, pour que les jetons de l'invite
-    # restent un préfixe exact de ceux de l'ensemble — c'est ce qui permet de
-    # localiser le début de la réponse par un simple comptage.
-    invite_bornee, _ = borner_la_description(prompt, tokenizer, MODEL.max_seq_length // 2)
-    jetons_invite = tokenizer(invite_bornee, return_tensors="pt")
-    jetons_complets = tokenizer(
-        invite_bornee + reponse,
+    # The prompt is bounded to half the window so that room always remains for the answer, which
+    # is the object of the measurement. The bound applies to the **text**, not to the token
+    # sequence, so that the prompt tokens stay an exact prefix of the whole — which is what
+    # allows the start of the answer to be located by a simple count.
+    bounded_prompt, _ = bound_description(prompt, tokenizer, MODEL.max_seq_length // 2)
+    prompt_tokens = tokenizer(bounded_prompt, return_tensors="pt")
+    full_tokens = tokenizer(
+        bounded_prompt + answer,
         return_tensors="pt",
         truncation=True,
         max_length=MODEL.max_seq_length,
     )
-    entrees = jetons_complets["input_ids"].to(device)
-    debut_reponse = jetons_invite["input_ids"].shape[1]
-    if entrees.shape[1] <= debut_reponse:
+    inputs = full_tokens["input_ids"].to(device)
+    answer_start = prompt_tokens["input_ids"].shape[1]
+    if inputs.shape[1] <= answer_start:
         return float("-inf")
 
     with torch.no_grad():
-        logits = model(entrees).logits
-    # Le logit à la position i prédit le jeton i+1 : on décale d'un cran.
-    log_probabilites = torch.log_softmax(logits[0, :-1].float(), dim=-1)
-    cibles = entrees[0, 1:]
-    retenues = log_probabilites.gather(1, cibles.unsqueeze(1)).squeeze(1)
-    reponse_seule = retenues[debut_reponse - 1 :]
-    return float(reponse_seule.mean())
+        logits = model(inputs).logits
+    # The logit at position i predicts token i+1: shift by one.
+    log_probabilities = torch.log_softmax(logits[0, :-1].float(), dim=-1)
+    targets = inputs[0, 1:]
+    kept = log_probabilities.gather(1, targets.unsqueeze(1)).squeeze(1)
+    answer_only = kept[answer_start - 1 :]
+    return float(answer_only.mean())
 
 
-def compter_les_ecretees(tokenizer, pairs) -> int:
-    """Nombre de réponses dont la fenêtre du modèle coupe la fin.
+def truncated_sides(tokenizer, pair, prompt: str) -> int:
+    """How many of the pair's two answers the model window cuts short.
 
-    Les dissertations d'UltraMedical dépassent régulièrement la fenêtre. La
-    comparaison reste juste — la même borne s'applique à la réponse préférée et à
-    la rejetée, et le score est normalisé par la longueur — mais elle porte alors
-    sur le **début** de chaque réponse. Le rapport doit pouvoir le dire avec un
-    chiffre plutôt que de le passer sous silence.
+    UltraMedical's essays regularly exceed the window. The comparison stays fair — the same
+    bound applies to the preferred and to the rejected answer, and the score is normalised by
+    length — but it then covers the **beginning** of each answer. The published result must be
+    able to say so with a number, and not pass over it in silence.
     """
-    ecretees = 0
-    for paire in pairs:
-        invite, _ = borner_la_description(
-            f"{paire.prompt}\n\n", tokenizer, MODEL.max_seq_length // 2
-        )
-        for reponse in (paire.chosen, paire.rejected):
-            if len(tokenizer(invite + reponse)["input_ids"]) > MODEL.max_seq_length:
-                ecretees += 1
-    return ecretees
+    bounded, _ = bound_description(prompt, tokenizer, MODEL.max_seq_length // 2)
+    return sum(
+        len(tokenizer(bounded + answer)["input_ids"]) > MODEL.max_seq_length
+        for answer in (pair.chosen, pair.rejected)
+    )
 
 
 def score_pairs(model, tokenizer, pairs, device: str = "cuda") -> list[PreferenceScore]:
-    """Attribue à chaque paire les vraisemblances des deux réponses."""
-    ecretees = compter_les_ecretees(tokenizer, pairs)
-    if ecretees:
-        logger.info(
-            "  %d réponses sur %d dépassent la fenêtre : la comparaison porte sur leur début.",
-            ecretees,
-            2 * len(pairs),
-        )
+    """Assign each pair the likelihoods of its two answers."""
     scores = []
-    for index, paire in enumerate(pairs):
-        # Les deux sauts de ligne ne sont pas cosmétiques. `_log_vraisemblance`
-        # localise le début de la réponse en comptant les jetons de l'invite
-        # seule, ce qui suppose que ces jetons forment un **préfixe exact** de
-        # ceux de l'ensemble. Un découpage en sous-mots peut fusionner le dernier
-        # caractère de l'invite avec le premier de la réponse et décaler la
-        # frontière d'un jeton ; un séparateur qui forme son propre jeton l'en
-        # empêche. Vérifié sur le corpus : aucune rupture de préfixe.
-        invite = f"{paire.prompt}\n\n"
+    for index, pair in enumerate(pairs):
+        # The two newlines are not cosmetic. `_log_likelihood` locates the start of the answer
+        # by counting the tokens of the prompt alone, which assumes those tokens form an
+        # **exact prefix** of the whole. Sub-word tokenisation can merge the last character of
+        # the prompt with the first of the answer and shift the boundary by one token; a
+        # separator that forms its own token prevents that. Checked on the corpus: no broken
+        # prefix.
+        prompt = f"{pair.prompt}\n\n"
         scores.append(
             PreferenceScore(
-                chosen=_log_vraisemblance(model, tokenizer, invite, paire.chosen, device),
-                rejected=_log_vraisemblance(model, tokenizer, invite, paire.rejected, device),
-                label_type=paire.label_type,
+                chosen=_log_likelihood(model, tokenizer, prompt, pair.chosen, device),
+                rejected=_log_likelihood(model, tokenizer, prompt, pair.rejected, device),
+                label_type=pair.label_type,
+                truncated_sides=truncated_sides(tokenizer, pair, prompt),
             )
         )
         if (index + 1) % 25 == 0:
-            logger.info("  %d/%d paires évaluées", index + 1, len(pairs))
+            logger.info("  %d/%d pairs scored", index + 1, len(pairs))
+    truncated = sum(score.truncated_sides for score in scores)
+    if truncated:
+        logger.info(
+            "  %d answers out of %d exceed the window: the comparison covers their beginning.",
+            truncated,
+            2 * len(pairs),
+        )
     return scores
 
 
 def summarize(scores: list[PreferenceScore]) -> dict:
-    """Agrège les scores : part de paires bien ordonnées et marge moyenne."""
+    """Aggregate the scores: share of correctly ordered pairs and mean margin."""
     if not scores:
-        return {"n": 0, "part_bien_ordonnees": 0.0, "marge_moyenne": 0.0}
-    bien_ordonnees = sum(score.bien_ordonnee for score in scores)
-    par_difficulte = {}
-    for niveau in sorted({score.label_type for score in scores}):
-        sous_ensemble = [s for s in scores if s.label_type == niveau]
-        par_difficulte[niveau] = {
-            "n": len(sous_ensemble),
-            "part_bien_ordonnees": round(
-                sum(s.bien_ordonnee for s in sous_ensemble) / len(sous_ensemble), 4
+        return {"n": 0, "correctly_ordered_share": 0.0, "mean_margin": 0.0}
+    correctly_ordered = sum(score.correctly_ordered for score in scores)
+    per_difficulty = {}
+    for level in sorted({score.label_type for score in scores}):
+        subset = [s for s in scores if s.label_type == level]
+        per_difficulty[level] = {
+            "n": len(subset),
+            "correctly_ordered_share": round(
+                sum(s.correctly_ordered for s in subset) / len(subset), 4
             ),
         }
+    truncated = sum(score.truncated_sides for score in scores)
     return {
         "n": len(scores),
-        "part_bien_ordonnees": round(bien_ordonnees / len(scores), 4),
-        "marge_moyenne": round(sum(score.marge for score in scores) / len(scores), 4),
-        "par_difficulte": par_difficulte,
-        # Le détail paire par paire, dans l'ordre du jeu. Deux modèles sont
-        # évalués sur les **mêmes** paires : comparer leurs deux proportions
-        # reviendrait à les traiter comme des mesures indépendantes, alors que
-        # l'information est entièrement dans les paires où ils divergent.
-        "bien_ordonnees": [score.bien_ordonnee for score in scores],
+        "correctly_ordered_share": round(correctly_ordered / len(scores), 4),
+        "mean_margin": round(sum(score.margin for score in scores) / len(scores), 4),
+        "per_difficulty": per_difficulty,
+        # How much of what was compared the model window cut short. Published rather than
+        # logged: it is the first thing that qualifies a result sitting below chance.
+        "truncated_answers": truncated,
+        "truncated_share": round(truncated / (2 * len(scores)), 4),
+        # The pair-by-pair detail, in set order. Two models are evaluated on the **same** pairs:
+        # comparing their two proportions would treat them as independent measurements, when
+        # all the information is in the pairs where they diverge.
+        "correctly_ordered": [score.correctly_ordered for score in scores],
     }

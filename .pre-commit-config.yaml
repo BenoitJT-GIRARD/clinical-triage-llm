@@ -1,5 +1,5 @@
-# Verifications executees avant chaque commit.
-# Installation : uv run pre-commit install
+# Checks run before every commit.
+# Installation: uv run pre-commit install
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -12,10 +12,9 @@ repos:
       - id: check-case-conflict
       - id: detect-private-key
       - id: check-added-large-files
-        # Le plus gros fichier versionne est le rapport en PDF, quelques
-        # megaoctets. Les poids de modeles et les jeux d'entrainement sont hors
-        # du depot, publies sur le Hugging Face Hub : ce seuil est la pour que
-        # l'un d'eux ne s'y glisse pas par megarde.
+        # The largest tracked file is a figure, a few hundred kilobytes. Model weights and
+        # training sets live outside the repository, published on the Hugging Face Hub: this
+        # threshold is here so that one of them cannot slip in unnoticed.
         args: ["--maxkb=5120"]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -29,5 +28,8 @@ repos:
     rev: 1.9.4
     hooks:
       - id: bandit
-        args: ["-c", "pyproject.toml", "-r", "src/clinical_triage"]
+        # The same two perimeters continuous integration analyses. Scanning the package alone
+        # would leave the scripts — which read tokens and run subprocesses — unexamined until
+        # the workflow ran.
+        args: ["-c", "pyproject.toml", "-r", "src/clinical_triage", "scripts"]
         additional_dependencies: ["bandit[toml]"]

@@ -1,16 +1,18 @@
-# Environnements et caches Python
+# Python environments and caches
 .venv/
 venv/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
 
-# Outils
+# Tools
 .ruff_cache/
 .pytest_cache/
 .coverage
-coverage.xml
 htmlcov/
+# A stray report at the root. The published one lives in `reports/coverage/`, where the header
+# badge reads its line rate: a pattern without a slash would match that one too.
+/coverage.xml
 
 # IDE
 .vscode/
@@ -19,36 +21,25 @@ htmlcov/
 # Secrets
 .env
 
-# Poids de modeles : plusieurs gigaoctets, publies sur le Hugging Face Hub.
-models/
+# Everything a run produces and nothing tracks: model weights (several gigabytes, published on
+# the Hugging Face Hub), the audit log of the service, and the MLflow experiment store. In a
+# container the log lives in a named volume instead.
+var/
 
-# Jeux d'entrainement : derives du code et des corpus, regeneres a l'identique
-# par scripts/01 (graine fixee) et publies sur le Hub. Le jeu d'evaluation
-# clinique et la fiche metadata.json restent versionnes : ils sont petits, et
-# on doit pouvoir lire les cas notes et le controle d'anonymisation sans rien
-# telecharger.
+# Training sets: derived from the code and the corpora, rebuilt identically by
+# scripts/build_dataset.py (fixed seed) and published on the Hub. The clinical evaluation set
+# and metadata.json stay versioned: they are small, and the annotated cases and the
+# anonymisation check must be readable without downloading anything.
 data/processed/sft_train.jsonl
 data/processed/sft_validation.jsonl
 data/processed/sft_test.jsonl
 data/processed/dpo_train.jsonl
 
-# Caches generes par Unsloth a la racine du projet : noyaux compiles et tampons
-# temporaires, reconstruits a chaque entrainement.
+# Caches Unsloth writes at the project root: compiled kernels and temporary buffers, rebuilt at
+# every training run.
 unsloth_compiled_cache/
 _unsloth_temporary_saved_buffers/
 
-# Suivi d'experiences MLflow : base locale, regenerable a chaque entrainement.
-mlruns/
-
-# Journaux d'audit du service : donnees d'execution, pas du code. En conteneur,
-# ils vivent dans un volume nomme.
-logs/
-
-# Documentation de travail, hors dépôt.
-infos/
-
-reports/*.zip
-
-# Divers OS
+# OS leftovers
 .DS_Store
 Thumbs.db

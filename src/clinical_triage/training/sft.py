@@ -1,65 +1,56 @@
-"""Fine-tuning supervisé du Qwen3-1.7B-Base avec Unsloth et LoRA.
+"""Supervised fine-tuning of Qwen3-1.7B-Base with Unsloth and LoRA.
 
-Le modèle de base ne sait pas dialoguer : il complète du texte. Le SFT lui
-apprend deux choses à la fois — le format ChatML de l'agent, et la tâche de
-triage elle-même.
+The base model cannot hold a dialogue: it completes text. SFT teaches it two things at once —
+the agent's ChatML format, and the triage task itself.
 
-Quatre points méritent d'être explicités, parce qu'ils conditionnent la suite :
+Four points deserve stating, because they condition everything after:
 
-1. **Le jeu de données expose `prompt` et `completion`**, pas une colonne
-   `messages`. Cela évite que la bibliothèque d'entraînement ne re-sérialise les
-   exemples avec le gabarit de dialogue natif du modèle — celui de Qwen3 insère
-   un bloc `<think></think>` devant la réponse, et le modèle apprendrait alors un
-   format que l'inférence ne reproduit jamais. Le couple prompt/completion permet
-   en prime de ne calculer la perte que sur la réponse, sans collateur maison.
-2. **Le jeton de fin de séquence est corrigé** avant l'entraînement : le
-   tokenizer de Qwen3-1.7B-Base sort d'usine avec `<|endoftext|>` alors que le
-   format appris se termine par `<|im_end|>`.
-3. **La tête de sortie est entraînée avec les projections.** C'est la correction
-   la moins évidente et la plus décisive du projet — voir plus bas.
-4. **LoRA n'entraîne que les matrices d'adaptation** des projections — quelques
-   millions de paramètres — auxquelles s'ajoute la tête de sortie, entraînée en
-   entier au point précédent. Elle pèse à elle seule près de 311 millions de
-   paramètres : le total entraîné avoisine donc 14 % du modèle, et non le
-   pourcent que LoRA seul laisserait attendre. C'est le prix de la correction du
-   jeton de fin, et le résumé d'exécution publie le compte exact.
+1. **the dataset exposes ``prompt`` and ``completion``**, not a ``messages`` column. That keeps
+   the training library from re-serialising the examples with the model's native chat template —
+   Qwen3's inserts a ``<think></think>`` block before the answer, and the model would then learn
+   a format inference never reproduces. The prompt/completion pair also makes it possible to
+   compute the loss on the answer only, with no hand-written collator.
+2. **the end-of-sequence token is fixed** before training: the Qwen3-1.7B-Base tokenizer ships
+   with ``<|endoftext|>`` while the learnt format ends with ``<|im_end|>``.
+3. **the output head is trained with the projections.** That is the least obvious and most
+   decisive correction of the project — see below.
+4. **LoRA trains only the adapter matrices** of the projections — a few million parameters — to
+   which the output head is added, trained in full by the previous point. It alone weighs nearly
+   311 million parameters: the total trained is therefore around 14% of the model, not the one
+   percent LoRA alone would suggest. That is the price of the end-token fix, and the run summary
+   publishes the exact count.
 
-## Pourquoi la tête de sortie doit être entraînée
+## Why the output head must be trained
 
-Qwen3-1.7B-**Base** porte les vingt-cinq jetons ChatML (151644 à 151668) comme un
-seul et même vecteur, jamais entraîné : leurs normes sont identiques au bit près,
-et `<|im_start|>` et `<|im_end|>` ont une similarité cosinus de 1,000. Le modèle
-lie par ailleurs sa tête de sortie à sa matrice d'embeddings
-(`tie_word_embeddings`), que LoRA gèle.
+Qwen3-1.7B-**Base** carries the twenty-five ChatML tokens (151644 to 151668) as one and the same
+vector, never trained: their norms are identical bit for bit, and ``<|im_start|>`` and
+``<|im_end|>`` have a cosine similarity of 1.000. The model also ties its output head to its
+embedding matrix (``tie_word_embeddings``), which LoRA freezes.
 
-Déclarer `<|im_end|>` comme fin de séquence ne suffit donc pas : sa ligne de
-sortie reste figée sur une valeur d'initialisation partagée avec vingt-quatre
-autres jetons, et le modèle ne peut **structurellement pas** l'émettre de
-préférence à eux. Mesuré : 0 % d'arrêts nets, et les 220 jetons du budget
-consommés à chaque réponse. Aucun nombre d'époques supplémentaires n'y change
-quoi que ce soit.
+Declaring ``<|im_end|>`` as end of sequence is therefore not enough: its output row stays frozen
+on an initialisation value shared with twenty-four other tokens, and the model **structurally
+cannot** emit it in preference to them. Measured: 0% clean stops, and the whole 220-token budget
+consumed on every answer. No amount of extra epochs changes anything.
 
-Ajouter `lm_head` aux modules adaptés lève le verrou. Trois configurations ont été
-comparées à protocole identique — 75 pas, 60 cas de validation :
+Adding ``lm_head`` to the adapted modules lifts the lock. Three configurations were compared
+under an identical protocol — 75 steps, 60 validation cases:
 
-| Configuration | Exactitude | Arrêts nets | Jetons générés |
+| Configuration | Accuracy | Clean stops | Tokens generated |
 |---|---|---|---|
-| projections seules | 0,850 | 0,000 | 220 |
-| + embeddings (`modules_to_save`) | 0,850 | 0,000 | 220 |
-| **+ tête de sortie** | **0,900** | **1,000** | **97** |
+| projections only | 0.850 | 0.000 | 220 |
+| + embeddings (`modules_to_save`) | 0.850 | 0.000 | 220 |
+| **+ output head** | **0.900** | **1.000** | **97** |
 
-Les chiffres exacts vivent dans `reports/training/comparaison_modules.json`, que
-le rapport lit ; ceux-ci les reprennent pour que la démonstration se suive sans
-quitter le fichier.
+The exact figures live in ``reports/training/module_comparison.json``; these repeat them so that
+the argument can be followed without leaving the file.
 
-Entraîner les seuls embeddings ne sert à rien : PEFT en recopie le module et
-rompt le lien avec la tête de sortie, qui reste gelée. C'est bien la tête qu'il
-faut adapter.
+Training the embeddings alone achieves nothing: PEFT copies the module and breaks the link with
+the output head, which stays frozen. It is indeed the head that must be adapted.
 
-Unsloth le fait nativement : il déplace `lm_head` vers `modules_to_save` et gère
-le déliage des poids. Son correctif `fix_untrained_tokens`, lui, ne détecte que
-les lignes d'embedding exactement nulles : sur ce modèle, dont les jetons ChatML
-sont des vecteurs dupliqués de faible norme, il resterait sans effet.
+Unsloth does this natively: it moves ``lm_head`` into ``modules_to_save`` and handles untying the
+weights. Its ``fix_untrained_tokens`` patch, on the other hand, only detects embedding rows that
+are exactly zero: on this model, whose ChatML tokens are duplicated vectors of small norm, it has
+no effect.
 """
 
 from __future__ import annotations
@@ -72,22 +63,22 @@ from clinical_triage.config import MODEL, SEED, TRAINING
 from clinical_triage.prompts import IM_END, prepare_tokenizer
 from clinical_triage.training.schedule import warmup_steps
 from clinical_triage.training.tracking import track
-from clinical_triage.utils import chemin_pour_journal, get_logger
+from clinical_triage.utils import get_logger, path_for_log
 
 logger = get_logger("sft")
 
 
 @dataclass
 class SFTResult:
-    """Résultat d'un entraînement supervisé."""
+    """The result of one supervised training run."""
 
     output_dir: str
     trainable_params: int
     total_params: int
     train_loss: float | None
     eval_loss: float | None
-    duree_s: float
-    memoire_gpu_max_go: float
+    duration_s: float
+    peak_gpu_memory_gb: float
 
 
 def train_sft(
@@ -105,13 +96,12 @@ def train_sft(
     max_length: int = MODEL.max_seq_length,
     gradient_checkpointing: bool = True,
 ) -> SFTResult:
-    """Lance le fine-tuning supervisé et renvoie le résumé de l'entraînement."""
-    # Unsloth réécrit des fonctions internes de `transformers` et de `trl` au
-    # moment de son import. Il doit donc être importé AVANT elles : importé après,
-    # ses correctifs s'appliquent à des références déjà copiées et n'ont plus
-    # aucun effet — sans le moindre message pour le signaler.
-    # L'ordre ci-dessous est fonctionnel : le trier alphabétiquement placerait
-    # `unsloth` en dernier et neutraliserait ses correctifs, d'où la dérogation.
+    """Run the supervised fine-tuning and return the run summary."""
+    # Unsloth rewrites internal functions of `transformers` and `trl` when it is imported. It
+    # must therefore be imported BEFORE them: imported after, its patches apply to references
+    # that have already been copied and have no effect at all — with no message to say so.
+    # The order below is functional: sorting it alphabetically would put `unsloth` last and
+    # neutralise its patches, hence the waiver.
     from unsloth import FastLanguageModel  # noqa: I001
 
     import torch
@@ -120,30 +110,30 @@ def train_sft(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # La tête de sortie rejoint les projections adaptées : sans elle, le modèle
-    # ne peut pas apprendre à s'arrêter (voir la docstring du module).
-    modules_adaptes = [*TRAINING.lora_target_modules, "lm_head"]
+    # The output head joins the adapted projections: without it the model cannot learn to stop
+    # (see the module docstring).
+    adapted_modules = [*TRAINING.lora_target_modules, "lm_head"]
 
-    hyperparametres = {
-        "modele_de_base": MODEL.base_model,
-        "moteur": "unsloth",
+    hyperparameters = {
+        "base_model": MODEL.base_model,
+        "engine": "unsloth",
         "epochs": epochs,
         "batch_size": batch_size,
         "grad_accum": grad_accum,
-        "lot_effectif": batch_size * grad_accum,
+        "effective_batch": batch_size * grad_accum,
         "learning_rate": learning_rate,
         "lora_r": lora_r,
         "lora_alpha": lora_alpha,
         "lora_dropout": TRAINING.lora_dropout,
-        "lora_modules": ", ".join(modules_adaptes),
+        "lora_modules": ", ".join(adapted_modules),
         "max_length": max_length,
         "gradient_checkpointing": gradient_checkpointing,
         "max_steps": max_steps,
-        "graine": SEED,
+        "seed": SEED,
     }
 
-    with track(run_name, hyperparametres) as resume:
-        logger.info("Chargement du tokenizer et du modèle de base : %s", MODEL.base_model)
+    with track(run_name, hyperparameters) as summary:
+        logger.info("Loading the tokenizer and the base model: %s", MODEL.base_model)
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=MODEL.base_model,
             max_seq_length=max_length,
@@ -157,10 +147,10 @@ def train_sft(
             r=lora_r,
             lora_alpha=lora_alpha,
             lora_dropout=TRAINING.lora_dropout,
-            target_modules=modules_adaptes,
+            target_modules=adapted_modules,
             bias="none",
-            # Le point de reprise d'Unsloth décharge les activations vers la
-            # mémoire centrale : même calcul, empreinte GPU nettement moindre.
+            # Unsloth's checkpointing offloads activations to main memory: same computation, a
+            # markedly smaller GPU footprint.
             use_gradient_checkpointing="unsloth" if gradient_checkpointing else False,
             random_state=SEED,
         )
@@ -169,8 +159,8 @@ def train_sft(
         if eval_path is not None:
             data_files["eval"] = str(eval_path)
         dataset = load_dataset("json", data_files=data_files)
-        # L'entraînement n'a besoin que de ces deux colonnes ; les métadonnées
-        # cliniques du dataset ne doivent pas atteindre le collateur.
+        # Training needs these two columns only; the clinical metadata of the dataset must not
+        # reach the collator.
         dataset = dataset.select_columns(["prompt", "completion"])
 
         config = SFTConfig(
@@ -200,15 +190,15 @@ def train_sft(
             seed=SEED,
             data_seed=SEED,
             eos_token=IM_END,
-            # La perte par morceaux économise de la mémoire en découpant le calcul
-            # sur le vocabulaire, mais elle suppose une tête de sortie intacte.
-            # Elle est donc incompatible avec l'adaptation de `lm_head`.
+            # Chunked loss saves memory by splitting the computation over the vocabulary, but it
+            # assumes an untouched output head. It is therefore incompatible with adapting
+            # `lm_head`.
             loss_type="nll",
             report_to=[],
         )
 
-        # Le modèle porte déjà son adaptateur : pas de `peft_config` ici, sans
-        # quoi TRL en grefferait un second par-dessus celui d'Unsloth.
+        # The model already carries its adapter: no `peft_config` here, without which TRL would
+        # graft a second one on top of Unsloth's.
         trainer = SFTTrainer(
             model=model,
             args=config,
@@ -217,51 +207,49 @@ def train_sft(
             processing_class=tokenizer,
         )
 
-        entrainables = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)
+        trainable = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)
         total = sum(p.numel() for p in trainer.model.parameters())
         logger.info(
-            "Paramètres entraînables : %s sur %s (%.2f %%)",
-            f"{entrainables:,}".replace(",", " "),
-            f"{total:,}".replace(",", " "),
-            100 * entrainables / total,
+            "Trainable parameters: %s out of %s (%.2f%%)",
+            f"{trainable:,}",
+            f"{total:,}",
+            100 * trainable / total,
         )
 
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
-        debut = time.perf_counter()
-        resultat = trainer.train()
-        duree = time.perf_counter() - debut
-        memoire = torch.cuda.max_memory_allocated() / 1024**3 if torch.cuda.is_available() else 0.0
+        started = time.perf_counter()
+        result = trainer.train()
+        duration = time.perf_counter() - started
+        memory = torch.cuda.max_memory_allocated() / 1024**3 if torch.cuda.is_available() else 0.0
 
         trainer.save_model(str(output_dir))
         tokenizer.save_pretrained(str(output_dir))
         trainer.save_state()
 
-        historique = trainer.state.log_history
-        perte_eval = next((e["eval_loss"] for e in reversed(historique) if "eval_loss" in e), None)
-        resume.historique = historique
-        resume.metriques = {
-            "train_loss": float(resultat.training_loss),
-            "eval_loss": float(perte_eval) if perte_eval is not None else None,
-            "parametres_entrainables": entrainables,
-            "parametres_total": total,
-            "part_entrainable_pct": round(100 * entrainables / total, 3),
-            "duree_s": round(duree, 1),
-            "memoire_gpu_max_go": round(memoire, 2),
-            "exemples_par_seconde": round(resultat.metrics.get("train_samples_per_second", 0.0), 2),
+        history = trainer.state.log_history
+        eval_loss = next((e["eval_loss"] for e in reversed(history) if "eval_loss" in e), None)
+        summary.history = history
+        summary.metrics = {
+            "train_loss": float(result.training_loss),
+            "eval_loss": float(eval_loss) if eval_loss is not None else None,
+            "trainable_parameters": trainable,
+            "total_parameters": total,
+            "trainable_share_pct": round(100 * trainable / total, 3),
+            "duration_s": round(duration, 1),
+            "peak_gpu_memory_gb": round(memory, 2),
+            "examples_per_second": round(result.metrics.get("train_samples_per_second", 0.0), 2),
         }
         logger.info(
-            "SFT terminé en %.0f s. Adaptateur sauvegardé dans %s",
-            duree,
-            chemin_pour_journal(output_dir),
+            "SFT finished in %.0f s. Adapter saved to %s", duration, path_for_log(output_dir)
         )
 
         return SFTResult(
             output_dir=str(output_dir),
-            trainable_params=entrainables,
+            trainable_params=trainable,
             total_params=total,
-            train_loss=float(resultat.training_loss),
-            eval_loss=float(perte_eval) if perte_eval is not None else None,
-            duree_s=round(duree, 1),
-            memoire_gpu_max_go=round(memoire, 2),
+            train_loss=float(result.training_loss),
+            eval_loss=float(eval_loss) if eval_loss is not None else None,
+            duration_s=round(duration, 1),
+            peak_gpu_memory_gb=round(memory, 2),
         )

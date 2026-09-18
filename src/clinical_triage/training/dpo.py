@@ -1,29 +1,24 @@
-"""Alignement par préférences (DPO) au-dessus du modèle fine-tuné, avec Unsloth.
+"""Preference alignment (DPO) above the fine-tuned model, with Unsloth.
 
-Le SFT apprend à répondre ; le DPO apprend à préférer. Ici, la préférence porte
-sur la sécurité clinique : entre deux réponses au même cas, on veut celle qui ne
-sous-évalue pas l'urgence, ne retarde pas la prise en charge, n'affirme pas de
-diagnostic et répond dans la langue attendue.
+SFT teaches the model to answer; DPO teaches it to prefer. Here the preference is about clinical
+safety: between two answers to the same case, the wanted one does not underestimate the urgency,
+does not delay care, does not assert a diagnosis and answers in the expected language.
 
-Quatre choix de méthode, tous destinés à empêcher l'alignement de défaire le
-travail du SFT :
+Four method choices, all meant to stop the alignment from undoing the work of the SFT:
 
-1. **La référence est le modèle SFT, pas le modèle de base.** On charge le modèle
-   SFT fusionné et on y attache un *nouvel* adaptateur LoRA. La bibliothèque
-   utilise alors le modèle adaptateur désactivé comme référence : c'est bien le
-   modèle SFT. Prendre le modèle de base comme référence autoriserait le DPO à
-   s'éloigner du format tout juste appris.
-2. **`rpo_alpha` ajoute la perte supervisée sur la réponse préférée.** Le DPO seul
-   n'optimise qu'un rapport de vraisemblances : il peut faire baisser la
-   probabilité des deux réponses pourvu que l'écart se creuse. Ce second terme
-   maintient la réponse préférée à un niveau de vraisemblance élevé.
-3. **L'adaptateur ne touche pas à la tête de sortie.** Le SFT s'en est déjà
-   chargé, et le modèle fusionné qui sert de base sait donc s'arrêter. Laisser la
-   tête hors de l'adaptateur garde celui-ci petit — et surtout servable à chaud
-   par vLLM, qui refuse les adaptateurs portant un `modules_to_save`.
-4. **Un jeu de validation est mis de côté.** Sans lui, les seules courbes
-   disponibles sont celles de l'entraînement, et rien ne permet de distinguer un
-   alignement qui généralise d'un alignement qui apprend par cœur.
+1. **the reference is the SFT model, not the base model.** The merged SFT model is loaded and a
+   *new* LoRA adapter is attached to it. The library then uses the model with its adapter
+   disabled as the reference: that is exactly the SFT model. Taking the base model as reference
+   would allow DPO to drift away from the format just learnt.
+2. **``rpo_alpha`` keeps a supervised term on the answer that was preferred.** DPO alone optimises a
+   likelihood ratio: it can lower the probability of both answers as long as the gap widens.
+   This second term keeps the preferred answer at a high likelihood.
+3. **the adapter does not touch the output head.** SFT already did, and the merged model that
+   serves as the base therefore knows how to stop. Leaving the head out of the adapter keeps it
+   small — and above all servable hot by vLLM, which refuses adapters carrying a
+   ``modules_to_save``.
+4. **a validation split is held out.** Without it the only curves available are the training
+   ones, and nothing distinguishes an alignment that generalises from one that memorises.
 """
 
 from __future__ import annotations
@@ -37,41 +32,40 @@ from clinical_triage.config import MODEL, SEED, TRAINING
 from clinical_triage.prompts import prepare_tokenizer
 from clinical_triage.training.schedule import warmup_steps
 from clinical_triage.training.tracking import track
-from clinical_triage.utils import chemin_pour_journal, get_logger
+from clinical_triage.utils import get_logger, path_for_log
 
 logger = get_logger("dpo")
 
 
-def _referencer_le_modele_de_base(output_dir: Path) -> None:
-    """Remplace le chemin local du modèle de référence par son identifiant public.
+def _reference_the_public_base(output_dir: Path) -> None:
+    """Replace the local path of the reference model by its public identifier.
 
-    L'adaptateur est entraîné au-dessus du modèle SFT fusionné, présent sur le
-    disque. La bibliothèque inscrit donc le **chemin absolu** de ce dossier dans
-    la configuration de l'adaptateur, ce qui rend les poids inchargeables sur
-    toute autre machine — y compris après publication sur le Hub. On y substitue
-    l'identifiant du dépôt public correspondant.
+    The adapter is trained above the merged SFT model, present on disk. The library therefore
+    writes the **absolute path** of that folder into the adapter configuration, which makes the
+    weights unloadable on any other machine — including after publication on the Hub. The
+    identifier of the corresponding public repository is substituted for it.
     """
     configuration = output_dir / "adapter_config.json"
     if not configuration.exists():
         return
-    contenu = json.loads(configuration.read_text(encoding="utf-8"))
-    contenu["base_model_name_or_path"] = MODEL.hub_sft_merged_model_id
+    content = json.loads(configuration.read_text(encoding="utf-8"))
+    content["base_model_name_or_path"] = MODEL.hub_sft_merged_model_id
     configuration.write_text(
-        json.dumps(contenu, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        json.dumps(content, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    logger.info("Modèle de référence de l'adaptateur : %s", contenu["base_model_name_or_path"])
+    logger.info("Adapter reference model: %s", content["base_model_name_or_path"])
 
 
 @dataclass
 class DPOResult:
-    """Résultat d'un alignement par préférences."""
+    """The result of one preference alignment run."""
 
     output_dir: str
     train_loss: float | None
     eval_reward_accuracy: float | None
     eval_reward_margin: float | None
-    duree_s: float
-    memoire_gpu_max_go: float
+    duration_s: float
+    peak_gpu_memory_gb: float
 
 
 def train_dpo(
@@ -88,10 +82,9 @@ def train_dpo(
     eval_ratio: float = 0.1,
     max_steps: int = -1,
 ) -> DPOResult:
-    """Lance l'alignement DPO au-dessus du modèle SFT fusionné."""
-    # Même contrainte qu'au SFT : Unsloth doit précéder `trl`. `PatchDPOTrainer`
-    # doit en plus être appelé avant l'import de `DPOTrainer`, sinon c'est la
-    # version non corrigée qui est chargée.
+    """Run the DPO alignment above the merged SFT model."""
+    # Same constraint as in SFT: Unsloth must come before `trl`. `PatchDPOTrainer` must also be
+    # called before importing `DPOTrainer`, otherwise the unpatched version is loaded.
     from unsloth import FastLanguageModel, PatchDPOTrainer
 
     PatchDPOTrainer()
@@ -102,13 +95,13 @@ def train_dpo(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    hyperparametres = {
-        "modele_de_reference": str(sft_merged_dir.name),
-        "moteur": "unsloth",
+    hyperparameters = {
+        "reference_model": str(sft_merged_dir.name),
+        "engine": "unsloth",
         "epochs": epochs,
         "batch_size": batch_size,
         "grad_accum": grad_accum,
-        "lot_effectif": batch_size * grad_accum,
+        "effective_batch": batch_size * grad_accum,
         "learning_rate": learning_rate,
         "beta": beta,
         "rpo_alpha": rpo_alpha,
@@ -116,13 +109,13 @@ def train_dpo(
         "lora_alpha": TRAINING.lora_alpha,
         "max_length": MODEL.max_seq_length,
         "max_steps": max_steps,
-        "graine": SEED,
+        "seed": SEED,
     }
 
-    with track(run_name, hyperparametres) as resume:
+    with track(run_name, hyperparameters) as summary:
         logger.info(
-            "Chargement du modèle SFT fusionné (base et référence) : %s",
-            chemin_pour_journal(sft_merged_dir),
+            "Loading the merged SFT model (base and reference): %s",
+            path_for_log(sft_merged_dir),
         )
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=str(sft_merged_dir),
@@ -145,11 +138,9 @@ def train_dpo(
 
         dataset = load_dataset("json", data_files={"train": str(train_path)})["train"]
         dataset = dataset.select_columns(["prompt", "chosen", "rejected"])
-        decoupage = dataset.train_test_split(test_size=eval_ratio, seed=SEED)
+        split = dataset.train_test_split(test_size=eval_ratio, seed=SEED)
         logger.info(
-            "Paires : %d pour l'entraînement, %d pour la validation.",
-            len(decoupage["train"]),
-            len(decoupage["test"]),
+            "Pairs: %d for training, %d for validation.", len(split["train"]), len(split["test"])
         )
 
         config = DPOConfig(
@@ -170,7 +161,7 @@ def train_dpo(
             bf16=True,
             max_length=MODEL.max_seq_length,
             warmup_steps=warmup_steps(
-                len(decoupage["train"]), batch_size * grad_accum, epochs, max_steps, 0.05
+                len(split["train"]), batch_size * grad_accum, epochs, max_steps, 0.05
             ),
             lr_scheduler_type="cosine",
             seed=SEED,
@@ -178,60 +169,57 @@ def train_dpo(
             report_to=[],
         )
 
-        # `ref_model=None` : la référence est le modèle courant, adaptateur
-        # désactivé — c'est-à-dire le modèle SFT fusionné.
+        # `ref_model=None`: the reference is the current model with its adapter disabled — that
+        # is, the merged SFT model.
         trainer = DPOTrainer(
             model=model,
             ref_model=None,
             args=config,
-            train_dataset=decoupage["train"],
-            eval_dataset=decoupage["test"],
+            train_dataset=split["train"],
+            eval_dataset=split["test"],
             processing_class=tokenizer,
         )
 
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
-        debut = time.perf_counter()
-        resultat = trainer.train()
-        duree = time.perf_counter() - debut
-        memoire = torch.cuda.max_memory_allocated() / 1024**3 if torch.cuda.is_available() else 0.0
+        started = time.perf_counter()
+        result = trainer.train()
+        duration = time.perf_counter() - started
+        memory = torch.cuda.max_memory_allocated() / 1024**3 if torch.cuda.is_available() else 0.0
 
         trainer.save_model(str(output_dir))
         tokenizer.save_pretrained(str(output_dir))
         trainer.save_state()
-        _referencer_le_modele_de_base(output_dir)
+        _reference_the_public_base(output_dir)
 
-        historique = trainer.state.log_history
-        derniere_eval = next(
-            (e for e in reversed(historique) if "eval_rewards/accuracies" in e), {}
-        )
-        precision = derniere_eval.get("eval_rewards/accuracies")
-        marge = derniere_eval.get("eval_rewards/margins")
+        history = trainer.state.log_history
+        last_eval = next((e for e in reversed(history) if "eval_rewards/accuracies" in e), {})
+        accuracy = last_eval.get("eval_rewards/accuracies")
+        margin = last_eval.get("eval_rewards/margins")
 
-        resume.historique = historique
-        resume.metriques = {
-            "train_loss": float(resultat.training_loss),
-            # Effectif du jeu de validation : sans lui, la part de paires bien
-            # ordonnées est une proportion dont personne ne peut estimer
-            # l'incertitude, et la figure la trace nue.
-            "paires_entrainement": len(decoupage["train"]),
-            "paires_validation": len(decoupage["test"]),
-            "eval_reward_accuracy": float(precision) if precision is not None else None,
-            "eval_reward_margin": float(marge) if marge is not None else None,
-            "duree_s": round(duree, 1),
-            "memoire_gpu_max_go": round(memoire, 2),
+        summary.history = history
+        summary.metrics = {
+            "train_loss": float(result.training_loss),
+            # Size of the validation split: without it, the share of correctly ordered pairs is a
+            # proportion whose uncertainty nobody can estimate, and a figure would draw it bare.
+            "training_pairs": len(split["train"]),
+            "validation_pairs": len(split["test"]),
+            "eval_reward_accuracy": float(accuracy) if accuracy is not None else None,
+            "eval_reward_margin": float(margin) if margin is not None else None,
+            "duration_s": round(duration, 1),
+            "peak_gpu_memory_gb": round(memory, 2),
         }
         logger.info(
-            "DPO terminé en %.0f s. Préférences correctement ordonnées sur le jeu de validation : %s",
-            duree,
-            f"{precision:.3f}" if precision is not None else "non mesuré",
+            "DPO finished in %.0f s. Preferences correctly ordered on the validation split: %s",
+            duration,
+            f"{accuracy:.3f}" if accuracy is not None else "not measured",
         )
 
         return DPOResult(
             output_dir=str(output_dir),
-            train_loss=float(resultat.training_loss),
-            eval_reward_accuracy=float(precision) if precision is not None else None,
-            eval_reward_margin=float(marge) if marge is not None else None,
-            duree_s=round(duree, 1),
-            memoire_gpu_max_go=round(memoire, 2),
+            train_loss=float(result.training_loss),
+            eval_reward_accuracy=float(accuracy) if accuracy is not None else None,
+            eval_reward_margin=float(margin) if margin is not None else None,
+            duration_s=round(duration, 1),
+            peak_gpu_memory_gb=round(memory, 2),
         )

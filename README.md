@@ -1,162 +1,254 @@
-# Agent IA de triage médical
+<h1 align="center">Emergency triage assistant</h1>
 
-[![CI](https://github.com/BenoitJT-GIRARD/clinical-triage/actions/workflows/ci.yml/badge.svg)](https://github.com/BenoitJT-GIRARD/clinical-triage/actions/workflows/ci.yml)
-[![Licence MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
+<p align="center">A small language model fine-tuned for emergency triage, that says when the explicit rule disagrees</p>
 
-Prototype d'un **agent d'aide au triage des urgences**. À partir d'une description de patient — motif, symptômes,
-antécédents, constantes relevées à l'accueil, en français ou en anglais — l'agent
-propose un **niveau de priorité**, le **justifie** et formule une **conduite à
-tenir**, en traçant chaque interaction pour les audits médicaux.
+<p align="center">
+  <img src="docs/badges/python.svg" alt="Python 3.12">
+  <img src="docs/badges/stack.svg" alt="Built with MLflow · PyTorch · scikit-learn">
+  <img src="docs/badges/licence.svg" alt="License: MIT">
+  <img src="docs/badges/coverage.svg" alt="coverage 79%">
+</p>
 
-Le modèle est un `Qwen3-1.7B-Base` spécialisé par **fine-tuning supervisé avec
-LoRA** — noyaux **Unsloth** — puis **aligné par préférences (DPO)**, servi par
-**vLLM** derrière une passerelle **FastAPI**, avec un pipeline **GitHub Actions**
-de bout en bout.
+**Project status** — finished, and stopped on purpose. The fine-tuning of the language model,
+its preference alignment and the triage evaluation all ran on one RTX 4060 Ti in August 2026;
+their artefacts are committed, and every number below names the file it comes from. No service is running behind this repository: the demonstration endpoint is a
+command anyone can run, not an address kept alive. What the figures and the documents rest on is
+`reports/run-evidence.json`, written by a run of `scripts/smoke.py` that redraws every published
+figure from the committed results and refuses to write anything if one of them comes out
+different. Pushes and pull requests still set the workflows off; the day this repository is
+archived, they fall back to a manual trigger.
 
-> **Aide à la décision, sous supervision humaine obligatoire.** L'agent ne pose
-> pas de diagnostic et ne remplace pas une évaluation clinique. Le catalogue de
-> présentations ayant servi à construire les données n'a pas été validé par un
-> médecin urgentiste : ce prototype ne doit pas être utilisé en situation réelle.
-> Devant tout signe vital engagé, appeler le 15 (SAMU).
+## The problem
 
-## Ce que fait l'agent
+A triage nurse decides, from a narrative and a couple of minutes, whether a patient is seen now,
+within a few hours, or later. One of the two ways of being wrong costs a waiting-room place. The
+other costs a patient, and it is the one this repository measures: **undertriage**, a patient
+sent down the queue who should have gone up it.
 
-| Point d'entrée | Rôle |
+A department can write a keyword rule in an afternoon, and that rule is the thing to beat. On the
+sixty hand-written cases of this evaluation it misses more than half the urgent ones — it reads
+words, and a chest pain described without the word "pain" is invisible to it. The question here
+is whether a **large language model** small enough to serve on one card, **fine-tuned** on the
+department's own vocabulary and then **preference-aligned**, does better than that rule; and
+whether "better" survives the harder comparison, against an ordinary classifier trained on the
+same pairs.
+
+Asking the question honestly cost more than answering it. No public medical corpus is labelled
+in triage levels, so the ground truth had to be built: a clinical catalogue written for the
+project, a generator that draws vignettes from it, and four public corpora filtered down to the
+cases that describe a patient. How, and what each source really yielded, is in
+[`data/README.md`](data/README.md) and [`docs/data-source.md`](docs/data-source.md).
+
+## What it does
+
+Three routes, and the third is the point.
+
+| Route | What it answers |
 |---|---|
-| `POST /questionnaire/next` | questionnaire adaptatif : les questions dépendent du motif, la collecte s'arrête dès qu'un signe vital apparaît |
-| `POST /triage` | niveau de priorité, justification, conduite à tenir, **et le niveau qu'aurait retenu la règle explicite** |
-| `GET /health` | état du service et du moteur d'inférence |
+| `POST /questionnaire/next` | the next question to ask, chosen from the complaint; collection stops as soon as a vital sign appears |
+| `POST /triage` | the triage level, why, what to do — **and what the explicit rule would have decided** |
+| `GET /health` | whether the gateway and its inference engine are answering |
 
-La réponse expose délibérément l'avis de la règle explicite et l'accord entre les
-deux : un agent d'aide à la décision doit rendre son désaccord visible.
+<!-- source: docs/images/MANIFEST.json -->
+![The published contract of the running service: three routes, the two that need a key marked with a padlock, and the schemas generated from the Pydantic models](docs/images/api-contract.png)
 
-## Ce que ce dépôt contient
+Hide that disagreement and the nurse reads a level without knowing that the rule, which never
+hallucinates, would have sent the patient elsewhere. So `rule_level`, `rule_reasons` and
+`agreement` travel in every reply, beside the model's own answer.
 
-```
-clinical-triage/
-├── src/clinical_triage/
-│   ├── config.py            # chemins, graines, hyperparamètres — source unique
-│   ├── prompts.py           # format de dialogue, partagé par toutes les étapes
-│   ├── inference.py         # chargement du modèle et génération
-│   ├── data/                # catalogue clinique, générateur, corpus, RGPD, jeux
-│   ├── training/            # fine-tuning supervisé, alignement DPO, suivi MLflow
-│   ├── evaluation/          # métriques, contrôles de sécurité, références, latence
-│   ├── serving/             # API, questionnaire adaptatif, journal d'audit
-│   └── reporting/           # figures
-├── scripts/                 # le pipeline, dans l'ordre (01 → 08)
-├── tests/                   # tests unitaires et tests de contrat de l'API
-├── notebooks/               # la démarche, commentée pas à pas
-├── deploy/                  # Dockerfile, compose, guide de déploiement
-├── data/processed/          # jeu d'évaluation, fiche d'audit, jeux reconstruits
-└── reports/                 # figures, résultats d'évaluation
-```
+### How it is built
 
-## Installation
+`Qwen3-1.7B-Base` is fine-tuned with LoRA on the project's bilingual set, on **PyTorch** under
+Unsloth's kernels, then aligned on preference pairs that each carry one deliberate defect. Every
+run writes to a local **MLflow** store, which is what makes the four LoRA settings comparable
+after the fact rather than from memory. The ordinary baseline is a **scikit-learn** linear
+classifier over n-grams, trained on the same pairs, and it is the demanding comparison.
 
-Prérequis : [uv](https://docs.astral.sh/uv/), Python 3.12. Un GPU NVIDIA est
-nécessaire pour l'entraînement — Unsloth en exige un dès l'import — et Docker pour
-servir le modèle avec vLLM.
+Serving splits in two. A **FastAPI** gateway behind **Uvicorn** validates, runs the
+questionnaire, applies the explicit rule, anonymises and logs; generation is delegated to vLLM
+over its OpenAI-compatible route. Request and reply shapes are **Pydantic** models, which is why
+the contract page above is generated rather than written. The gateway's **Docker** image carries
+neither weights nor torch, so a new model version ships without rebuilding it.
+
+Around all that: the environment is held to its lock file by **uv**, every push is read by
+**Ruff** and by **Bandit**, and **pytest** works in three tiers — the last of which starts the
+gateway in a process of its own and talks to it over the network. `datasets` keeps its cache in Arrow, and the **Parquet** reader is imported before
+torch in the suite: on Windows the other order ends the process with an access violation.
+
+## The result
+
+Sixty cases written by hand, forty of them urgent, none of them seen during training and none
+labelled by the rule that is compared against here.
+
+<!-- source: reports/evaluation_results.json -->
+| system | accuracy | undertriage | overtriage | format compliance |
+|---|---|---|---|---|
+| majority class | 0.333 | 0.500 | 0.333 | 1.000 |
+| always critical | 0.333 | 0.000 | 0.667 | 1.000 |
+| explicit rule | 0.617 | 0.550 | 0.017 | 1.000 |
+| linear classifier | 0.617 | 0.275 | 0.200 | 1.000 |
+| `Qwen3-1.7B-Base` | 0.083 | 0.700 | 0.267 | 0.367 |
+| SFT + LoRA | 0.683 | 0.300 | 0.117 | 1.000 |
+| SFT + DPO, merged | 0.700 | 0.275 | 0.117 | 1.000 |
+n = 60 cases, of which n = 40 are urgent: undertriage is counted on those forty alone,
+everything else on all sixty. What each column measures, and with which estimator, is in
+[`metrics.yaml`](metrics.yaml).
+
+<!-- source: reports/figures/MANIFEST.json -->
+![Accuracy, undertriage and overtriage for every system on the same hand-written cases, each proportion with its 95% interval, n = 60 cases of which 40 are urgent](reports/figures/systems_comparison.png)
+
+<!-- source: reports/evaluation_results.json -->
+Against the rule it would replace, the shipped model halves the failure that matters, on the
+n = 40 urgent cases of that set: **11** missed, against **22**. Read as a paired test on the
+same cases, which is the only honest way to read two systems that saw the same patients, that
+gap is **p = 0.019**.
+
+<!-- source: reports/evaluation_results.json -->
+Against the ordinary classifier it is a different story, and this is the finding the project
+publishes rather than buries: on the same n = 40 urgent cases both miss **11**, and the
+paired test gives **p = 1.0**. Four months of fine-tuning buy an answer a nurse can read and a format
+the information system can parse — not a better triage decision than n-grams and a logistic
+regression.
+
+### What the model restates, and what it transfers
+
+<!-- source: reports/figures/MANIFEST.json -->
+![Accuracy on the internal test split against the hand-written clinical set, for each system, with the difference and its interval on the right, n = 120 internal cases and 60 clinical cases](reports/figures/recall_versus_transfer.png)
+
+<!-- source: reports/evaluation_results.json -->
+On the internal test split, n = 120 cases, the model scores **1.000**. That number measures
+restatement, not triage: every presentation in that split was seen during training under
+another wording. The clinical set, n = 60, is the one that measures transfer, and the distance
+between the two, **0.300**, is the size of the illusion a single-set evaluation would have
+produced.
+
+### The alignment did not transfer
+
+<!-- source: reports/evaluation_results.json -->
+On an external preference set of n = 150 pairs, the aligned model orders **0.353** of them
+correctly, below chance, and the supervised model does the same. On the project's own pairs the
+alignment works; asked to prefer the better of two answers it never saw in training, it has
+learnt nothing transferable. Its benefit here is narrow and real, the format holds and the
+undertriage moves, and the repository says where it stops.
+
+## Why these numbers can be believed
+
+The evaluation set was written by hand, case by case, with the clinical reason for each label
+recorded beside it. It never passed through the triage rule, which is what makes the comparison
+against that rule meaningful: on the corpus part of the training data the rule recovers its own
+labels by construction, and measuring it there would measure the filter.
+
+Every proportion carries an interval: Wilson for accuracy, exact for undertriage, where the
+effectives are smallest. Every comparison between two systems is a paired test on the same cases,
+never an overlap of two intervals, because overlap proves nothing and on paired data it is
+systematically too cautious. The protocol, the estimators and what each of them can and cannot
+support are in [`docs/protocol.md`](docs/protocol.md).
+
+The figures are drawn from the committed result files by `scripts/build_figures.py`, and
+[`reports/figures/MANIFEST.json`](reports/figures/MANIFEST.json) records for each one its
+effective, its estimator and the digest of the image. Nothing in this README is typed by hand
+from a number read elsewhere.
+
+The last check that closed this work found five defects, and the useful half of that result is
+what it failed to find: no published figure moved. Four of the five were about how a measurement
+gets written down. A count that was missing came out as `0`, so a report regenerated from a fresh
+clone could read that the "0 distinct presentations it holds have all been seen in training". The
+share of preference pairs clipped by the context window was typed into the report by hand while
+the function that measures it only logged the value. The endpoint bench published
+`"tokens_per_s": 0.0` for a gateway that counts no token at all. And the global accuracy built its
+interval with Wilson directly, going around the single gate that picks the estimator from the
+effective: on 60 and 120 cases the two paths agree, on a three-case subgroup they would not.
+
+The fifth defect was the serious one. Four tests of the tracking module failed in the environment
+continuous integration installs, because `describe_environment()` imported torch with no guard.
+Those four tests are precisely the ones that exercise what the module promises, that tracking
+never brings down a run.
+
+Each correction was made where the defect lived. The count moved into `metadata.json`, which is
+versioned, and reads `None` when it is absent, so the sentence loses its number. The clipped share
+is written into the results file and read back from there. The throughput appears only when at
+least one measurement carries a token count, the condition the gateway overhead already had. The
+accuracy interval goes through `interval_for_proportion`. The environment description degrades to
+`unavailable` when a library is missing. After that, the suite passes whole without the training
+group, 0 failures, and the four tests exercise the path they describe.
+
+## Running it
+
+Requirements: [uv](https://docs.astral.sh/uv/) and Python 3.12. Training needs an NVIDIA GPU,
+which Unsloth demands at import, and serving the model needs Docker.
 
 ```bash
 uv sync
-uv run clinical-triage        # état du projet et de la configuration
-
-# Noyau Jupyter du projet, utilisé par les notebooks.
-uv run python -m ipykernel install --user --name clinical-triage --display-name "Python (clinical-triage)"
+uv run clinical-triage          # what is configured, and what is present
+uv run pytest                   # the three tiers
 ```
 
-Sur un poste dont le répertoire personnel est synchronisé dans le nuage, placer
-l'environnement et les caches ailleurs : les téléchargements se comptent en
-gigaoctets.
+The pipeline, in order. The first two steps need the Hub, the next four a GPU:
 
 ```bash
-export UV_PROJECT_ENVIRONMENT=~/.local/share/clinical-triage/venv
-export HF_HOME=~/.local/share/clinical-triage/hf
-# Le suivi d'expériences écrit dans une base SQLite : un client de
-# synchronisation qui la recopie pendant l'écriture interrompt la création
-# du schéma.
-export MLFLOW_TRACKING_URI="sqlite:///$HOME/.local/share/clinical-triage/mlflow.db"
+uv run python scripts/build_dataset.py
+uv run python scripts/tune_hyperparameters.py
+uv run python scripts/train_sft.py
+uv run python scripts/merge_adapter.py --adapter sft
+uv run python scripts/train_dpo.py
+uv run python scripts/merge_adapter.py --adapter dpo
+uv run python scripts/run_evaluation.py
+uv run python scripts/build_figures.py
 ```
 
-## Le pipeline, dans l'ordre
+The service, locally, with the engine beside it:
 
 ```bash
-uv run python scripts/01_build_dataset.py         # dataset bilingue et jeu d'évaluation
-uv run python scripts/02_tune_hyperparameters.py  # comparaison des configurations
-uv run python scripts/03_train_sft.py             # fine-tuning supervisé
-uv run python scripts/04_merge_and_export.py --adapter sft
-uv run python scripts/05_train_dpo.py             # alignement par préférences
-uv run python scripts/04_merge_and_export.py --adapter dpo
-uv run python scripts/06_evaluate.py              # évaluation comparée aux références
-docker compose -f deploy/docker-compose.yml up    # endpoint vLLM + passerelle
-uv run python scripts/07_benchmark_endpoint.py --api-key "$TRIAGE_API_KEY"  # latence et débit
-uv run python scripts/08_publish_hf.py --what tout
+export TRIAGE_API_KEY="a-key-of-your-choosing"
+docker compose -f infra/docker-compose.yml up --build
 ```
 
-Les notebooks `01` à `05` commentent ces mêmes étapes et se rejouent une fois le
-pipeline déroulé :
+Everything the gateway reads is in [`.env.example`](.env.example); how it is deployed, and what
+it costs, is in [`docs/operations.md`](docs/operations.md) and [`infra/README.md`](infra/README.md).
 
-```bash
-uv run jupyter nbconvert --to notebook --inplace --execute notebooks/*.ipynb
+<!-- source: docs/images/MANIFEST.json -->
+![A real call to POST /questionnaire/next on the running service: the chest theme is detected from the complaint and the next question asked is the one about radiating pain](docs/images/questionnaire-answer.png)
+
+## Structure
+
+```
+.
+├── src/clinical_triage/   # the package: config, prompts, data, training, evaluation, serving
+├── scripts/               # the pipeline, one entry point per step
+├── tests/                 # unit, integration, system
+├── notebooks/             # the laboratory notebook, step by step
+├── docs/                  # what is written for a reader, and the screenshots
+├── reports/               # the results, the figures and their manifest
+├── data/                  # what the programme consumes, and the data card
+├── infra/                 # image, compose, deployment, model cards
+└── var/                   # what a run produces, and nothing tracks
 ```
 
-Suivi des entraînements, en local et sans compte — sur la même base que celle
-écrite par les scripts :
+Where each decision lives, and what was rejected on the way, is in
+[`docs/architecture.md`](docs/architecture.md). What changed between versions is in
+[`CHANGELOG.md`](CHANGELOG.md).
 
-```bash
-uv run mlflow ui --backend-store-uri "$MLFLOW_TRACKING_URI"
-```
+## What this does not prove
 
-## Trois décisions qui expliquent le reste
+The clinical catalogue behind the training data was written for this project and **has not been
+validated by an emergency physician**. Nothing here should meet a patient.
 
-**Les données ne viennent pas d'où on croit.** Aucun des corpus imposés n'est
-annoté en niveaux de triage, et FrenchMedMCQA ne compte que 1 080 questions dont
-six décrivent un patient. La vérité terrain vient donc d'un **catalogue de
-présentations cliniques** rédigé pour le projet, dont un générateur tire des
-vignettes ; les corpus publics apportent des cas authentiques, filtrés et
-étiquetés avec une confiance explicitement moindre. Détail dans
-[`data/README.md`](data/README.md).
+Sixty cases is a small evaluation, and it shows: the interval on the shipped model's accuracy
+spans a quarter of the scale. The comparison against the ordinary classifier is not close to
+significant either way, so "the model is not better" is what the data supports, not "the model is
+worse". One seed, one run: nothing here estimates what another seed would have given.
 
-**L'évaluation ne mesure pas une règle contre elle-même.** Les chiffres publiés
-portent sur un jeu de **cas écrits à la main**, jamais vus à l'entraînement, dont
-près de la moitié sont des présentations atypiques. Le modèle y est comparé à
-quatre références : deux triviales, la règle explicite qu'il doit remplacer, et
-un classifieur classique entraîné sur les mêmes paires — celle-ci dit ce que le
-fine-tuning apporte par-dessus un apprentissage ordinaire.
+The alignment does not transfer beyond the pairs it was trained on, and the endpoint latency was
+measured on one machine, one run, against one engine. The triage levels are those of the French
+scale, and the questionnaire speaks French: the model is bilingual, the clinical vocabulary is
+not.
 
-**Un seul format de dialogue, et un jeton de fin que le modèle peut produire.**
-Le projet installe son propre gabarit ChatML sur le tokenizer et déclare
-`<|im_end|>` comme fin de séquence. Ça ne suffit pas : dans `Qwen3-1.7B-Base`, les
-vingt-cinq jetons ChatML sont un seul et même vecteur jamais entraîné — `im_start`
-et `im_end` ont une similarité cosinus de 1,000 — et la tête de sortie est liée aux
-embeddings, que LoRA gèle. Le modèle ne peut donc pas émettre le jeton de fin :
-0 % d'arrêts nets, mesuré. **La tête de sortie est donc entraînée avec les
-projections** ; les arrêts nets passent à 100 % et la réponse tombe de 220 à 97
-jetons. Détail et mesures dans `reports/training/`.
+## Licence and data
 
-## Qualité
+MIT — see [LICENSE](LICENSE).
 
-| Outil | Rôle | Commande |
-|---|---|---|
-| Ruff | style et format | `uv run ruff check .` · `uv run ruff format .` |
-| Pytest | tests et couverture | `uv run pytest` |
-| Bandit | analyse statique de sécurité | `uv run bandit -c pyproject.toml -r src/clinical_triage` |
-| pip-audit | vulnérabilités des dépendances | `uv run pip-audit` |
-| pre-commit | vérifications avant commit | `uv run pre-commit install` |
-
-L'intégration continue exécute tout cela, puis **construit l'image de service et
-vérifie qu'elle démarre, répond, et refuse un appel sans clé**.
-
-## Contenu
-
-| # | Élément | Où |
-|---|---|---|
-| 1 | Dataset médical bilingue | [`data/processed/`](data/processed) et le Hugging Face Hub |
-| 2 | Modèle spécialisé (SFT + LoRA, puis DPO) | Hugging Face Hub, cartes dans `reports/` |
-| 3 | Endpoint de démonstration | [`deploy/`](deploy/README.md) |
-| 4 | Pipeline CI/CD | [`.github/workflows/`](.github/workflows) |
-
-## Licence
-
-MIT — voir [LICENSE](LICENSE).
+The training set is built from four public medical corpora, each used under its own licence and
+none redistributed here in its original form; the clinical vignettes and the evaluation cases
+were written for this project. No real patient data is used. The masking, and the residue a
+separate check still finds after it, are measured and published in the
+[data card](data/README.md#gdpr-what-is-masked-and-what-is-checked).

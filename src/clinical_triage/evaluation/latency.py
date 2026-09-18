@@ -1,29 +1,26 @@
-"""Banc de performance de l'endpoint de triage.
+"""Performance bench of the triage endpoint.
 
-L'évaluation clinique mesure la qualité des décisions ; ce module mesure ce que
-coûte une décision. Les deux chiffres qui comptent pour un service d'urgences ne
-sont pas les mêmes :
+The clinical evaluation measures decision quality; this module measures what a decision costs.
+The two numbers that matter to an emergency department are not the same:
 
-- la **latence perçue**, requête par requête, sans concurrence : c'est le temps
-  que l'infirmière d'accueil attend devant son écran ;
-- le **débit sous charge**, plusieurs requêtes en parallèle : c'est ce qui dit
-  combien de postes d'accueil un serveur peut alimenter aux heures de pointe.
+- **perceived latency**, request by request, with no concurrency: the time the triage nurse
+  waits in front of the screen;
+- **throughput under load**, several requests in parallel: what says how many reception desks
+  one server can feed at peak.
 
-Ces deux chiffres se mesurent sur **la passerelle**, `POST /triage`, parce que
-c'est elle que l'infirmière appelle. Les mesurer sur le moteur vLLM seul
-laisserait dehors tout ce que la passerelle fait à chaque requête : la règle
-explicite, puis l'anonymisation Presidio des deux textes avant l'écriture au
-journal d'audit, le tout de façon synchrone. Le critère de passage en production
-porte sur ce que le service rend, pas sur ce que le moteur produit.
+Both are measured on the **gateway**, ``POST /triage``, because that is what the nurse calls.
+Measuring them on the vLLM engine alone would leave out everything the gateway does on every
+request: the explicit rule, then the Presidio anonymisation of both texts before writing to the
+audit log, all of it synchronously. The go-live criterion covers what the service delivers, not
+what the engine produces.
 
-Le coût du moteur seul reste mesurable (`cible="moteur"`), et le rapport le
-présente comme ce qu'il est : une décomposition. La passerelle donne d'ailleurs
-sa propre durée d'inférence dans chaque réponse, ce qui isole son surcoût sans
-avoir à relancer quoi que ce soit.
+The cost of the engine alone stays measurable (``target="engine"``), and the published protocol
+presents it for what it is: a decomposition. The gateway also reports its own inference duration
+in every reply, which isolates its overhead without re-running anything.
 
-Dans les deux cas, on mesure l'endpoint réel servi par vLLM, jamais le moteur de
-développement : un chiffre obtenu avec `transformers` en génération séquentielle
-n'a rien à voir, vLLM regroupant les requêtes et réutilisant le cache d'attention.
+In both cases the real endpoint served by vLLM is measured, never the development engine: a
+figure obtained with ``transformers`` in sequential generation has nothing to do with it, vLLM
+batching requests and reusing the attention cache.
 """
 
 from __future__ import annotations
@@ -36,137 +33,139 @@ from clinical_triage.evaluation.metrics import latency_summary
 from clinical_triage.prompts import completion_payload, extract_level
 from clinical_triage.utils import get_logger
 
-logger = get_logger("latence")
+logger = get_logger("latency")
 
 
 @dataclass
 class Measure:
-    """Une requête chronométrée.
+    """One timed request.
 
-    `inference_ms` n'est renseigné que pour la passerelle : elle publie la durée
-    de sa propre génération, et la différence avec la latence totale donne son
-    surcoût — règle explicite, anonymisation, écriture au journal.
+    ``inference_ms`` is filled in for the gateway only: it publishes the duration of its own
+    generation, and the difference with the total latency gives its overhead — explicit rule,
+    anonymisation, writing to the log.
     """
 
-    latence_ms: float
+    latency_ms: float
     tokens: int
-    niveau: str | None
+    level: str | None
     inference_ms: float | None = None
 
 
-def _appel_moteur(client, url: str, symptomes: str, modele: str) -> Measure:
-    """Interroge le moteur vLLM directement et chronomètre la réponse complète."""
-    debut = time.perf_counter()
-    reponse = client.post(f"{url}/v1/completions", json=completion_payload(symptomes, modele))
-    reponse.raise_for_status()
-    latence = (time.perf_counter() - debut) * 1000
-    corps = reponse.json()
-    texte = corps["choices"][0]["text"]
-    tokens = corps.get("usage", {}).get("completion_tokens", 0)
-    return Measure(latence_ms=latence, tokens=tokens, niveau=extract_level(texte))
+def _call_engine(client, url: str, symptoms: str, model: str) -> Measure:
+    """Query the vLLM engine directly and time the complete answer."""
+    started = time.perf_counter()
+    response = client.post(f"{url}/v1/completions", json=completion_payload(symptoms, model))
+    response.raise_for_status()
+    latency = (time.perf_counter() - started) * 1000
+    body = response.json()
+    text = body["choices"][0]["text"]
+    tokens = body.get("usage", {}).get("completion_tokens", 0)
+    return Measure(latency_ms=latency, tokens=tokens, level=extract_level(text))
 
 
-def _appel_passerelle(client, url: str, symptomes: str, modele: str) -> Measure:
-    """Interroge `POST /triage` et chronomètre la réponse complète.
+def _call_gateway(client, url: str, symptoms: str, model: str) -> Measure:
+    """Query ``POST /triage`` and time the complete answer.
 
-    `modele` n'est pas utilisé : la passerelle sert le modèle qu'elle a chargé.
-    Le paramètre est là pour que les deux fonctions d'appel aient la même
-    signature, et que `benchmark` puisse choisir l'une ou l'autre sans détour.
+    ``model`` is unused: the gateway serves the model it loaded. The parameter is there so that
+    both call functions share a signature, and ``benchmark`` can pick either without detours.
     """
-    debut = time.perf_counter()
-    reponse = client.post(f"{url}/triage", json={"symptoms": symptomes})
-    if reponse.status_code == 429:
-        # Le quota est une politique de service, pas une limite du moteur : une
-        # mesure de débit le heurte nécessairement, puisqu'elle tient une seule
-        # clé. Le message brut du client HTTP ne dit pas quoi en faire.
+    started = time.perf_counter()
+    response = client.post(f"{url}/triage", json={"symptoms": symptoms})
+    if response.status_code == 429:
+        # The quota is a service policy, not an engine limit: a throughput measurement
+        # necessarily hits it, since it holds a single key. The raw HTTP client message does not
+        # say what to do about it.
         raise SystemExit(
-            "La passerelle applique son quota par appelant (429). Le banc n'utilise "
-            "qu'une clé : relevez TRIAGE_RATE_LIMIT le temps de la mesure, ou baissez "
-            "--concurrences et --repetitions."
+            "The gateway is applying its per-caller quota (429). The bench uses a single key: "
+            "raise TRIAGE_RATE_LIMIT for the duration of the measurement, or lower "
+            "--concurrency and --repetitions."
         )
-    reponse.raise_for_status()
-    latence = (time.perf_counter() - debut) * 1000
-    corps = reponse.json()
+    response.raise_for_status()
+    latency = (time.perf_counter() - started) * 1000
+    body = response.json()
     return Measure(
-        latence_ms=latence,
-        # La passerelle ne compte pas les jetons produits : ce chiffre-là se lit
-        # sur le moteur, et la mesure « moteur » est là pour ça.
+        latency_ms=latency,
+        # The gateway does not count the tokens produced: that figure is read on the engine,
+        # and the "engine" measurement is there for it.
         tokens=0,
-        niveau=corps.get("level"),
-        inference_ms=corps.get("latency_ms"),
+        level=body.get("level"),
+        inference_ms=body.get("latency_ms"),
     )
 
 
-APPELS = {"passerelle": _appel_passerelle, "moteur": _appel_moteur}
+CALLS = {"gateway": _call_gateway, "engine": _call_engine}
 
 
 def benchmark(
     url: str,
-    modele: str,
-    cas: list[str],
+    model: str,
+    cases: list[str],
     api_key: str | None = None,
-    concurrences: tuple[int, ...] = (1, 4, 8),
+    concurrencies: tuple[int, ...] = (1, 4, 8),
     repetitions: int = 2,
-    cible: str = "passerelle",
+    target: str = "gateway",
 ) -> dict:
-    """Mesure latence et débit d'un endpoint à plusieurs niveaux de concurrence.
+    """Measure latency and throughput of an endpoint at several concurrency levels.
 
-    `cible` vaut « passerelle » — `POST /triage`, ce que le service rend, et ce
-    sur quoi porte le critère de passage en production — ou « moteur », qui
-    interroge vLLM directement et donne le coût de la seule génération.
+    ``target`` is "gateway" — ``POST /triage``, what the service delivers, and what the go-live
+    criterion covers — or "engine", which queries vLLM directly and gives the cost of generation
+    alone.
     """
     import httpx
 
-    if cible not in APPELS:
-        raise ValueError(f"Cible de mesure inconnue : {cible!r} (attendu : {set(APPELS)})")
-    appeler = APPELS[cible]
+    if target not in CALLS:
+        raise ValueError(f"Unknown measurement target: {target!r} (expected: {set(CALLS)})")
+    call = CALLS[target]
 
-    # Les deux cibles n'ont pas le même schéma d'authentification : la passerelle
-    # attend sa propre clé dans `X-API-Key`, le moteur celle que vLLM reçoit par
-    # `--api-key` et vérifie comme un jeton porteur.
+    # The two targets do not share an authentication scheme: the gateway expects its own key in
+    # ``X-API-Key``, the engine the one vLLM receives through ``--api-key`` and checks as a
+    # bearer token.
     if not api_key:
-        entetes: dict[str, str] = {}
-    elif cible == "passerelle":
-        entetes = {"X-API-Key": api_key}
+        headers: dict[str, str] = {}
+    elif target == "gateway":
+        headers = {"X-API-Key": api_key}
     else:
-        entetes = {"Authorization": f"Bearer {api_key}"}
-    requetes = [cas[i % len(cas)] for i in range(len(cas) * repetitions)]
-    resultats: dict[str, dict] = {}
+        headers = {"Authorization": f"Bearer {api_key}"}
+    requests = [cases[i % len(cases)] for i in range(len(cases) * repetitions)]
+    results: dict[str, dict] = {}
 
-    with httpx.Client(timeout=120, headers=entetes) as client:
-        # Chauffe : la première requête paie le chargement des poids en mémoire GPU.
-        appeler(client, url, cas[0], modele)
+    with httpx.Client(timeout=120, headers=headers) as client:
+        # Warm-up: the first request pays for loading the weights into GPU memory.
+        call(client, url, cases[0], model)
 
-        for concurrence in concurrences:
-            debut = time.perf_counter()
-            if concurrence == 1:
-                mesures = [appeler(client, url, cas_patient, modele) for cas_patient in requetes]
+        for concurrency in concurrencies:
+            started = time.perf_counter()
+            if concurrency == 1:
+                measures = [call(client, url, case, model) for case in requests]
             else:
-                with ThreadPoolExecutor(max_workers=concurrence) as pool:
-                    mesures = list(pool.map(lambda c: appeler(client, url, c, modele), requetes))
-            duree_totale = time.perf_counter() - debut
+                with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                    measures = list(pool.map(lambda c: call(client, url, c, model), requests))
+            total_duration = time.perf_counter() - started
 
-            resume = latency_summary([m.latence_ms for m in mesures])
-            resume["requetes"] = len(mesures)
-            resume["debit_req_par_s"] = round(len(mesures) / duree_totale, 2)
-            resume["tokens_par_s"] = round(sum(m.tokens for m in mesures) / duree_totale, 1)
-            resume["part_niveau_extrait"] = round(
-                sum(m.niveau is not None for m in mesures) / len(mesures), 3
+            summary = latency_summary([m.latency_ms for m in measures])
+            summary["requests"] = len(measures)
+            summary["requests_per_s"] = round(len(measures) / total_duration, 2)
+            counted = sum(m.tokens for m in measures)
+            if counted:
+                # Written only when tokens are actually counted. The gateway returns none, and
+                # a throughput of 0.0 there would announce a null rate where the quantity is
+                # simply not measured.
+                summary["tokens_per_s"] = round(counted / total_duration, 1)
+            summary["level_extracted_share"] = round(
+                sum(m.level is not None for m in measures) / len(measures), 3
             )
-            surcouts = [
-                m.latence_ms - m.inference_ms for m in mesures if m.inference_ms is not None
-            ]
-            if surcouts:
-                # Ce que la passerelle ajoute à la génération : règle explicite,
-                # anonymisation des deux textes, écriture au journal d'audit.
-                resume["surcout_passerelle_ms"] = latency_summary(surcouts)["p50_ms"]
-            resultats[f"concurrence_{concurrence}"] = resume
+            overheads = [m.latency_ms - m.inference_ms for m in measures if m.inference_ms]
+            if overheads:
+                # What the gateway adds to generation: explicit rule, anonymisation of both
+                # texts, writing to the audit log.
+                summary["gateway_overhead_ms"] = latency_summary(overheads)["p50_ms"]
+            results[f"concurrency_{concurrency}"] = summary
             logger.info(
-                "  concurrence %d : p50 %.0f ms, p95 %.0f ms, %.2f req/s",
-                concurrence,
-                resume["p50_ms"],
-                resume["p95_ms"],
-                resume["debit_req_par_s"],
+                "  concurrency %d: p50 %.0f ms, p95 %.0f ms, %.2f req/s",
+                concurrency,
+                summary["p50_ms"],
+                summary["p95_ms"],
+                summary["requests_per_s"],
             )
 
-    return resultats
+    return results
