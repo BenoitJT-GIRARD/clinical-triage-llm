@@ -14,7 +14,7 @@
       "trainable_parameters": 346030080,
       "train_loss": 0.42945626616477967,
       "eval_loss": 0.07821135967969894,
-      "triage_accuracy": 0.833,
+      "selection_accuracy": 0.833,
       "clean_stop_share": 1.0,
       "duration_s": 426.6,
       "peak_gpu_memory_gb": 13.09
@@ -27,7 +27,7 @@
       "trainable_parameters": 328597504,
       "train_loss": 0.5085491720835368,
       "eval_loss": 0.1491304636001587,
-      "triage_accuracy": 0.8,
+      "selection_accuracy": 0.8,
       "clean_stop_share": 1.0,
       "duration_s": 422.2,
       "peak_gpu_memory_gb": 12.36
@@ -40,7 +40,7 @@
       "trainable_parameters": 319881216,
       "train_loss": 0.6009943437576294,
       "eval_loss": 0.253621906042099,
-      "triage_accuracy": 0.783,
+      "selection_accuracy": 0.783,
       "clean_stop_share": 1.0,
       "duration_s": 562.3,
       "peak_gpu_memory_gb": 7.13
@@ -53,7 +53,7 @@
       "trainable_parameters": 328597504,
       "train_loss": 0.7836870988210042,
       "eval_loss": 0.4552520215511322,
-      "triage_accuracy": 0.733,
+      "selection_accuracy": 0.733,
       "clean_stop_share": 0.983,
       "duration_s": 424.4,
       "peak_gpu_memory_gb": 13.55

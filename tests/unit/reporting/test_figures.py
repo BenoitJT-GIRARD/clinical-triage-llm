@@ -115,8 +115,8 @@ def test_the_hyperparameter_tuning_is_drawn(tmp_path):
         "kept": "r16_lr2e-4",
         "protocol": {"evaluated_cases": 60},
         "variants": [
-            {"variant": "r16_lr2e-4", "triage_accuracy": 0.82, "eval_loss": 0.41},
-            {"variant": "r8_lr2e-4", "triage_accuracy": 0.78, "eval_loss": 0.45},
+            {"variant": "r16_lr2e-4", "selection_accuracy": 0.82, "eval_loss": 0.41},
+            {"variant": "r8_lr2e-4", "selection_accuracy": 0.78, "eval_loss": 0.45},
         ],
     }
     path = figures.hyperparameter_tuning(comparison, tmp_path / "tuning.png")
@@ -135,8 +135,8 @@ def test_a_validation_loss_that_was_not_measured_is_not_drawn_as_a_zero(tmp_path
         "kept": "r16_lr2e-4",
         "protocol": {"evaluated_cases": 60},
         "variants": [
-            {"variant": "r16_lr2e-4", "triage_accuracy": 0.82, "eval_loss": 0.41},
-            {"variant": "r32_lr2e-4", "triage_accuracy": 0.79, "eval_loss": None},
+            {"variant": "r16_lr2e-4", "selection_accuracy": 0.82, "eval_loss": 0.41},
+            {"variant": "r32_lr2e-4", "selection_accuracy": 0.79, "eval_loss": None},
         ],
     }
     figures.hyperparameter_tuning(comparison, tmp_path / "tuning.png")

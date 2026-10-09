@@ -200,13 +200,14 @@ def hyperparameter_tuning(comparison: dict, destination: Path) -> Path:
 
     Accuracy is a proportion on a few dozen cases, so it carries its interval; the validation
     loss is a single number per run and carries none. Two panels, and no second vertical
-    axis: quantities of different natures do not share a scale.
+    axis: quantities of different natures do not share a scale. The accuracy is a selection
+    score — measured on the cases the setting is chosen on — and the title says so.
     """
 
     variants = list(comparison["variants"])
     cases = int(comparison["protocol"]["evaluated_cases"])
     names = [v["variant"].replace("_", "\n") for v in variants]
-    accuracy = [v["triage_accuracy"] for v in variants]
+    accuracy = [v["selection_accuracy"] for v in variants]
     intervals = [interval_for_proportion(round(v * cases), cases) for v in accuracy]
     losses = [v["eval_loss"] for v in variants]
     kept = comparison["kept"]
@@ -233,7 +234,7 @@ def hyperparameter_tuning(comparison: dict, destination: Path) -> Path:
         accuracy,
         tops=[i[1] if i else a for a, i in zip(accuracy, intervals, strict=True)],
     )
-    left.set_title("Triage accuracy on the validation split")
+    left.set_title("Selection accuracy on the validation split")
     left.set_ylabel("accuracy (share of cases)")
     left.set_xlabel("LoRA setting")
     left.set_xticks(range(len(names)))
