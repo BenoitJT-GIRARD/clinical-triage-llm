@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import pytest
 
+from clinical_triage.data import corpus_sources
 from clinical_triage.data.corpus_sources import (
     InterruptedRead,
     _cap_reached,
     _rows,
+    load_frenchmedmcqa,
 )
 
 # --- An interrupted read must not pass for a complete one ---
@@ -75,3 +77,24 @@ def test_a_deliberate_stop_is_not_a_cut():
 )
 def test_the_read_cap(already_read: int, limit: int, expected: bool):
     assert _cap_reached([None] * already_read, limit) is expected
+
+
+# --- FrenchMedMCQA: the right answer is an index counted from zero ---
+
+
+@pytest.mark.parametrize(
+    ("index", "expected"), [(0, "option a"), (4, "option e"), (5, ""), (None, "")]
+)
+def test_the_frenchmedmcqa_answer_index_counts_from_zero(monkeypatch, index, expected):
+    """In the mirror used, `correct_answers` is 0 for a and 4 for e.
+
+    Read as counting from one, every answer was shifted by one option and the first option, at
+    index zero, was never read. Checked against the authors' archive, which writes letters.
+    """
+    row = {"question": "Quel est le mécanisme ?", "correct_answers": index}
+    row.update({f"answer_{letter}": f"option {letter}" for letter in "abcde"})
+    monkeypatch.setattr(corpus_sources, "_stream_all_splits", lambda _repo: iter([row]))
+
+    (entry,) = load_frenchmedmcqa()
+
+    assert entry.answer == expected

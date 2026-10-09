@@ -208,9 +208,9 @@ def load_medquad(limit: int = 0) -> list[CorpusEntry]:
 def load_frenchmedmcqa(limit: int = 0) -> list[CorpusEntry]:
     """FrenchMedMCQA: French multiple-choice pharmacy questions.
 
-    All three splits are read: 595 questions in training, 164 in validation, 321 in test.
-    Stopping at the first would leave out 485 questions of the only other French-language
-    source corpus.
+    The mirror used keeps only the single-answer questions: 1,080 of the corpus's 3,105. All
+    three splits are read — 595 questions in training, 164 in validation, 321 in test — since
+    stopping at the first would leave out 485 questions of the only other French-language corpus.
     """
     # A generator: an unavailable source produces no row there, and the loop below terminates on
     # its own, returning an empty list.
@@ -218,20 +218,23 @@ def load_frenchmedmcqa(limit: int = 0) -> list[CorpusEntry]:
         _stream_all_splits(DATA.corpora["frenchmedmcqa"]),
         DATA.corpora["frenchmedmcqa"],
     )
-    # `correct_answers` encodes the right options, either as letters or as digits.
-    digit_to_letter = {"1": "a", "2": "b", "3": "c", "4": "d", "5": "e"}
+    # `correct_answers` is the index of the right option, counted from zero: 0 for a, 4 for e.
+    # Checked against the authors' archive, which writes the answers as letters.
+    options = ("a", "b", "c", "d", "e")
     entries: list[CorpusEntry] = []
     for row in dataset:
         question = _clean(row.get("question"))
         if not question:
             continue
-        raw = str(row.get("correct_answers") or "").lower()
-        letters = [digit_to_letter.get(c, c) for c in raw if c.isalnum()]
-        correct = [_clean(row.get(f"answer_{letter}")) for letter in letters]
+        try:
+            index = int(row.get("correct_answers"))
+        except (TypeError, ValueError):
+            index = -1
+        correct = _clean(row.get(f"answer_{options[index]}")) if 0 <= index < len(options) else ""
         entries.append(
             CorpusEntry(
                 text=question,
-                answer="; ".join(a for a in correct if a),
+                answer=correct,
                 lang="fr",
                 source="frenchmedmcqa",
                 topic="",
