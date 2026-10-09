@@ -57,7 +57,7 @@ dependencies = [
 clinical-triage = "clinical_triage.cli:main"
 
 [project.urls]
-Repository = "https://github.com/BenoitJT-GIRARD/clinical-triage"
+Repository = "https://github.com/BenoitJT-GIRARD/clinical-triage-llm"
 
 [build-system]
 requires = ["uv_build>=0.9,<0.12"]
