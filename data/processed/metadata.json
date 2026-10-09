@@ -81,8 +81,8 @@
   },
   "build": {
     "seed": 42,
-    "git_revision": "ebf4ba1",
-    "date_utc": "2026-08-25",
+    "git_revision": "130354d",
+    "date_utc": "2026-10-09",
     "command": "uv run python scripts/build_dataset.py"
   },
   "statistics": {
@@ -102,26 +102,26 @@
       "fr": 2500
     },
     "by_source": {
-      "clinical_vignette": 3284,
-      "medmcqa": 1283,
-      "mediqal": 313,
-      "medquad": 120
+      "clinical_vignette": 3275,
+      "medmcqa": 1281,
+      "mediqal": 314,
+      "medquad": 130
     },
     "by_confidence": {
-      "high": 3284,
-      "medium": 1716
+      "high": 3275,
+      "medium": 1725
     },
-    "share_with_vitals": 0.493,
+    "share_with_vitals": 0.492,
     "dpo_by_strategy": {
-      "unsafe_recommendation": 676,
-      "asserted_diagnosis": 627,
-      "answered_in_english": 598,
-      "undertriage": 499
+      "unsafe_recommendation": 664,
+      "asserted_diagnosis": 647,
+      "answered_in_english": 597,
+      "undertriage": 492
     },
     "dpo_length_balance": {
-      "chosen_mean_chars": 354.5,
-      "rejected_mean_chars": 345.2,
-      "chosen_longer_share": 0.437
+      "chosen_mean_chars": 355.1,
+      "rejected_mean_chars": 345.6,
+      "chosen_longer_share": 0.446
     },
     "evaluation_by_level": {
       "URGENCE_VITALE": 20,
@@ -139,9 +139,9 @@
       "discordant_vitals": 3
     },
     "description_lengths": {
-      "token_budget": 324,
+      "token_budget": 331,
       "median_tokens": 68,
-      "max_tokens": 292,
+      "max_tokens": 312,
       "char_cap": 800
     },
     "answer_lengths": {
@@ -153,19 +153,19 @@
     "corpus_yield": {
       "mediqal": {
         "entries_read": 3075,
-        "cases_kept": 313,
+        "cases_kept": 314,
         "funnel": {
           "entries": 3075,
-          "no_patient_presentation": 1407,
-          "outside_length_bounds": 514,
-          "no_identified_sign": 792,
+          "no_patient_presentation": 1408,
+          "outside_length_bounds": 513,
+          "no_identified_sign": 795,
           "duplicates": 0,
-          "kept": 362
+          "kept": 359
         }
       },
       "medquad": {
         "entries_read": 16407,
-        "cases_kept": 120,
+        "cases_kept": 130,
         "funnel": {
           "entries": 16407,
           "no_patient_presentation": 15909,
@@ -177,14 +177,14 @@
       },
       "medmcqa": {
         "entries_read": 182822,
-        "cases_kept": 1283,
+        "cases_kept": 1281,
         "funnel": {
           "entries": 182822,
-          "no_patient_presentation": 171251,
-          "outside_length_bounds": 372,
-          "no_identified_sign": 9038,
-          "duplicates": 71,
-          "kept": 2090
+          "no_patient_presentation": 171590,
+          "outside_length_bounds": 323,
+          "no_identified_sign": 8798,
+          "duplicates": 83,
+          "kept": 2028
         }
       },
       "frenchmedmcqa": {
@@ -203,48 +203,81 @@
   },
   "diagnostics": {
     "completions": {
-      "total": 305,
+      "total": 314,
       "by_origin": {
         "corpus": {
-          "examples": 1716,
-          "distinct_answers": 235,
-          "mean_repetition": 7.3
+          "examples": 1725,
+          "distinct_answers": 244,
+          "mean_repetition": 7.1
         },
         "vignettes": {
-          "examples": 3284,
+          "examples": 3275,
           "distinct_answers": 70,
-          "mean_repetition": 46.9
+          "mean_repetition": 46.8
         }
       }
     },
     "separability": {
-      "vignettes": 3284,
+      "vignettes": 3275,
       "presentations": 70,
-      "random_split": 0.9884,
-      "split_by_presentation": 0.7734,
-      "gap": 0.215
+      "random_split": 0.9856,
+      "split_by_presentation": 0.79,
+      "gap": 0.1957
     },
     "metadata_leakage": {
-      "vignettes": 3284,
+      "vignettes": 3275,
       "cells": 9,
-      "majority_vote_accuracy": 0.8956,
-      "share_in_homogeneous_cell": 0.6337
+      "majority_vote_accuracy": 0.8953,
+      "share_in_homogeneous_cell": 0.6324
+    },
+    "exam_residue": {
+      "mediqal": {
+        "n": 314,
+        "with_residue": 0,
+        "share": 0.0
+      },
+      "medquad": {
+        "n": 130,
+        "with_residue": 3,
+        "share": 0.0231
+      },
+      "medmcqa": {
+        "n": 1281,
+        "with_residue": 1,
+        "share": 0.0008
+      },
+      "frenchmedmcqa": {
+        "n": 0,
+        "with_residue": 0,
+        "share": 0.0
+      }
     }
   },
   "gdpr": {
     "principle": "Minimisation: no real patient data. The vignettes are synthetic, and the public corpora are research sets with no identifying data.",
-    "masking": "Presidio (French and English spaCy), limited to genuinely identifying entities (PERSON, PHONE_NUMBER, EMAIL_ADDRESS, CREDIT_CARD, IBAN_CODE, IP_ADDRESS, URL, US_SSN, FR_NIR, FR_TELEPHONE, DATE_NAISSANCE, DATE_NAISSANCE_ISO).",
+    "masking": "Presidio (French and English spaCy), limited to genuinely identifying entities (PERSON, PHONE_NUMBER, EMAIL_ADDRESS, CREDIT_CARD, IBAN_CODE, IP_ADDRESS, URL, US_SSN, FR_NIR, FR_TELEPHONE, INTL_TELEPHONE, DATE_NAISSANCE, DATE_NAISSANCE_ISO).",
     "entities_left_out": {
       "DATE_TIME": "masks onset delays, which are a triage criterion",
       "LOCATION": "masks the names of organs and of hospital departments",
       "NRP": "masks the names of conditions and of molecules",
       "MEDICAL_LICENSE": "fires on bibliographic references in the corpora"
     },
-    "entities_masked": 246,
+    "entities_masked": 225,
     "independent_check": {
       "title followed by a name": 3
     },
     "anonymisation_applied": true,
+    "default_setting_damage": {
+      "n": 400,
+      "damaged": 319,
+      "share": 0.7975,
+      "detections": {
+        "DATE_TIME": 453,
+        "LOCATION": 106,
+        "NRP": 3
+      },
+      "blood_pressure_read_as_a_place": 1
+    },
     "train_evaluation_overlap": {
       "test∩train": 0,
       "test∩validation": 0,

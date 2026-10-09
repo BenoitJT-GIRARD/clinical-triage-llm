@@ -213,11 +213,11 @@ Measured yield of each corpus, after filtering for the cases genuinely usable fo
 <!-- yield:start — table written by scripts/build_dataset.py, do not edit by hand -->
 | Corpus | Entries read | No patient described | Outside length bounds | No sign identified | Duplicates | Cases extracted | Cases delivered | Yield |
 |---|---|---|---|---|---|---|---|---|
-| MediQAl | 3,075 | 1,407 | 514 | 792 | 0 | 362 | **313** | **313 / 3,075** |
-| MedQuAD | 16,407 | 15,909 | 0 | 315 | 0 | 183 | 120 | 120 / 16,407 |
-| MedMCQA | 182,822 | 171,251 | 372 | 9,038 | 71 | 2,090 | 1,283 | 1,283 / 182,822 |
+| MediQAl | 3,075 | 1,408 | 513 | 795 | 0 | 359 | **314** | **314 / 3,075** |
+| MedQuAD | 16,407 | 15,909 | 0 | 315 | 0 | 183 | 130 | 130 / 16,407 |
+| MedMCQA | 182,822 | 171,590 | 323 | 8,798 | 83 | 2,028 | 1,281 | 1,281 / 182,822 |
 | FrenchMedMCQA | 1,080 | 1,074 | 0 | 6 | 0 | 0 | **0** | **0 / 1,080** |
-n = 203,384 entries read across the four corpora, 1,716 cases delivered.
+n = 203,384 entries read across the four corpora, 1,725 cases delivered.
 <!-- yield:end -->
 
 > **How to read it.** One row per corpus, read left to right as a funnel. `Entries read` is
