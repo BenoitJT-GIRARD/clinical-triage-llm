@@ -190,8 +190,13 @@ MEASURES = {
     "spo2": re.compile(r"\b(?:SpO2|SaO2|saturation|sats?)\b\D{0,12}?(\d{2,3})", re.IGNORECASE),
     "pain_score": re.compile(r"\b(?:douleur|pain|EVA)\b\D{0,12}?(\d{1,2})\s*/\s*10", re.IGNORECASE),
 }
+# "HTA" and "hypertension" precede a reading as often as "TA" does: "HTA à 220/120" went unread
+# because "TA" sat inside a word, and the case was labelled moderate. "PA" and "PAS" are read in
+# capitals only: in lower case, "pas" is the French negation.
 BLOOD_PRESSURE = re.compile(
-    r"\b(?:TA|BP|tension|blood pressure)\b\D{0,12}?(\d{2,3})\s*/\s*(\d{2,3})", re.IGNORECASE
+    r"\b(?:H?TA|(?-i:PAS?)|BP|(?:hyper)?tension|pression artérielle|(?:blood|arterial) pressure)\b"
+    r"\D{0,12}?(\d{2,3})\s*/\s*(\d{2,3})",
+    re.IGNORECASE,
 )
 # Two forms, and the distinction between them is deliberate:
 #

@@ -255,3 +255,28 @@ def test_a_patient_old_enough_to_self_report_carries_a_pain_score():
     generator = random.Random(11)
     scores = [generate("critical", 40, generator).pain_score for _ in range(20)]
     assert all(score is not None for score in scores)
+
+
+@pytest.mark.parametrize(
+    ("text", "systolic", "diastolic"),
+    [
+        ("Femme de 70 ans, HTA à 220/120 mmHg, céphalées", 220, 120),
+        ("PA 185/105 à l'arrivée", 185, 105),
+        ("pression artérielle 90/60", 90, 60),
+        ("hypertension at 210/115 on arrival", 210, 115),
+        ("arterial pressure 100/70", 100, 70),
+        ("TA 148/92, FC 102", 148, 92),
+    ],
+)
+def test_the_blood_pressure_is_read_behind_every_reception_abbreviation(text, systolic, diastolic):
+    """ "HTA à 220/120" was invisible: "TA" sat inside a word, and the case was labelled moderate."""
+    reading = parse(text)
+    assert (reading.systolic_bp, reading.diastolic_bp) == (systolic, diastolic)
+
+
+def test_a_surge_read_behind_hta_is_critical():
+    assert critical_findings(parse("Homme de 64 ans, HTA à 220/120"), 64)
+
+
+def test_the_french_negation_is_not_read_as_a_pressure():
+    assert parse("ne dort pas 12/24 h depuis la chute").systolic_bp is None
