@@ -117,6 +117,24 @@ def clopper_pearson(successes: int, total: int, alpha: float = 0.05) -> tuple[fl
     return (round(low, 4), round(high, 4))
 
 
+def upper_bound_without_miss(total: int, alpha: float = 0.05) -> float:
+    """The exact upper bound of undertriage when none of ``total`` urgent cases is missed.
+
+    Zero misses is the best a model can do, and the bound still does not reach zero: the exact
+    interval of 0 out of n stops at ``1 - (alpha / 2) ** (1 / n)``. That is the resolution of the
+    evaluation set — a property of how many urgent cases it holds, not of any model.
+    """
+    return round(1 - (alpha / 2) ** (1 / total), 4)
+
+
+def cases_needed_without_miss(bound: float, alpha: float = 0.05) -> int:
+    """How many urgent cases, none missed, an undertriage claim of "under ``bound``" needs."""
+    total = 1
+    while 1 - (alpha / 2) ** (1 / total) >= bound:
+        total += 1
+    return total
+
+
 def difference_newcombe(
     successes_a: int, total_a: int, successes_b: int, total_b: int, z: float = 1.96
 ) -> tuple[float, float, float]:

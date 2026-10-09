@@ -245,3 +245,12 @@ def test_the_paired_analyses_compare_the_two_training_stages_on_the_same_cases(e
     assert (stages["model"], stages["baseline"]) == ("dpo-merged", "sft")
     assert stages["undertriage"]["model_only"] == 1
     assert results["worse_of_two"]["model"] == "dpo-merged"
+
+
+def test_the_resolution_counts_the_urgent_cases_of_the_set(evaluation):
+    cases = [{"level": "URGENCE_VITALE"}] * 20 + [{"level": "URGENCE_MODEREE"}] * 20
+    cases += [{"level": "CONSULTATION_DIFFEREE"}] * 20
+    block = evaluation.resolution(cases)
+    assert block["urgent_cases"] == 40
+    assert block["upper_bound_without_miss"] == 0.0881
+    assert block["urgent_cases_needed_for_target"] == 72

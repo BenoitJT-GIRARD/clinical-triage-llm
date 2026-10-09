@@ -51,7 +51,11 @@ from clinical_triage.evaluation.baselines import (
     explicit_rule,
     majority_class,
 )
-from clinical_triage.evaluation.metrics import mcnemar_exact
+from clinical_triage.evaluation.metrics import (
+    cases_needed_without_miss,
+    mcnemar_exact,
+    upper_bound_without_miss,
+)
 from clinical_triage.evaluation.rule_anatomy import rule_misses
 from clinical_triage.evaluation.runner import (
     error_table,
@@ -335,6 +339,22 @@ def _paired_analyses(results: dict, cases: list[dict]) -> None:
     }
 
 
+def resolution(cases: list[dict], target: float = 0.05) -> dict:
+    """What the clinical set can show about undertriage, whatever the model.
+
+    Even a model that misses no urgent case leaves an exact upper bound above zero; the number of
+    urgent cases fixes it. Written beside the results, so that a safety claim is read against
+    what the set could have shown.
+    """
+    urgent = sum(TRIAGE.severity[case["level"]] >= 1 for case in cases)
+    return {
+        "urgent_cases": urgent,
+        "upper_bound_without_miss": upper_bound_without_miss(urgent),
+        "target": target,
+        "urgent_cases_needed_for_target": cases_needed_without_miss(target),
+    }
+
+
 def _default_output(seed: int, label: str | None) -> Path:
     if label:
         return PATHS.reports / f"evaluation_{label}.json"
@@ -487,6 +507,7 @@ def main() -> None:
 
     _paired_analyses(results, clinical_cases)
     results["rule_anatomy"] = rule_misses(clinical_cases)
+    results["clinical_set"]["resolution"] = resolution(clinical_cases)
     if not args.model_path:
         results["adapter_versus_merged"] = _compare_deliveries(results, paths)
     del results["_predictions"]

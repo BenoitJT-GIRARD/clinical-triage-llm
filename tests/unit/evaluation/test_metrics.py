@@ -16,6 +16,7 @@ from clinical_triage.evaluation.baselines import (
 from clinical_triage.evaluation.metrics import (
     HORS_FORMAT,
     accuracy,
+    cases_needed_without_miss,
     clopper_pearson,
     confusion,
     difference_newcombe,
@@ -28,6 +29,7 @@ from clinical_triage.evaluation.metrics import (
     subgroup_accuracy,
     summarize,
     undertriage_rate,
+    upper_bound_without_miss,
     wilson_interval,
 )
 
@@ -352,3 +354,15 @@ def test_a_null_gap_has_an_interval_that_contains_zero():
     gap, low, high = difference_newcombe(30, 60, 30, 60)
     assert gap == 0.0
     assert low < 0 < high
+
+
+def test_the_bound_without_miss_is_the_exact_interval_of_zero_out_of_n():
+    for total in (3, 40, 72):
+        assert upper_bound_without_miss(total) == clopper_pearson(0, total)[1]
+
+
+def test_forty_urgent_cases_cannot_show_less_than_nine_percent_of_undertriage():
+    assert upper_bound_without_miss(40) == 0.0881
+    assert cases_needed_without_miss(0.05) == 72
+    assert upper_bound_without_miss(cases_needed_without_miss(0.05)) < 0.05
+    assert upper_bound_without_miss(cases_needed_without_miss(0.05) - 1) >= 0.05
