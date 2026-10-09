@@ -30,16 +30,21 @@ from clinical_triage.config import PATHS
 #: here rather than in a module of the tier so that it stays what it is — a fixture — and so
 #: that nothing imports it by accident.
 STUB_ENGINE = '''
-"""Stand-in for the vLLM server: the two routes the gateway actually calls."""
+"""Stand-in for the vLLM server: the two routes the gateway calls, several connections at once.
+
+The gateway keeps its connection to the engine open between requests, as vLLM allows: a server
+that served one connection at a time would never answer anyone else.
+"""
 
 import json
 import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ANSWER = os.environ["STUB_ANSWER"]
 EXPECTED_KEY = os.environ["STUB_KEY"]
 SEEN = Path(os.environ["STUB_SEEN"])
+REQUESTS = Path(os.environ["STUB_REQUESTS"])
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -57,6 +62,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.headers.get("Authorization") == f"Bearer {EXPECTED_KEY}"
 
     def do_GET(self):
+        with REQUESTS.open("a", encoding="utf-8") as handle:
+            handle.write(f"GET {self.path}\\n")
         if not self._authorised():
             self._reply(401, {"error": "no key presented"})
         elif self.path == "/v1/models":
@@ -65,6 +72,8 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(404, {"error": "unknown route"})
 
     def do_POST(self):
+        with REQUESTS.open("a", encoding="utf-8") as handle:
+            handle.write(f"POST {self.path}\\n")
         if not self._authorised():
             self._reply(401, {"error": "no key presented"})
             return
@@ -78,7 +87,7 @@ class Handler(BaseHTTPRequestHandler):
         """Silence: the server's own log would drown the test output."""
 
 
-HTTPServer(("127.0.0.1", int(os.environ["STUB_PORT"])), Handler).serve_forever()
+ThreadingHTTPServer(("127.0.0.1", int(os.environ["STUB_PORT"])), Handler).serve_forever()
 '''
 
 #: What the stand-in engine answers, in the shape the model produces. French, like the service.
@@ -150,14 +159,23 @@ class Service:
     audit_log: Path
     #: One JSON line per call the gateway made to the engine.
     engine_calls: Path
+    #: One line per request the engine received, whatever its route and whoever sent it.
+    engine_log: Path
 
     def headers(self, key: str | None = None) -> dict[str, str]:
         return {"X-API-Key": self.key if key is None else key}
 
     def traces(self) -> list[dict]:
+
         from clinical_triage.serving.audit import read_entries
 
         return read_entries(self.audit_log)
+
+    def engine_requests(self) -> list[str]:
+        """Every request the engine received, as "METHOD /route"."""
+        if not self.engine_log.exists():
+            return []
+        return [line for line in self.engine_log.read_text(encoding="utf-8").splitlines() if line]
 
     def prompts(self) -> list[str]:
         import json
@@ -180,6 +198,7 @@ def start_service(tmp_path_factory):
     def launch(**overrides: str) -> Service:
         workspace = tmp_path_factory.mktemp("service")
         engine_calls = workspace / "engine-calls.jsonl"
+        engine_log = workspace / "engine-requests.log"
         audit_log = workspace / "audit"
         engine_port, gateway_port = free_port(), free_port()
 
@@ -195,6 +214,7 @@ def start_service(tmp_path_factory):
                     "STUB_ANSWER": ENGINE_ANSWER,
                     "STUB_KEY": SERVICE_KEY,
                     "STUB_SEEN": str(engine_calls),
+                    "STUB_REQUESTS": str(engine_log),
                     "PYTHONIOENCODING": "utf-8",
                 },
                 stdout=handle,
@@ -231,6 +251,7 @@ def start_service(tmp_path_factory):
             engine_url=f"http://127.0.0.1:{engine_port}",
             audit_log=audit_log,
             engine_calls=engine_calls,
+            engine_log=engine_log,
         )
 
     yield launch

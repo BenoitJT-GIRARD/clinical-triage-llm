@@ -29,6 +29,7 @@ import random
 import re
 from dataclasses import dataclass
 
+from clinical_triage.config import SERVING
 from clinical_triage.data.case_generator import USER_TEMPLATES
 from clinical_triage.data.corpus_sources import CorpusEntry
 from clinical_triage.data.triage_rules import (
@@ -162,7 +163,7 @@ MEDQUAD_BOILERPLATE = (
 # ``tests/unit/data/test_corpus_cases.py`` redoes this computation and fails if the model window
 # or the generation budget changes.
 MIN_LENGTH = 60
-MAX_LENGTH = 800
+MAX_LENGTH = SERVING.max_description_characters
 
 
 @dataclass(frozen=True)

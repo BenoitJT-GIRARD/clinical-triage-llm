@@ -259,6 +259,10 @@ class ServingConfig:
 
     max_new_tokens: int = 220
     temperature: float = 0.0
+    # The longest patient narrative, in characters. It is the bound the dataset build places on
+    # the corpus cases, so no training narrative exceeds it, and the service refuses a longer
+    # one rather than serving the model a text unlike anything it learnt on.
+    max_description_characters: int = 800
     # Name of the model served by vLLM and written into the audit log.
     served_model_name: str = "qwen3-1.7b-clinical-triage"
 

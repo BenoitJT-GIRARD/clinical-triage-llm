@@ -16,7 +16,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
 
-from clinical_triage.config import TRIAGE
+from clinical_triage.config import SERVING, TRIAGE
 
 
 class TriageRequest(BaseModel):
@@ -25,8 +25,12 @@ class TriageRequest(BaseModel):
     symptoms: str = Field(
         ...,
         min_length=3,
-        max_length=4000,
-        description="Free-text description of the patient's symptoms, history and vital signs.",
+        max_length=SERVING.max_description_characters,
+        description=(
+            "Free-text description of the patient's symptoms, history and vital signs. Bounded "
+            "to the longest narrative the model was trained on: a longer one is refused rather "
+            "than cut, since a cut can take away the very vital sign that decides the level."
+        ),
         examples=[
             "Homme de 62 ans, douleur thoracique et sueurs depuis 20 minutes. TA 148/92, FC 102."
         ],
@@ -58,9 +62,10 @@ class TriageReply(BaseModel):
     description_truncated: bool = Field(
         False,
         description=(
-            "True when the description received exceeded the model window and was bounded. "
-            "The triage then did not read the whole narrative: only a clinician can judge "
-            "whether what is missing mattered."
+            "True when the local engine bounded a description its window could not hold. The "
+            "triage then did not read the whole narrative: only a clinician can judge whether "
+            "what is missing mattered. Always false behind the remote engine, which refuses "
+            "such a description instead."
         ),
     )
     latency_ms: float = Field(..., description="Inference duration, in milliseconds.")
@@ -72,7 +77,11 @@ class QuestionnaireRequest(BaseModel):
     """Current state of the adaptive questionnaire."""
 
     chief_complaint: str = Field(
-        ..., min_length=2, max_length=500, description="Main reason for the visit."
+        ...,
+        min_length=2,
+        max_length=500,
+        description="Main reason for the visit.",
+        examples=["toux"],
     )
     # This field is bounded like every other text field. Without those bounds an arbitrarily
     # large dictionary with arbitrary values would be deserialised whole into memory, then
@@ -85,7 +94,13 @@ class QuestionnaireRequest(BaseModel):
     ] = Field(
         default_factory=dict,
         max_length=32,
-        description="Answers already collected, by question id.",
+        description=(
+            "Answers already collected, each under the id of the question it answers "
+            "(`next_question_id` of the previous reply). Empty on the first call."
+        ),
+        # Without an example, the interactive documentation offers `additionalProp1` keys the
+        # questionnaire does not know.
+        examples=[{"conscience": "oui"}],
     )
 
 
@@ -101,8 +116,15 @@ class QuestionnaireReply(BaseModel):
     )
 
 
+class LivenessReply(BaseModel):
+    """The gateway process is alive."""
+
+    status: str = Field(..., description="alive, whenever the gateway answers at all.")
+    model_version: str = Field(..., description="The model the gateway serves.")
+
+
 class HealthReply(BaseModel):
-    """Health of the service."""
+    """Readiness of the service: whether the inference engine responds."""
 
     status: str = Field(..., description="ok when the service can answer, degraded otherwise.")
     backend: str = Field(..., description="Inference engine: transformers or vllm.")

@@ -12,6 +12,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from clinical_triage.config import SERVING
 from clinical_triage.serving import api as module_api
 from clinical_triage.serving.api import RateLimiter
 from clinical_triage.serving.audit import read_entries
@@ -65,10 +66,17 @@ def test_open_mode_has_to_be_asked_for_explicitly(monkeypatch, tmp_path):
         )
 
 
-def test_the_probe_reports_an_unreachable_engine(client):
-    """A probe that is always green triggers no restart on the day of the outage."""
+def test_the_liveness_probe_answers_without_a_key_and_without_the_engine(client):
+    """Anyone may ask whether the gateway lives: the answer starts nothing."""
     reply = client.get("/health")
     assert reply.status_code == 200
+    assert reply.json()["status"] == "alive"
+
+
+def test_the_readiness_probe_reports_an_unreachable_engine_with_a_503(client):
+    """A probe that is always 200 triggers no restart on the day of the outage."""
+    reply = client.get("/ready", headers={"X-API-Key": KEY})
+    assert reply.status_code == 503
     body = reply.json()
     assert body["backend"] == "vllm"
     assert body["status"] == "degraded"
@@ -76,13 +84,14 @@ def test_the_probe_reports_an_unreachable_engine(client):
     assert body["detail"]
 
 
-def test_the_probe_does_not_publish_the_engines_address(client):
-    """The probe asks for neither key nor quota: it says there is an outage, never where.
+def test_the_readiness_probe_asks_for_the_key(client):
+    """On an on-demand host, questioning the engine starts a GPU: not for anyone without a key."""
+    assert client.get("/ready").status_code == 401
 
-    The httpx message carries the URL it queried. On Modal that URL is precisely what protects
-    the engine, and the probe was making it public.
-    """
-    detail = client.get("/health").json()["detail"]
+
+def test_the_readiness_probe_does_not_publish_the_engines_address(client):
+    """It says there is an outage, never where: the httpx message carries the URL it queried."""
+    detail = client.get("/ready", headers={"X-API-Key": KEY}).json()["detail"]
     address = module_api.app.state.settings.vllm_url
     assert address not in detail
     assert "http" not in detail
@@ -297,27 +306,41 @@ def test_the_questionnaire_refuses_an_oversized_body(client):
     )
 
 
-def test_a_description_that_is_too_long_is_bounded_and_said_to_be(client, monkeypatch):
-    """A description overflowing the model window used to cut the generation short.
+def test_a_description_longer_than_any_the_model_learnt_on_is_refused(client, monkeypatch):
+    """Refused, not cut: a cut can take away the vital sign written at the end of a narrative.
 
-    The contract accepted four thousand characters, the window holds far fewer, and the outcome
-    was a tensor dimension error at the precise moment a clinician is waiting for an answer. It
-    is bounded now — and the reply says so, because a clinical narrative silently truncated is
-    exactly what a decision-support system must not produce.
+    The bound is the longest narrative of the training set. Beyond it the model would read a
+    text unlike anything it learnt on, and the request never reaches the engine.
     """
-    received: list[str] = []
-
-    def _generate(request, symptoms):
-        bounded, truncated = module_api.bound_in_characters(symptoms)
-        received.append(bounded)
-        return MODEL_ANSWER, "URGENCE_VITALE", 42.0, truncated
-
-    monkeypatch.setattr(module_api, "_generate_vllm", _generate)
-    long_one = "Le patient décrit une gêne diffuse et variable depuis plusieurs jours. " * 40
+    called: list[str] = []
+    monkeypatch.setattr(
+        module_api, "_generate_vllm", lambda request, symptoms: called.append(symptoms)
+    )
+    long_one = "x" * (SERVING.max_description_characters + 1)
     reply = client.post("/triage", json={"symptoms": long_one}, headers={"X-API-Key": KEY})
-    assert reply.status_code == 200
-    assert reply.json()["description_truncated"] is True
-    assert len(received[0]) == module_api.MAX_CHARACTERS
+    assert reply.status_code == 422
+    assert called == []
+
+
+def test_a_description_the_engine_refuses_is_reported_as_the_callers_to_change(client, monkeypatch):
+    """Not as an outage: an engine that refused a text will refuse it again."""
+    import httpx
+
+    refusal = httpx.HTTPStatusError(
+        "too long",
+        request=httpx.Request("POST", "http://engine/v1/completions"),
+        response=httpx.Response(400),
+    )
+
+    def _refuse(request, symptoms):
+        raise module_api._engine_failure(refusal)
+
+    monkeypatch.setattr(module_api, "_generate_vllm", _refuse)
+    reply = client.post(
+        "/triage", json={"symptoms": "douleur thoracique"}, headers={"X-API-Key": KEY}
+    )
+    assert reply.status_code == 422
+    assert "Shorten" in reply.json()["detail"]
 
 
 def test_a_normal_description_is_not_flagged_as_bounded(client):

@@ -19,9 +19,17 @@ import pytest
 pytestmark = [pytest.mark.system, pytest.mark.slow]
 
 
-def test_the_probe_answers_without_a_key_and_finds_the_engine(service):
-    """A probe that demanded a key would be useless to whatever restarts the container."""
+def test_the_liveness_probe_answers_without_a_key_and_calls_no_engine(service):
+    """Whatever restarts the container needs no key, and its probe must wake nothing."""
+    before = len(service.engine_requests())
     reply = httpx.get(f"{service.url}/health", timeout=10)
+    assert reply.status_code == 200
+    assert reply.json()["status"] == "alive"
+    assert len(service.engine_requests()) == before
+
+
+def test_the_readiness_probe_finds_the_engine_with_the_key(service):
+    reply = httpx.get(f"{service.url}/ready", headers=service.headers(), timeout=10)
     assert reply.status_code == 200
     body = reply.json()
     assert body["status"] == "ok"
@@ -69,7 +77,8 @@ def test_the_gateway_presents_its_key_to_the_engine(service):
     )
     assert presented.status_code == 200
 
-    assert httpx.get(f"{service.url}/health", timeout=10).json()["model_loaded"] is True
+    ready = httpx.get(f"{service.url}/ready", headers=service.headers(), timeout=10)
+    assert ready.json()["model_loaded"] is True
 
 
 def test_a_request_without_the_service_key_never_reaches_the_engine(service):
