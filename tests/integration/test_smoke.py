@@ -130,3 +130,32 @@ def test_the_versions_recorded_are_the_ones_that_would_explain_a_different_numbe
     assert versions["matplotlib"] != "not installed"
     assert versions["numpy"] != "not installed"
     assert "python" in versions
+
+
+def test_the_capped_training_chain_is_read_where_the_training_writes_it(smoke):
+    assert PATHS.root / smoke.CHAIN_CHECK_DIR == PATHS.training_summaries(capped=True)
+
+
+def test_a_capped_training_chain_is_recorded_with_its_versions(smoke, monkeypatch, tmp_path):
+    folder = tmp_path / smoke.CHAIN_CHECK_DIR
+    folder.mkdir(parents=True)
+    for stage in smoke.CHAIN_CHECK_STAGES:
+        summary = {
+            "hyperparameters": {"max_steps": 20},
+            "metrics": {"train_loss": 0.65, "duration_s": 120.0},
+            "environment": {"torch": "2.14.1", "gpu": "a GPU"},
+        }
+        (folder / f"{stage}.json").write_text(json.dumps(summary), encoding="utf-8")
+    monkeypatch.setattr(smoke, "ROOT_DIR", tmp_path)
+
+    chain = smoke.training_chain_check()
+    assert set(chain) == set(smoke.CHAIN_CHECK_STAGES)
+    assert chain["dpo"]["steps"] == 20
+    assert chain["sft"]["environment"]["torch"] == "2.14.1"
+    assert chain["sft"]["ran_on"].count("-") == 2
+
+
+def test_without_a_capped_chain_the_evidence_says_none_ran(smoke, a_run_that_reproduces):
+    assert smoke.main() == 0
+    evidence = json.loads(a_run_that_reproduces.read_text(encoding="utf-8"))
+    assert evidence["training_chain_check"] is None

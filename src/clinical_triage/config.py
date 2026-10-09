@@ -73,8 +73,8 @@ class Paths:
         """Where a training run writes its summary.
 
         The summaries of the shipped seed are published results. Those of the other seeds are
-        published apart, as the spread of the method; those of a capped run check a chain and
-        are published nowhere.
+        published apart, as the spread of the method; those of a capped run check a chain, and
+        only the run evidence records them.
         """
         if capped:
             return self.root / "var" / "runs"
