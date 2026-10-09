@@ -32,17 +32,10 @@ on an initialisation value shared with twenty-four other tokens, and the model *
 cannot** emit it in preference to them. Measured: 0% clean stops, and the whole 220-token budget
 consumed on every answer. No amount of extra epochs changes anything.
 
-Adding ``lm_head`` to the adapted modules lifts the lock. Three configurations were compared
-under an identical protocol — 75 steps, 60 validation cases:
-
-| Configuration | Accuracy | Clean stops | Tokens generated |
-|---|---|---|---|
-| projections only | 0.850 | 0.000 | 220 |
-| + embeddings (`modules_to_save`) | 0.850 | 0.000 | 220 |
-| **+ output head** | **0.900** | **1.000** | **97** |
-
-The exact figures live in ``reports/training/module_comparison.json``; these repeat them so that
-the argument can be followed without leaving the file.
+Adding ``lm_head`` to the adapted modules lifts the lock. ``scripts/tune_hyperparameters.py
+--study modules`` compares three configurations under one protocol — the projections alone, with
+the embeddings, with the output head — and writes ``reports/training/module_comparison.json``:
+only the third stops cleanly.
 
 Training the embeddings alone achieves nothing: PEFT copies the module and breaks the link with
 the output head, which stays frozen. It is indeed the head that must be adapted.
@@ -85,18 +78,28 @@ def train_sft(
     train_path: Path,
     eval_path: Path | None,
     output_dir: Path,
+    *,
+    lora_r: int,
+    lora_alpha: int,
+    learning_rate: float,
     run_name: str = "sft",
     epochs: int = TRAINING.sft_epochs,
     batch_size: int = TRAINING.sft_batch_size,
     grad_accum: int = TRAINING.sft_grad_accum,
-    learning_rate: float = TRAINING.sft_lr,
-    lora_r: int = TRAINING.lora_r,
-    lora_alpha: int = TRAINING.lora_alpha,
     max_steps: int = -1,
     max_length: int = MODEL.max_seq_length,
     gradient_checkpointing: bool = True,
+    modules: tuple[str, ...] | None = None,
+    seed: int = SEED,
+    summary_dir: Path | None = None,
 ) -> SFTResult:
-    """Run the supervised fine-tuning and return the run summary."""
+    """Run the supervised fine-tuning and return the run summary.
+
+    The rank, the scaling and the learning rate have no default: they are the setting the
+    tuning kept. ``modules`` replaces the adapted modules, for the study that compares them.
+    ``seed`` drives the adapter's initialisation and the order of the examples; the data and its
+    splits do not move with it.
+    """
     # Unsloth rewrites internal functions of `transformers` and `trl` when it is imported. It
     # must therefore be imported BEFORE them: imported after, its patches apply to references
     # that have already been copied and have no effect at all — with no message to say so.
@@ -112,7 +115,7 @@ def train_sft(
 
     # The output head joins the adapted projections: without it the model cannot learn to stop
     # (see the module docstring).
-    adapted_modules = [*TRAINING.lora_target_modules, "lm_head"]
+    adapted_modules = list(modules) if modules else [*TRAINING.lora_target_modules, "lm_head"]
 
     hyperparameters = {
         "base_model": MODEL.base_model,
@@ -129,10 +132,10 @@ def train_sft(
         "max_length": max_length,
         "gradient_checkpointing": gradient_checkpointing,
         "max_steps": max_steps,
-        "seed": SEED,
+        "seed": seed,
     }
 
-    with track(run_name, hyperparameters) as summary:
+    with track(run_name, hyperparameters, summary_dir) as summary:
         logger.info("Loading the tokenizer and the base model: %s", MODEL.base_model)
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=MODEL.base_model,
@@ -152,7 +155,7 @@ def train_sft(
             # Unsloth's checkpointing offloads activations to main memory: same computation, a
             # markedly smaller GPU footprint.
             use_gradient_checkpointing="unsloth" if gradient_checkpointing else False,
-            random_state=SEED,
+            random_state=seed,
         )
 
         data_files = {"train": str(train_path)}
@@ -187,8 +190,8 @@ def train_sft(
                 TRAINING.sft_warmup_ratio,
             ),
             lr_scheduler_type="cosine",
-            seed=SEED,
-            data_seed=SEED,
+            seed=seed,
+            data_seed=seed,
             eos_token=IM_END,
             # Chunked loss saves memory by splitting the computation over the vocabulary, but it
             # assumes an untouched output head. It is therefore incompatible with adapting

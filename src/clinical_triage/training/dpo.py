@@ -81,8 +81,14 @@ def train_dpo(
     rpo_alpha: float | None = TRAINING.dpo_rpo_alpha,
     eval_ratio: float = 0.1,
     max_steps: int = -1,
+    seed: int = SEED,
+    summary_dir: Path | None = None,
 ) -> DPOResult:
-    """Run the DPO alignment above the merged SFT model."""
+    """Run the DPO alignment above the merged SFT model.
+
+    ``seed`` drives the adapter's initialisation and the order of the pairs. The split between
+    training and validation pairs stays the project's: every seed is judged on the same pairs.
+    """
     # Same constraint as in SFT: Unsloth must come before `trl`. `PatchDPOTrainer` must also be
     # called before importing `DPOTrainer`, otherwise the unpatched version is loaded.
     from unsloth import FastLanguageModel, PatchDPOTrainer
@@ -105,14 +111,14 @@ def train_dpo(
         "learning_rate": learning_rate,
         "beta": beta,
         "rpo_alpha": rpo_alpha,
-        "lora_r": TRAINING.lora_r,
-        "lora_alpha": TRAINING.lora_alpha,
+        "lora_r": TRAINING.dpo_lora_r,
+        "lora_alpha": TRAINING.dpo_lora_alpha,
         "max_length": MODEL.max_seq_length,
         "max_steps": max_steps,
-        "seed": SEED,
+        "seed": seed,
     }
 
-    with track(run_name, hyperparameters) as summary:
+    with track(run_name, hyperparameters, summary_dir) as summary:
         logger.info(
             "Loading the merged SFT model (base and reference): %s",
             path_for_log(sft_merged_dir),
@@ -127,13 +133,13 @@ def train_dpo(
 
         model = FastLanguageModel.get_peft_model(
             model,
-            r=TRAINING.lora_r,
-            lora_alpha=TRAINING.lora_alpha,
+            r=TRAINING.dpo_lora_r,
+            lora_alpha=TRAINING.dpo_lora_alpha,
             lora_dropout=TRAINING.lora_dropout,
             target_modules=list(TRAINING.lora_target_modules),
             bias="none",
             use_gradient_checkpointing="unsloth",
-            random_state=SEED,
+            random_state=seed,
         )
 
         dataset = load_dataset("json", data_files={"train": str(train_path)})["train"]
@@ -164,8 +170,8 @@ def train_dpo(
                 len(split["train"]), batch_size * grad_accum, epochs, max_steps, 0.05
             ),
             lr_scheduler_type="cosine",
-            seed=SEED,
-            data_seed=SEED,
+            seed=seed,
+            data_seed=seed,
             report_to=[],
         )
 

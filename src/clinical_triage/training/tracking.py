@@ -146,11 +146,12 @@ def _close_mlflow(mlflow, summary: RunSummary, failed: bool) -> None:
 
 
 @contextmanager
-def track(name: str, hyperparameters: dict):
+def track(name: str, hyperparameters: dict, directory: Path | None = None):
     """Open an MLflow run and yield its summary, for the caller to complete.
 
     The JSON summary is written in every case, including when training fails: what was measured
-    before the error remains the first piece of the diagnosis.
+    before the error remains the first piece of the diagnosis. ``directory`` defaults to the
+    published training results; see ``Paths.training_summaries`` for the others.
     """
     summary = RunSummary(
         name=name, hyperparameters=hyperparameters, environment=describe_environment()
@@ -166,12 +167,12 @@ def track(name: str, hyperparameters: dict):
     finally:
         if mlflow is not None:
             _close_mlflow(mlflow, summary, failed)
-        write_summary(summary)
+        write_summary(summary, directory)
 
 
-def write_summary(summary: RunSummary) -> Path:
-    """Write the run summary under ``reports/training/``."""
-    directory = PATHS.reports / "training"
+def write_summary(summary: RunSummary, directory: Path | None = None) -> Path:
+    """Write the run summary, by default under ``reports/training/``."""
+    directory = directory or PATHS.training_summaries()
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{summary.name}.json"
     path.write_text(

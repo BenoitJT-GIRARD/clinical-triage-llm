@@ -22,10 +22,19 @@ def adapter(tmp_path, monkeypatch):
     return cli.PATHS.sft_adapter
 
 
-def test_without_an_adapter_the_setting_is_announced_as_a_default(adapter):
+def test_without_an_adapter_the_kept_setting_is_announced_as_not_trained(adapter, monkeypatch):
+    monkeypatch.setattr(
+        cli, "kept_setting", lambda: {"lora_r": 32, "lora_alpha": 64, "learning_rate": 2e-4}
+    )
     summary = cli._lora()
-    assert "default" in summary
-    assert f"r={cli.TRAINING.lora_r}" in summary
+    assert "r=32" in summary
+    assert "not trained yet" in summary
+
+
+def test_without_a_tuning_no_setting_is_invented(adapter, monkeypatch):
+    """A default rank once stood here, and it was not the rank of the shipped model."""
+    monkeypatch.setattr(cli, "kept_setting", lambda: None)
+    assert cli._lora().startswith("not tuned yet")
 
 
 def test_with_an_adapter_its_own_rank_is_shown(adapter):

@@ -10,7 +10,8 @@ from __future__ import annotations
 import json
 
 from clinical_triage import __version__
-from clinical_triage.config import DATA, MODEL, PATHS, TRAINING, TRIAGE
+from clinical_triage.config import DATA, MODEL, PATHS, TRIAGE
+from clinical_triage.training.selection import kept_setting
 
 
 def _state(path) -> str:
@@ -19,18 +20,22 @@ def _state(path) -> str:
 
 
 def _lora() -> str:
-    """Describe the LoRA setting, the adapter's own if one exists.
+    """Describe the supervised LoRA setting: the adapter's own, else the one the tuning kept.
 
-    The values in ``config.py`` are only a starting point: fine-tuning follows the variant the
-    tuning run kept. Printing the default here while an adapter sits on disk would describe
-    something that was never trained.
+    Fine-tuning follows the setting the tuning run kept. Printing anything else while an adapter
+    sits on disk would describe something that was never trained.
     """
-    default = f"r={TRAINING.lora_r}, alpha={TRAINING.lora_alpha}, lr={TRAINING.sft_lr} (default)"
     configuration = PATHS.sft_adapter / "adapter_config.json"
-    if not configuration.exists():
-        return default
-    adapter = json.loads(configuration.read_text(encoding="utf-8"))
-    return f"r={adapter['r']}, alpha={adapter['lora_alpha']} (supervised adapter on disk)"
+    if configuration.exists():
+        adapter = json.loads(configuration.read_text(encoding="utf-8"))
+        return f"r={adapter['r']}, alpha={adapter['lora_alpha']} (supervised adapter on disk)"
+    kept = kept_setting()
+    if kept is None:
+        return "not tuned yet: run scripts/tune_hyperparameters.py"
+    return (
+        f"r={kept['lora_r']}, alpha={kept['lora_alpha']}, lr={kept['learning_rate']:g} "
+        "(kept by the tuning, not trained yet)"
+    )
 
 
 def main() -> None:

@@ -52,8 +52,25 @@ def test_lora_adapts_the_attention_and_the_perceptron():
 
 def test_the_alignment_stays_conservative():
     """A high alignment learning rate undoes the format learnt during fine-tuning."""
-    assert TRAINING.dpo_lr < TRAINING.sft_lr
+    from clinical_triage.training.selection import SETTINGS
+
+    assert TRAINING.dpo_lr * 10 <= min(setting["learning_rate"] for setting in SETTINGS)
     assert TRAINING.dpo_rpo_alpha is not None
+
+
+def test_the_shipped_seed_keeps_the_canonical_folders_and_the_others_live_apart():
+    from clinical_triage.config import PATHS, SEED
+
+    assert PATHS.for_seed(SEED) == PATHS
+    assert PATHS.for_seed(43).dpo_merged.parent == PATHS.models / "seed-43"
+    assert PATHS.training_summaries(43) == PATHS.reports / "training" / "seeds" / "seed-43"
+
+
+def test_a_capped_run_never_writes_over_a_delivered_artefact():
+    from clinical_triage.config import PATHS
+
+    assert PATHS.capped().sft_adapter != PATHS.sft_adapter
+    assert PATHS.reports not in PATHS.training_summaries(capped=True).parents
 
 
 def test_the_repository_identifiers_follow_the_account(monkeypatch):

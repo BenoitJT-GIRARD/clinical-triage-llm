@@ -5,11 +5,14 @@ the library then takes the model without its adapter as the reference, that is t
 model itself. With the base model as reference, the alignment would be free to drift away from
 the format just learnt.
 
+``--seed`` aligns the supervised model of that seed; ``--max-steps`` checks the chain and writes
+under ``var/`` only, as ``train_sft.py`` does.
+
 Usage::
 
     uv run python scripts/train_dpo.py
+    uv run python scripts/train_dpo.py --seed 43
     uv run python scripts/train_dpo.py --max-steps 20   # does the chain hold?
-    uv run python scripts/train_dpo.py --beta 0.2
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ logger = get_logger("train_dpo")
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--epochs", type=int, default=TRAINING.dpo_epochs)
     parser.add_argument("--batch-size", type=int, default=TRAINING.dpo_batch_size)
     parser.add_argument("--grad-accum", type=int, default=TRAINING.dpo_grad_accum)
@@ -39,17 +43,19 @@ def main() -> None:
     parser.add_argument("--max-steps", type=int, default=-1)
     args = parser.parse_args()
 
-    set_seed(SEED)
-    if not PATHS.sft_merged.exists():
+    capped = args.max_steps > 0
+    paths = PATHS.capped() if capped else PATHS.for_seed(args.seed)
+    set_seed(args.seed)
+    if not paths.sft_merged.exists():
         raise SystemExit(
             "Merged SFT model not found. Run first:\n"
-            "  uv run python scripts/merge_adapter.py --adapter sft"
+            f"  uv run python scripts/merge_adapter.py --adapter sft --seed {args.seed}"
         )
 
     result = train_dpo(
         train_path=PATHS.data_processed / "dpo_train.jsonl",
-        sft_merged_dir=PATHS.sft_merged,
-        output_dir=PATHS.dpo_adapter,
+        sft_merged_dir=paths.sft_merged,
+        output_dir=paths.dpo_adapter,
         epochs=args.epochs,
         batch_size=args.batch_size,
         grad_accum=args.grad_accum,
@@ -57,6 +63,8 @@ def main() -> None:
         beta=args.beta,
         rpo_alpha=args.rpo_alpha,
         max_steps=args.max_steps,
+        seed=args.seed,
+        summary_dir=PATHS.training_summaries(args.seed, capped=capped),
     )
     logger.info("Result: %s", json.dumps(result.__dict__, ensure_ascii=False, indent=2))
 

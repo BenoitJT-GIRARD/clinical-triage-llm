@@ -14,7 +14,7 @@ once, and scripts, tests and the service all see the same settings without each 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -56,6 +56,31 @@ class Paths:
         """Make the directories a run writes into, on first use."""
         for directory in (self.data_processed, self.models, self.figures, self.logs):
             directory.mkdir(parents=True, exist_ok=True)
+
+    def for_seed(self, seed: int) -> Paths:
+        """The weights of one training seed. The shipped seed keeps the canonical folders.
+
+        The other seeds measure the spread of the method and are never served: they live apart,
+        so that nothing reading the canonical folders can pick one up by mistake.
+        """
+        return self if seed == SEED else replace(self, models=self.models / f"seed-{seed}")
+
+    def capped(self) -> Paths:
+        """Where a run capped to a few steps writes: never over a delivered artefact."""
+        return replace(self, models=self.models / "capped")
+
+    def training_summaries(self, seed: int = SEED, capped: bool = False) -> Path:
+        """Where a training run writes its summary.
+
+        The summaries of the shipped seed are published results. Those of the other seeds are
+        published apart, as the spread of the method; those of a capped run check a chain and
+        are published nowhere.
+        """
+        if capped:
+            return self.root / "var" / "runs"
+        if seed == SEED:
+            return self.reports / "training"
+        return self.reports / "training" / "seeds" / f"seed-{seed}"
 
     # Adapters and merged models produced by the pipeline.
     @property
@@ -194,9 +219,10 @@ class TrainingConfig:
     accept overrides on the command line, and always log the values actually used.
     """
 
-    # LoRA
-    lora_r: int = 16
-    lora_alpha: int = 32
+    # LoRA. The rank, the scaling and the learning rate of the supervised pass have no default
+    # here: they are the setting `scripts/tune_hyperparameters.py` keeps, read back by
+    # `scripts/train_sft.py`. A default in this file once announced a rank the shipped model did
+    # not have.
     lora_dropout: float = 0.05
     lora_target_modules: tuple[str, ...] = (
         "q_proj",
@@ -211,7 +237,6 @@ class TrainingConfig:
     sft_epochs: int = 2
     sft_batch_size: int = 4
     sft_grad_accum: int = 4
-    sft_lr: float = 2e-4
     sft_warmup_ratio: float = 0.03
     # DPO — conservative settings, to stay close to the reference SFT model. ``rpo_alpha`` adds
     # the supervised loss on the preferred answer, which keeps the alignment from unlearning
@@ -220,6 +245,10 @@ class TrainingConfig:
     dpo_batch_size: int = 2
     dpo_grad_accum: int = 8
     dpo_lr: float = 5e-6
+    # The alignment adapter's own rank and scaling, set once and not tuned: measuring an effect
+    # this small does not support a search over it.
+    dpo_lora_r: int = 16
+    dpo_lora_alpha: int = 32
     dpo_beta: float = 0.1
     dpo_rpo_alpha: float = 1.0
 
