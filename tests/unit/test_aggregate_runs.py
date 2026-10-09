@@ -38,6 +38,7 @@ def _results(model: str, accuracy: float, misses: int, errors: list[dict], task:
         "internal_set": {"models": {model: {"accuracy": 1.0}}},
         "errors": {model: errors},
         "task_preferences": {"correctly_ordered_share": task},
+        "aligned_versus_supervised": {"undertriage": {"model_only": 1, "baseline_only": 0}},
     }
 
 
@@ -52,6 +53,8 @@ def test_the_seed_study_reports_each_seed_and_the_spread(aggregate):
     assert set(study["seeds"]) == {"42", "43", "44"}
     spread = study["spread"]["dpo-merged"]["clinical_accuracy"]
     assert (spread["min"], spread["max"], spread["mean"]) == (0.60, 0.70, 0.65)
+    paired = study["seeds"]["43"]["aligned_versus_supervised"]["undertriage"]
+    assert (paired["model_only"], paired["baseline_only"]) == (1, 0)
 
 
 def test_the_before_after_rebuilds_the_predictions_from_the_errors(aggregate):

@@ -3,7 +3,8 @@
 Two published files, each read from committed results and never from a model:
 
 - ``reports/seed_study.json`` — for each seed, the supervised and the aligned model on the
-  clinical and internal sets, and the task-format preference share; then, per measure, the
+  clinical and internal sets, their paired comparison, and the task-format preference share;
+  then, per measure, the
   spread over the seeds. One training run says what one run gave; three say how much of a gap
   between two systems the training alone can produce. The shipped model is seed 42's, whatever
   its rank among the three: choosing the best on the clinical set would make that set a
@@ -75,6 +76,9 @@ def seed_study(runs: dict[int, dict]) -> dict:
         }
         task = results.get("task_preferences") or {}
         per_seed[str(seed)]["task_preferences_share"] = task.get("correctly_ordered_share")
+        # The protocol compares the two models on every seed, not on the shipped one alone: one
+        # seed's verdict on what the alignment changes could be that seed's luck.
+        per_seed[str(seed)]["aligned_versus_supervised"] = results.get("aligned_versus_supervised")
     spread = {}
     for model in ("sft", "dpo-merged"):
         rows = [per_seed[s][model] for s in per_seed if model in per_seed[s]]
