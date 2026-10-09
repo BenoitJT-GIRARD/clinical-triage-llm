@@ -18,6 +18,7 @@ from clinical_triage.data.anonymize import (
     _engines,
     analyze_and_anonymize,
     audit_corpus,
+    default_setting_damage,
     residual_pii,
 )
 
@@ -190,3 +191,15 @@ def test_a_phone_number_from_any_country_is_masked(language, text):
     masked, count = analyze_and_anonymize(text, language)
     assert count >= 1
     assert not residual_pii(masked), masked
+
+
+def test_the_cost_of_the_default_setting_is_measured_on_the_sample_it_is_given():
+    """The published share comes from this function, not from a count made once by hand."""
+    damage = default_setting_damage(
+        [
+            ("Homme de 62 ans, douleur thoracique depuis trois semaines. TA 148/92, FC 102.", "fr"),
+            ("toux grasse sans fièvre ni gêne respiratoire.", "fr"),
+        ]
+    )
+    assert (damage["n"], damage["damaged"], damage["share"]) == (2, 1, 0.5)
+    assert damage["blood_pressure_read_as_a_place"] == 1

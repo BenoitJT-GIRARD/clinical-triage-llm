@@ -199,6 +199,40 @@ def anonymize_text(text: str, lang: str = "fr") -> str:
     return analyze_and_anonymize(text, lang)[0]
 
 
+def default_setting_damage(texts: list[tuple[str, str]]) -> dict:
+    """What the entities left out would have masked, on a sample of clinical narratives.
+
+    Presidio's default setting includes the entities of ``ENTITIES_LEFT_OUT``. On clinical
+    narrative they take away the onset delay, the age and the abbreviation for blood pressure —
+    what decides a triage level. The cost is measured here, at every build and on a declared
+    sample, rather than quoted from a count made once by hand.
+    """
+    analyzer, _ = _engines()
+    damaged = 0
+    detections: dict[str, int] = {}
+    blood_pressure_read_as_a_place = 0
+    for text, lang in texts:
+        language = lang if lang in ("fr", "en") else "en"
+        available = set(analyzer.get_supported_entities(language=language))
+        entities = [entity for entity in ENTITIES_LEFT_OUT if entity in available]
+        found = analyzer.analyze(
+            text=text, language=language, entities=entities, score_threshold=SCORE_THRESHOLD
+        )
+        damaged += bool(found)
+        for result in found:
+            detections[result.entity_type] = detections.get(result.entity_type, 0) + 1
+            if result.entity_type == "LOCATION" and text[result.start : result.end] == "TA":
+                blood_pressure_read_as_a_place += 1
+    total = len(texts)
+    return {
+        "n": total,
+        "damaged": damaged,
+        "share": round(damaged / total, 4) if total else 0.0,
+        "detections": dict(sorted(detections.items())),
+        "blood_pressure_read_as_a_place": blood_pressure_read_as_a_place,
+    }
+
+
 # --- A quality check independent of the detector ---
 
 # Patterns looked for AFTER masking. They are deliberately hand-written and do not use Presidio:

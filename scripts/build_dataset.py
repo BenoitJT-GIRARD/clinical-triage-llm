@@ -33,6 +33,7 @@ from clinical_triage.data.anonymize import (
     MASKED_ENTITIES,
     analyze_and_anonymize,
     audit_corpus,
+    default_setting_damage,
 )
 from clinical_triage.data.case_generator import generate_cases
 from clinical_triage.data.clinical_catalogue import PRESENTATIONS
@@ -74,6 +75,10 @@ YIELD_MARKERS = (
     "<!-- yield:start",
     "<!-- yield:end -->",
 )
+
+#: Narratives on which the cost of Presidio's default setting is measured. Four hundred keeps the
+#: interval on the published share within a few points and the measurement within a minute.
+DEFAULT_SETTING_SAMPLE = 400
 
 
 def _command_run(args: argparse.Namespace) -> str:
@@ -367,6 +372,17 @@ def main() -> None:
     corpus_cases = _cap_corpus_cases(corpus_cases, args.sft_size, rng)
 
     # --- 3. GDPR anonymisation of the texts coming from the corpora ---
+    # Before masking, the cost of Presidio's default setting is measured on a fixed sample of
+    # the narratives about to be masked. The sample is drawn by its own generator: drawing it
+    # from `rng` would shift every later draw, and change the dataset to describe it.
+    damage_sample = random.Random(SEED).sample(
+        corpus_cases, min(DEFAULT_SETTING_SAMPLE, len(corpus_cases))
+    )
+    default_damage = (
+        None
+        if args.no_anonymize
+        else default_setting_damage([(case.description, case.lang) for case in damage_sample])
+    )
     if args.no_anonymize:
         logger.warning("Anonymisation disabled (--no-anonymize).")
         masked_entities = 0
@@ -550,6 +566,8 @@ def main() -> None:
             else residual_pii or "no residual personal data detected"
         ),
         "anonymisation_applied": not args.no_anonymize,
+        # What the entities left out would have masked, had the default setting been kept.
+        "default_setting_damage": default_damage or "not measured: anonymisation disabled",
         "train_evaluation_overlap": overlaps,
     }
     write_metadata(meta, output / "metadata.json")
