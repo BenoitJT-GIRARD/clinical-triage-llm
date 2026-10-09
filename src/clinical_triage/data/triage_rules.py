@@ -370,6 +370,19 @@ def matched_flags(text: str, level: str) -> list[str]:
     return sorted(set(found))
 
 
+def negated_flags(text: str, level: str) -> list[str]:
+    """Return the signs of the requested level that the text names under a negation.
+
+    The rule discards them, rightly when the sign is denied ("pas de douleur thoracique") and
+    wrongly when the negation belongs to something else. Listing them is how a missed case is
+    told apart from a case the rule never read.
+    """
+    normalized = normalize(text)
+    pattern = RED_PATTERN if level == VITAL else WARNING_PATTERN
+    found = [m.group(0) for m in pattern.finditer(normalized) if _is_negated(normalized, m.start())]
+    return sorted(set(found))
+
+
 def _reading(text: str, vitals: VitalSigns | None, age: int | None) -> tuple[VitalSigns, int]:
     """Fill in the reading and the age from the text when they are not provided."""
     return (
