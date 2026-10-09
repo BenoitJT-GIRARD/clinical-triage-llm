@@ -104,8 +104,8 @@ def _engines():
     nlp_engine = NlpEngineProvider(nlp_configuration=configuration).create_engine()
     analyzer = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=["fr", "en"])
 
-    # Recognisers specific to the French context, absent from Presidio: social security number,
-    # national phone format, date of birth.
+    # Recognisers absent from Presidio: the French social security number, the French phone
+    # number and the international one, the date of birth.
     french_patterns = {
         "FR_NIR": Pattern(
             "NIR", r"\b[12]\s?\d{2}\s?\d{2}\s?\d{2,3}\s?\d{2,3}\s?\d{3}\s?\d{2}\b", 0.85
@@ -116,6 +116,15 @@ def _engines():
         "FR_TELEPHONE": Pattern(
             "phone",
             r"\b0[1-9](?:[ .-]?\d{2}){4}\b|\+33[ .-]?[1-9](?:[ .-]?\d{2}){4}\b",
+            0.85,
+        ),
+        # Any other country, written in its international form: a country code then at least
+        # two groups of digits. Presidio's own recogniser let +44, +41 and even +1 through on
+        # these texts, and a relative abroad is a common line in a triage note. France is left
+        # to the pattern above, which names it.
+        "INTL_TELEPHONE": Pattern(
+            "international phone",
+            r"\+(?!33)\d{1,3}(?:[ .-]?\(?\d{1,4}\)?){2,6}\b",
             0.85,
         ),
         # Two spellings of a date of birth: DD/MM/YYYY, and the ISO form YYYY-MM-DD the
@@ -148,6 +157,7 @@ def _engines():
 MASKED_ENTITIES = PII_ENTITIES + (
     "FR_NIR",
     "FR_TELEPHONE",
+    "INTL_TELEPHONE",
     "DATE_NAISSANCE",
     "DATE_NAISSANCE_ISO",
 )

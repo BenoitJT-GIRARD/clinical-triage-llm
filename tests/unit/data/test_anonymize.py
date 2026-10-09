@@ -174,3 +174,19 @@ def test_the_chosen_setting_leaves_onset_age_and_vitals_intact(language, text, s
     masked, _ = analyze_and_anonymize(text, language)
     for survivor in survivors:
         assert survivor in masked
+
+
+@pytest.mark.parametrize(
+    ("language", "text"),
+    [
+        ("fr", "Fille joignable au +44 20 7946 0958 en cas de besoin."),
+        ("fr", "Médecin traitant à Genève, +41 22 345 67 89."),
+        ("en", "Daughter reachable on +1 415 555 0132."),
+        ("en", "Call the family on +49 30 1234567."),
+    ],
+)
+def test_a_phone_number_from_any_country_is_masked(language, text):
+    """+44 and +41 stayed in the clear: only the French and the generic forms were recognised."""
+    masked, count = analyze_and_anonymize(text, language)
+    assert count >= 1
+    assert not residual_pii(masked), masked
