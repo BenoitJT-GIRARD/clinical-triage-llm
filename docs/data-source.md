@@ -76,7 +76,7 @@ No real patient data is used. The catalogue vignettes are synthetic, and the pub
 research sets with no identifying content. The anonymisation pass runs anyway, on both languages,
 and a separate check looks afterwards for what it might have let through. The data card holds the
 three answers: the entities masked, the ones left alone on purpose, and the residue the check
-still reports — [`../data/README.md`](../data/README.md#gdpr-what-is-masked-and-what-is-checked).
+still reports — [`../data/README.md`](../data/README.md#personal-data).
 
 ## Reusing this dataset
 

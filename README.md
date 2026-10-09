@@ -287,4 +287,4 @@ The training set is built from four public medical corpora, each used under its 
 none redistributed here in its original form; the clinical vignettes and the evaluation cases
 were written for this project. No real patient data is used. The masking, and the residue a
 separate check still finds after it, are measured and published in the
-[data card](data/README.md#gdpr-what-is-masked-and-what-is-checked).
+[data card](data/README.md#personal-data).
