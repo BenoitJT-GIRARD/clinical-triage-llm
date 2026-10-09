@@ -12,10 +12,13 @@ The tokenizer exported with the model carries the project's chat template and ``
 end-of-sequence token. That is what makes the inference server stop in the right place with no
 extra setting: the generation configuration is written into the model, not into the caller.
 
+An export that fails the check of :mod:`clinical_triage.training.export` is deleted, not left
+beside the delivered models for something to pick up.
+
 Usage::
 
     uv run python scripts/merge_adapter.py --adapter sft
-    uv run python scripts/merge_adapter.py --adapter dpo
+    uv run python scripts/merge_adapter.py --adapter dpo --seed 43
 """
 
 from __future__ import annotations
@@ -25,46 +28,32 @@ from clinical_triage.bootstrap import use_utf8_console
 use_utf8_console()
 
 import argparse
+import shutil
+from pathlib import Path
 
-from clinical_triage.config import MODEL, PATHS
+from clinical_triage.config import MODEL, PATHS, SEED
 from clinical_triage.prompts import prepare_tokenizer
-from clinical_triage.utils import get_logger
+from clinical_triage.training.export import export_problems
+from clinical_triage.utils import get_logger, path_for_log
 
 logger = get_logger("merge")
 
 
-def _check_export(destination) -> None:
-    """Refuse an export whose output head did not survive the untying.
-
-    Two ways the export can be wrong without raising anything: the configuration re-enables the
-    tie between embeddings and output head, or the weight file contains no distinct
-    ``lm_head.weight`` tensor. In both cases the model served is not the one that was trained.
-    """
-    import json
-
-    configuration = json.loads((destination / "config.json").read_text(encoding="utf-8"))
-    if configuration.get("tie_word_embeddings"):
-        raise SystemExit(
-            f"{destination}: the weights are still tied, the merged output head is lost."
-        )
-
-    index = destination / "model.safetensors.index.json"
-    if index.exists():
-        keys = set(json.loads(index.read_text(encoding="utf-8"))["weight_map"])
-    else:
-        from safetensors import safe_open
-
-        with safe_open(str(destination / "model.safetensors"), framework="pt") as handle:
-            keys = set(handle.keys())
-    if "lm_head.weight" not in keys:
-        raise SystemExit(f"{destination}: `lm_head.weight` absent from the exported weights.")
+def keep_or_delete(destination: Path) -> None:
+    """Keep a checked export, or delete it and stop."""
+    problems = export_problems(destination)
+    if problems:
+        shutil.rmtree(destination, ignore_errors=True)
+        raise SystemExit("Export refused and deleted: " + "; ".join(problems))
     logger.info("Export checked: output head untied and present in the weights.")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--adapter", choices=["sft", "dpo"], required=True)
+    parser.add_argument("--seed", type=int, default=SEED)
     args = parser.parse_args()
+    paths = PATHS.for_seed(args.seed)
 
     import torch
     from peft import PeftModel
@@ -72,12 +61,12 @@ def main() -> None:
 
     if args.adapter == "sft":
         base = MODEL.base_model
-        adapter = PATHS.sft_adapter
-        destination = PATHS.sft_merged
+        adapter = paths.sft_adapter
+        destination = paths.sft_merged
     else:
-        base = str(PATHS.sft_merged)
-        adapter = PATHS.dpo_adapter
-        destination = PATHS.dpo_merged
+        base = str(paths.sft_merged)
+        adapter = paths.dpo_adapter
+        destination = paths.dpo_merged
 
     if not adapter.exists():
         raise SystemExit(f"Adapter not found: {adapter}")
@@ -113,8 +102,8 @@ def main() -> None:
 
     merged.save_pretrained(str(destination), safe_serialization=True)
     tokenizer.save_pretrained(str(destination))
-    _check_export(destination)
-    logger.info("Merged model saved to %s", destination)
+    keep_or_delete(destination)
+    logger.info("Merged model saved to %s", path_for_log(destination))
 
 
 if __name__ == "__main__":
