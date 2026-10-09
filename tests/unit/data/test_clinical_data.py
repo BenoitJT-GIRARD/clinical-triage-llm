@@ -393,3 +393,22 @@ def test_the_yield_table_of_the_card_follows_the_delivered_counts():
             == measure["entries_read"]
         )
         assert f"{lost['kept']:,}" in table
+
+
+# --- A complaint carries no delay: the generator states the onset, once ---
+
+#: Every way a complaint could state a delay. The generator owns the onset; a complaint that
+#: carried one too read "depuis deux jours depuis trois jours", and nine of the thirteen
+#: complaints concerned were deferred consultations: the duplicate predicted the level.
+TIME_EXPRESSION = re.compile(
+    r"\b(depuis|il y a|minutes?|heures?|jours?|semaines?|mois|matin|soir|nuit|hier|veille"
+    r"|since|ago|hours?|days?|weeks?|months?|yesterday|morning|night)\b"
+    r"|\bfor (a|an|two|three|four|six|ten|twenty|several|\d+) (minute|hour|day|week|month)",
+    re.IGNORECASE,
+)
+
+
+@pytest.mark.parametrize("presentation", PRESENTATIONS, ids=lambda p: p.id)
+def test_a_complaint_carries_no_delay(presentation):
+    for complaint in (presentation.complaint_fr, presentation.complaint_en):
+        assert not TIME_EXPRESSION.search(complaint), complaint
