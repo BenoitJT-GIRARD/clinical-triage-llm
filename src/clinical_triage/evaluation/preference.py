@@ -1,21 +1,27 @@
-"""An independent measurement of the alignment, on an external preference set.
+"""What the preference alignment changed, measured by the quantity it optimises.
 
 The clinical set says whether the model triages correctly. It says little about what preference
 alignment changed: on three classes, two close models often produce the same decisions, and the
 gap drowns in the uncertainty.
 
-So the alignment is measured where it expresses itself: **on preferences**. For each pair of
-answers annotated by humans, the likelihood the model assigns to the preferred answer is
-compared with the one it assigns to the rejected answer. A better-aligned model ranks the good
-answer first more often.
+So the alignment is measured where it acts: **on the likelihood it gives to two answers of the
+same question**. Each answer is read twice by the same model — with the DPO adapter, and without
+it, that is by the supervised model the alignment started from. The difference between the two
+log-likelihoods is what the alignment changed for that answer: the implicit reward DPO
+optimises. A pair counts as correctly ordered when the alignment raised the preferred answer more
+than the rejected one.
 
-The set used is **UltraMedical-Preference**. It is deliberately kept **out of training**: its
-answers are long English essays, which would teach the model to violate the triage output
-contract. Reserved for measurement, it provides an evaluation of the alignment that depends
-neither on our data nor on our labels.
+Both readings cover the same text, so what belongs to the text itself — rare vocabulary, an
+author's style — cancels out in the difference. A change the alignment applies to every token,
+on the other hand, accumulates with length: the summary therefore also says what share of the
+pairs it settles in favour of the longer answer, and what share of the answers it lowered.
 
-Pairs labelled by answer length alone are discarded: they would measure verbosity, not clinical
-preference.
+Two sets are read this way. The test split of **UltraMedical-Preference**, 777 pairs of medical
+answers whose better one GPT-4 picked and biomedical experts reviewed, measures whether anything
+transferred to medicine at large; it is kept out of training, its long English essays would
+teach the model to break the triage output contract. The **task-format set** of
+:mod:`clinical_triage.evaluation.task_preferences` measures whether the preference learnt on
+generated narratives holds on narratives written by hand.
 """
 
 from __future__ import annotations
@@ -30,57 +36,48 @@ logger = get_logger("preference")
 
 
 @dataclass(frozen=True)
-class PreferenceScore:
-    """The likelihoods assigned to the two answers of a pair.
+class AlignmentEffect:
+    """What the alignment changed to the log-likelihood of the two answers of a pair."""
 
-    ``truncated_sides`` counts how many of the two answers the model window cut short — 0, 1 or
-    2. It travels with the score, where a log line would bury it, because the share of
-    truncated answers is published next to the result and qualifies how it must be read.
-    """
-
-    chosen: float
-    rejected: float
-    label_type: str
-    truncated_sides: int = 0
+    preferred_gain: float
+    rejected_gain: float
+    group: str
+    preferred_is_longer: bool
 
     @property
     def correctly_ordered(self) -> bool:
-        return self.chosen > self.rejected
+        return self.preferred_gain > self.rejected_gain
 
-    @property
-    def margin(self) -> float:
-        return self.chosen - self.rejected
+
+def _bounded_prompt(prompt: str, tokenizer) -> str:
+    # The prompt is bounded to half the model window, so that room always remains for the answer,
+    # which is the object of the measurement. The bound applies to the **text**, not to the
+    # token sequence, so that the prompt tokens stay an exact prefix of the whole — which is what
+    # allows the start of the answer to be located by a simple count.
+    return bound_description(prompt, tokenizer, MODEL.max_seq_length // 2)[0]
 
 
 def _log_likelihood(model, tokenizer, prompt: str, answer: str, device: str) -> float:
-    """Mean per-token log-likelihood of ``answer``, given ``prompt``.
+    """Log-likelihood of ``answer`` given ``prompt``, summed over its tokens.
 
-    Normalised by length: without that, the comparison would mechanically favour the shorter
-    answer, and length would be measured a second time, substance never.
+    The sum, not the mean: it is the quantity DPO optimises, and the two readings of one answer
+    cover the same tokens.
     """
     import torch
 
-    # The bounds come from the model's real window. Beyond it, the forward pass would truncate
-    # the logits to the window while the targets kept their original length, and reading the
-    # likelihoods would fail on a dimension mismatch — UltraMedical's essays regularly exceed
-    # that window.
-    #
-    # The prompt is bounded to half the window so that room always remains for the answer, which
-    # is the object of the measurement. The bound applies to the **text**, not to the token
-    # sequence, so that the prompt tokens stay an exact prefix of the whole — which is what
-    # allows the start of the answer to be located by a simple count.
-    bounded_prompt, _ = bound_description(prompt, tokenizer, MODEL.max_seq_length // 2)
-    prompt_tokens = tokenizer(bounded_prompt, return_tensors="pt")
+    # Bounded by the real model window. Beyond it, the forward pass would truncate the logits to
+    # the window while the targets kept their original length, and reading the likelihoods would
+    # fail on a dimension mismatch — UltraMedical's essays regularly exceed that window.
+    bounded = _bounded_prompt(prompt, tokenizer)
+    prompt_tokens = tokenizer(bounded, return_tensors="pt")
     full_tokens = tokenizer(
-        bounded_prompt + answer,
+        bounded + answer,
         return_tensors="pt",
         truncation=True,
         max_length=MODEL.max_seq_length,
     )
     inputs = full_tokens["input_ids"].to(device)
     answer_start = prompt_tokens["input_ids"].shape[1]
-    if inputs.shape[1] <= answer_start:
-        return float("-inf")
 
     with torch.no_grad():
         logits = model(inputs).logits
@@ -88,82 +85,106 @@ def _log_likelihood(model, tokenizer, prompt: str, answer: str, device: str) -> 
     log_probabilities = torch.log_softmax(logits[0, :-1].float(), dim=-1)
     targets = inputs[0, 1:]
     kept = log_probabilities.gather(1, targets.unsqueeze(1)).squeeze(1)
-    answer_only = kept[answer_start - 1 :]
-    return float(answer_only.mean())
+    return float(kept[answer_start - 1 :].sum())
 
 
-def truncated_sides(tokenizer, pair, prompt: str) -> int:
-    """How many of the pair's two answers the model window cuts short.
+def clipped_answers(tokenizer, pairs, separator: str = "\n\n") -> int:
+    """How many answers the model window cuts short.
 
-    UltraMedical's essays regularly exceed the window. The comparison stays fair — the same
-    bound applies to the preferred and to the rejected answer, and the score is normalised by
-    length — but it then covers the **beginning** of each answer. The published result must be
-    able to say so with a number, and not pass over it in silence.
+    The comparison stays fair — both readings of one answer cover the same tokens — but it then
+    covers the **beginning** of the answer. The count is published beside the result.
     """
-    bounded, _ = bound_description(prompt, tokenizer, MODEL.max_seq_length // 2)
-    return sum(
-        len(tokenizer(bounded + answer)["input_ids"]) > MODEL.max_seq_length
-        for answer in (pair.chosen, pair.rejected)
-    )
+    clipped = 0
+    for pair in pairs:
+        bounded = _bounded_prompt(f"{pair.prompt}{separator}", tokenizer)
+        clipped += sum(
+            len(tokenizer(bounded + answer)["input_ids"]) > MODEL.max_seq_length
+            for answer in (pair.chosen, pair.rejected)
+        )
+    return clipped
 
 
-def score_pairs(model, tokenizer, pairs, device: str = "cuda") -> list[PreferenceScore]:
-    """Assign each pair the likelihoods of its two answers."""
-    scores = []
+def measure_alignment(
+    model, tokenizer, pairs, device: str = "cuda", separator: str = "\n\n"
+) -> list[AlignmentEffect]:
+    """Read every answer with and without the DPO adapter, and keep the difference.
+
+    ``model`` must carry the DPO adapter on top of the merged supervised model, as in training:
+    disabling the adapter then gives back exactly the reference model, with no second load.
+
+    ``separator`` closes the prompt. Between a free-text question and its answer, two newlines
+    form a token of their own, which keeps the prompt tokens an exact prefix of the whole; a
+    triage prompt already ends on the opening of the assistant turn and takes none.
+    """
+    effects = []
     for index, pair in enumerate(pairs):
-        # The two newlines are not cosmetic. `_log_likelihood` locates the start of the answer
-        # by counting the tokens of the prompt alone, which assumes those tokens form an
-        # **exact prefix** of the whole. Sub-word tokenisation can merge the last character of
-        # the prompt with the first of the answer and shift the boundary by one token; a
-        # separator that forms its own token prevents that. Checked on the corpus: no broken
-        # prefix.
-        prompt = f"{pair.prompt}\n\n"
-        scores.append(
-            PreferenceScore(
-                chosen=_log_likelihood(model, tokenizer, prompt, pair.chosen, device),
-                rejected=_log_likelihood(model, tokenizer, prompt, pair.rejected, device),
-                label_type=pair.label_type,
-                truncated_sides=truncated_sides(tokenizer, pair, prompt),
+        prompt = f"{pair.prompt}{separator}"
+        after = [
+            _log_likelihood(model, tokenizer, prompt, answer, device)
+            for answer in (pair.chosen, pair.rejected)
+        ]
+        with model.disable_adapter():
+            before = [
+                _log_likelihood(model, tokenizer, prompt, answer, device)
+                for answer in (pair.chosen, pair.rejected)
+            ]
+        effects.append(
+            AlignmentEffect(
+                preferred_gain=after[0] - before[0],
+                rejected_gain=after[1] - before[1],
+                group=pair.label_type,
+                preferred_is_longer=len(pair.chosen) > len(pair.rejected),
             )
         )
-        if (index + 1) % 25 == 0:
-            logger.info("  %d/%d pairs scored", index + 1, len(pairs))
-    truncated = sum(score.truncated_sides for score in scores)
-    if truncated:
-        logger.info(
-            "  %d answers out of %d exceed the window: the comparison covers their beginning.",
-            truncated,
-            2 * len(pairs),
-        )
-    return scores
+        if (index + 1) % 100 == 0:
+            logger.info("  %d/%d pairs measured", index + 1, len(pairs))
+    return effects
 
 
-def summarize(scores: list[PreferenceScore]) -> dict:
-    """Aggregate the scores: share of correctly ordered pairs and mean margin."""
-    if not scores:
-        return {"n": 0, "correctly_ordered_share": 0.0, "mean_margin": 0.0}
-    correctly_ordered = sum(score.correctly_ordered for score in scores)
-    per_difficulty = {}
-    for level in sorted({score.label_type for score in scores}):
-        subset = [s for s in scores if s.label_type == level]
-        per_difficulty[level] = {
+def _share(values: list[bool]) -> float:
+    return round(sum(values) / len(values), 4)
+
+
+def summarize(effects: list[AlignmentEffect]) -> dict:
+    """The share of correctly ordered pairs, overall and per group, with what qualifies it.
+
+    Two shares travel with the result, because it cannot be read without them: the answers whose
+    likelihood the alignment **lowered**, and the pairs it settled in favour of the **longer**
+    answer.
+    """
+    if not effects:
+        return {"n": 0, "correctly_ordered_share": 0.0, "per_group": {}}
+    per_group = {}
+    for group in sorted({effect.group for effect in effects}):
+        subset = [effect for effect in effects if effect.group == group]
+        per_group[group] = {
             "n": len(subset),
-            "correctly_ordered_share": round(
-                sum(s.correctly_ordered for s in subset) / len(subset), 4
-            ),
+            "correctly_ordered_share": _share([effect.correctly_ordered for effect in subset]),
         }
-    truncated = sum(score.truncated_sides for score in scores)
+    gains = [gain for effect in effects for gain in (effect.preferred_gain, effect.rejected_gain)]
     return {
-        "n": len(scores),
-        "correctly_ordered_share": round(correctly_ordered / len(scores), 4),
-        "mean_margin": round(sum(score.margin for score in scores) / len(scores), 4),
-        "per_difficulty": per_difficulty,
-        # How much of what was compared the model window cut short. Published rather than
-        # logged: it is the first thing that qualifies a result sitting below chance.
-        "truncated_answers": truncated,
-        "truncated_share": round(truncated / (2 * len(scores)), 4),
-        # The pair-by-pair detail, in set order. Two models are evaluated on the **same** pairs:
-        # comparing their two proportions would treat them as independent measurements, when
-        # all the information is in the pairs where they diverge.
-        "correctly_ordered": [score.correctly_ordered for score in scores],
+        "n": len(effects),
+        "correctly_ordered_share": _share([effect.correctly_ordered for effect in effects]),
+        "per_group": per_group,
+        "lowered_answers_share": _share([gain < 0 for gain in gains]),
+        "longer_favoured_share": _share(
+            [effect.correctly_ordered == effect.preferred_is_longer for effect in effects]
+        ),
+    }
+
+
+def preferred_longer_share(pairs, set_aside: str = "length") -> dict:
+    """How often the preferred answer is simply the longer one, outside the length-matched group.
+
+    This is why the corpus is never trained on: an alignment learnt on pairs where the preferred
+    answer is mostly the longer one learns length. The ``length`` group is set aside because its
+    authors built it from answers of comparable length — it is the one group where length cannot
+    decide.
+    """
+    considered = [pair for pair in pairs if pair.label_type != set_aside]
+    longer = sum(len(pair.chosen) > len(pair.rejected) for pair in considered)
+    return {
+        "n": len(considered),
+        "preferred_is_longer": longer,
+        "share": round(longer / len(considered), 4) if considered else 0.0,
     }

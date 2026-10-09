@@ -200,37 +200,3 @@ def test_the_two_deliveries_are_compared_on_what_separates_them(evaluation):
 def test_deliveries_are_not_compared_when_only_one_was_evaluated(evaluation):
     results = {"clinical_set": {"models": {"dpo-merged": {}}}, "_predictions": {}}
     assert evaluation._compare_deliveries(results) == {}
-
-
-# --- Supervised against aligned, on the same preference pairs ----------------
-
-
-def test_the_alignment_is_judged_on_the_pairs_where_the_two_models_differ(evaluation):
-    results = {
-        "external_preferences": {
-            "sft": {"correctly_ordered": [True, False, False, True]},
-            "dpo": {"correctly_ordered": [True, True, False, False]},
-        }
-    }
-
-    comparison = evaluation._compare_preferences(results)
-
-    assert comparison["n"] == 4
-    assert comparison["aligned_only"] == 1
-    assert comparison["supervised_only"] == 1
-    assert comparison["agreements"] == 2
-
-
-def test_two_preference_runs_of_different_lengths_are_not_paired(evaluation):
-    """Pairing two lists that do not describe the same pairs would compare nothing."""
-    results = {
-        "external_preferences": {
-            "sft": {"correctly_ordered": [True, False]},
-            "dpo": {"correctly_ordered": [True, False, True]},
-        }
-    }
-    assert evaluation._compare_preferences(results) is None
-
-
-def test_a_run_without_the_external_preference_set_publishes_no_comparison(evaluation):
-    assert evaluation._compare_preferences({}) is None

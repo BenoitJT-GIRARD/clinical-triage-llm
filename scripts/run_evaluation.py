@@ -272,31 +272,6 @@ def _compare_undertriage(
     }
 
 
-def _compare_preferences(results: dict) -> dict | None:
-    """Compare the supervised model and the aligned model on the **same** pairs.
-
-    Both were measured on the same external set: what separates them is the pairs alone where
-    one succeeds and the other fails. Comparing their two proportions would throw that
-    information away, and would declare a gain on a difference of two pairs out of a hundred and
-    fifty.
-    """
-    preferences = results.get("external_preferences", {})
-    supervised = preferences.get("sft", {}).get("correctly_ordered")
-    aligned = preferences.get("dpo", {}).get("correctly_ordered")
-    if not supervised or not aligned or len(supervised) != len(aligned):
-        return None
-
-    aligned_only = sum(a and not s for s, a in zip(supervised, aligned, strict=True))
-    supervised_only = sum(s and not a for s, a in zip(supervised, aligned, strict=True))
-    return {
-        "n": len(supervised),
-        "aligned_only": aligned_only,
-        "supervised_only": supervised_only,
-        "agreements": len(supervised) - aligned_only - supervised_only,
-        "p_mcnemar": round(mcnemar_exact(aligned_only, supervised_only), 4),
-    }
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -311,8 +286,8 @@ def main() -> None:
     parser.add_argument(
         "--preferences",
         type=int,
-        default=150,
-        help="pairs of the external preference set (0 to skip)",
+        default=777,
+        help="pairs of the external preference set, 777 in all (0 to skip)",
     )
     args = parser.parse_args()
 
@@ -395,13 +370,20 @@ def main() -> None:
         checks = robustness.run(agent)
         results["robustness"][name] = robustness.summarize(checks)
 
-        # An independent measurement of the alignment, on a corpus of human preferences kept out
-        # of training.
-        if external_pairs:
-            scores = preference.score_pairs(
+        # What the alignment changed, on an external preference set kept out of training. It is
+        # measured on the model that carries the DPO adapter alone: each answer is read with and
+        # without it, that is after and before the alignment.
+        if external_pairs and name == "dpo":
+            effects = preference.measure_alignment(
                 agent.model, agent.tokenizer, external_pairs, agent.device
             )
-            results["external_preferences"][name] = preference.summarize(scores)
+            results["external_preferences"] = {
+                **preference.summarize(effects),
+                "clipped_answers": preference.clipped_answers(agent.tokenizer, external_pairs),
+                "preferred_is_longer_outside_length_group": preference.preferred_longer_share(
+                    external_pairs
+                ),
+            }
 
         del agent
         free_gpu_memory()
@@ -432,16 +414,11 @@ def main() -> None:
             "linear_classifier",
         )
     results["adapter_versus_merged"] = _compare_deliveries(results)
-    results["paired_preferences"] = _compare_preferences(results)
     del results["_predictions"]
     for block in ("clinical_set", "internal_set"):
         classical = results[block]["baselines"].get("linear_classifier")
         if classical:
             classical.pop("_predictions", None)
-    # The pair-by-pair detail serves the paired comparison; it has no place in the results file,
-    # where it would add hundreds of booleans nobody will read.
-    for measures in results["external_preferences"].values():
-        measures.pop("correctly_ordered", None)
 
     PATHS.reports.mkdir(parents=True, exist_ok=True)
     destination = PATHS.reports / "evaluation_results.json"
@@ -475,12 +452,17 @@ def main() -> None:
             failures = ", ".join(measures["non_compliant_cases"]) or "none"
             print(f"{name:24s} | compliant {measures['compliant_share']:.3f} | failing: {failures}")
 
-    if results["external_preferences"]:
-        print("\n=== External preferences (UltraMedical, outside training) ===")
-        for name, measures in results["external_preferences"].items():
+    preferences = results["external_preferences"]
+    if preferences:
+        print("\n=== External preferences (UltraMedical test split, outside training) ===")
+        print(
+            f"{'all':24s} | preferred raised more {preferences['correctly_ordered_share']:.3f} "
+            f"on {preferences['n']} pairs"
+        )
+        for group, measures in preferences["per_group"].items():
             print(
-                f"{name:24s} | correctly ordered {measures['correctly_ordered_share']:.3f} "
-                f"on {measures['n']} pairs | margin {measures['mean_margin']:+.4f}"
+                f"{group:24s} | preferred raised more {measures['correctly_ordered_share']:.3f} "
+                f"on {measures['n']} pairs"
             )
 
 

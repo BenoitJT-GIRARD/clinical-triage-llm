@@ -98,3 +98,50 @@ def test_the_frenchmedmcqa_answer_index_counts_from_zero(monkeypatch, index, exp
     (entry,) = load_frenchmedmcqa()
 
     assert entry.answer == expected
+
+
+# --- External preferences: the test split, every group ---
+
+
+def _ultramedical_pair(group: str, index: int, rejected: str | None = None) -> dict:
+    return {
+        "label_type": group,
+        "prompt": f"question {index}",
+        "chosen": [
+            {"role": "user", "content": "q"},
+            {"role": "assistant", "content": f"preferred {index}"},
+        ],
+        "rejected": [{"role": "assistant", "content": rejected or f"rejected {index}"}],
+    }
+
+
+@pytest.fixture
+def test_split(monkeypatch, tmp_path):
+    """Replace the download of the test split with a local file."""
+    import json
+
+    rows = [
+        _ultramedical_pair("easy", 0),
+        _ultramedical_pair("length", 1),
+        _ultramedical_pair("human", 2, rejected="preferred 2"),  # two identical answers
+        _ultramedical_pair("hard", 3),
+    ]
+    path = tmp_path / "test.json"
+    path.write_text(json.dumps(rows), encoding="utf-8")
+    monkeypatch.setattr("huggingface_hub.hf_hub_download", lambda *_, **__: str(path))
+
+
+def test_the_external_preferences_keep_every_group(test_split):
+    """The last message of each answer is read, and a pair whose two answers are identical is
+    set aside: it decides nothing."""
+    from clinical_triage.data.corpus_sources import load_ultramedical_preferences
+
+    pairs = load_ultramedical_preferences()
+    assert [pair.label_type for pair in pairs] == ["easy", "length", "hard"]
+    assert (pairs[0].chosen, pairs[0].rejected) == ("preferred 0", "rejected 0")
+
+
+def test_the_external_preferences_respect_the_cap(test_split):
+    from clinical_triage.data.corpus_sources import load_ultramedical_preferences
+
+    assert len(load_ultramedical_preferences(limit=2)) == 2

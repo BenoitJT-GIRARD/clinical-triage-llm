@@ -1,8 +1,8 @@
 """Loading the public medical corpora.
 
-Four corpora are required: MediQAl, FrenchMedMCQA, MedQuAD and UltraMedical-Preference. This
-module only downloads them and brings them to a common shape; sorting what is genuinely usable
-for triage happens in ``corpus_cases``.
+Four corpora are the starting point: MediQAl, FrenchMedMCQA, MedQuAD and
+UltraMedical-Preference. This module only downloads them and brings them to a common shape;
+sorting what is genuinely usable for triage happens in ``corpus_cases``.
 
 Three findings, checked on the corpora themselves, explain what follows:
 
@@ -10,13 +10,13 @@ Three findings, checked on the corpora themselves, explain what follows:
   describes a patient, their complaint, their history and often their vital signs on arrival.
   3,075 distinct vignettes, in French, 569 of which carry at least one readable vital sign. It
   is the only authentic French-language source.
-- **FrenchMedMCQA holds 1,080 questions** across its three splits, and only six of them describe
-  a patient: it is a set of pharmacy exam questions.
+- **FrenchMedMCQA is a set of pharmacy exam questions.** The mirror used keeps only its 1,080
+  single-answer questions, out of the corpus's 3,105, and only six of them describe a patient.
 - **MedQuAD asks general questions about conditions**, not about patients. It serves to vary the
   English clinical vocabulary, not to supply cases.
 
-MedMCQA completes the English vignette volume, since the three usable source corpora are
-either French-language or patient-free.
+MedMCQA completes the English vignette volume, since the three other usable corpora are either
+French-language or patient-free.
 
 **The corpora are read in full.** A partial read would give a yield that describes not the
 source but the ceiling we set ourselves, and the published protocol would draw false conclusions
@@ -32,7 +32,9 @@ silence would produce a table describing half a corpus while presenting it as th
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 from clinical_triage.config import DATA
 from clinical_triage.utils import get_logger
@@ -133,7 +135,7 @@ def _rows(dataset, repo: str):
 def load_mediqal(limit: int = 0) -> list[CorpusEntry]:
     """MediQAl: annotated French clinical cases, from the ANR MALADES project.
 
-    It is the only source corpus that describes **patients**: the ``clinical_case`` column
+    It is the only one of the four starting corpora that describes **patients**: the ``clinical_case`` column
     carries a complaint, a history and, one time in five, the vital signs recorded on arrival.
 
     Three configurations share that column — ``oeq`` (open questions), ``mcqu`` and ``mcqm``
@@ -178,7 +180,7 @@ def load_mediqal(limit: int = 0) -> list[CorpusEntry]:
 def load_medquad(limit: int = 0) -> list[CorpusEntry]:
     """MedQuAD: English medical question-answer pairs, from the NIH websites.
 
-    The designated repository exposes two columns, ``Question`` and ``Answer``, capitalised;
+    The repository used exposes two columns, ``Question`` and ``Answer``, capitalised;
     other redistributions of the same corpus name them in lower case. Both are accepted, so that
     changing mirror does not break the preparation.
     """
@@ -284,7 +286,7 @@ class PreferencePair:
     prompt: str
     chosen: str
     rejected: str
-    label_type: str  # "hard", "easy" or "length"
+    label_type: str  # "easy", "hard", "length" or "human"
 
 
 def _last_message(value: object) -> str:
@@ -303,37 +305,35 @@ def _last_message(value: object) -> str:
     return _clean(value)
 
 
-def load_ultramedical_preferences(
-    limit: int, drop_length_labels: bool = True
-) -> list[PreferencePair]:
-    """UltraMedical-Preference: pairs of medical answers annotated by preference.
+def load_ultramedical_preferences(limit: int = 0) -> list[PreferencePair]:
+    """UltraMedical-Preference: pairs of medical answers, test split.
 
-    The corpus records in ``label_type`` the criterion the preference was established on. A third
-    of the pairs are labelled ``length``: the preferred answer is preferred because it is longer.
-    Training an alignment on that signal teaches the model that "longer is better", which, on an
-    agent whose answer fits in three lines, translates into a generation that never stops. Those
-    pairs are therefore discarded by default.
+    For each question the authors had several models answer, then GPT-4 scored and ranked the
+    answers: the best ranked becomes the preferred one. On the test split — 777 pairs, the one the
+    authors set aside for evaluation — biomedical experts reviewed and corrected those choices.
+    ``label_type`` puts each pair in a group: ``easy``, ``hard``, ``length``, whose two answers
+    have comparable lengths, and ``human``, where the experts overruled GPT-4.
+
+    The file is read directly: its columns differ from the training split's, and ``datasets``
+    refuses to load the whole repository.
     """
-    dataset = _stream(DATA.corpora["ultramedical_pref"])
-    if dataset is None:
+    from huggingface_hub import hf_hub_download
+
+    repo = DATA.corpora["ultramedical_pref"]
+    try:
+        path = hf_hub_download(repo, "data/test.json", repo_type="dataset")
+        rows = json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - a missing source must not stop everything
+        logger.warning("Corpus %s unavailable (%s) — source skipped.", repo, exc)
         return []
     pairs: list[PreferencePair] = []
-    discarded = 0
-    for row in _rows(dataset, DATA.corpora["ultramedical_pref"]):
-        label_type = _clean(row.get("label_type"))
-        if drop_length_labels and label_type == "length":
-            discarded += 1
-            continue
+    for row in rows:
         prompt = _clean(row.get("prompt"))
         chosen = _last_message(row.get("chosen"))
         rejected = _last_message(row.get("rejected"))
         if prompt and chosen and rejected and chosen != rejected:
-            pairs.append(PreferencePair(prompt, chosen, rejected, label_type))
-        if len(pairs) >= limit:
+            pairs.append(PreferencePair(prompt, chosen, rejected, _clean(row.get("label_type"))))
+        if _cap_reached(pairs, limit):
             break
-    logger.info(
-        "UltraMedical-Preference: %d pairs kept, %d discarded (length preference).",
-        len(pairs),
-        discarded,
-    )
+    logger.info("UltraMedical-Preference: %d test pairs loaded.", len(pairs))
     return pairs
