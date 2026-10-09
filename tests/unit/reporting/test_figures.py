@@ -187,7 +187,9 @@ def test_undertriage_by_subgroup_is_drawn(tmp_path):
         },
     }
     path = figures.subgroup_undertriage(by_subgroup, tmp_path / "subgroup.png")
-    assert "drawn at every effective" in _manifest(path)["dispersion"]
+    manifest = _manifest(path)
+    assert "drawn even on the smallest groups" in manifest["dispersion"]
+    assert manifest["n"] == "n(urgent cases) = 30, split as on the axis"
 
 
 # --- What a figure is allowed to claim ---
@@ -213,6 +215,7 @@ def test_a_subgroup_too_small_carries_no_whisker(tmp_path):
     assert len(whiskers) == 1, "only one of the two bars is measurable"
     assert len([bar for bar in ax.patches if bar.get_hatch()]) == 1
     assert any("n = 3" in label.get_text() for label in ax.get_xticklabels())
+    assert _manifest(tmp_path / "case-type.png")["n"] == "n(cases) = 35, split as on the axis"
 
 
 def test_a_value_is_written_above_its_interval_not_inside_it(tmp_path):

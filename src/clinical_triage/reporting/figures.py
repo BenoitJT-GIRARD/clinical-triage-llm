@@ -19,7 +19,7 @@ and not clouds of points:
   figure says which ones it draws.
 
 Sizes, colours, fonts and the sample-size stamp come from the vendored style module, which
-also writes every image and refuses one whose axes or effective are missing.
+also writes every image and refuses one whose axes or sample size are missing.
 """
 
 from __future__ import annotations
@@ -94,7 +94,7 @@ CONFIDENCE_LABELS = {"high": "high (catalogue)", "medium": "medium (corpus)"}
 #: Said in words on every figure whose bars are counted, never estimated.
 COUNTED = "exhaustive counts, no estimation"
 
-#: Hatch of a bar whose effective forbids publishing a rate. Colour alone would not do: it
+#: Hatch of a bar whose sample size forbids publishing a rate. Colour alone would not do: it
 #: disappears in a greyscale print.
 NOT_MEASURABLE = "///"
 
@@ -292,7 +292,7 @@ def sft_training(
 ) -> Path:
     """Loss against optimiser steps for the supervised run that produced the shipped model.
 
-    The two effectives are those of the sets the losses are computed on. Without them the figure
+    The two sample sizes are those of the sets the losses are computed on. Without them the figure
     shows two curves without saying on how many examples, and a gap between two validation
     points does not read the same way on fifty examples as on five hundred.
     """
@@ -317,16 +317,16 @@ def sft_training(
     ax.set_yscale("log")
     ax.legend(loc="upper right")
     fig.tight_layout()
-    effective: dict[str, int] = {}
+    sizes: dict[str, int] = {}
     if training_examples or validation_examples:
-        effective = {
+        sizes = {
             "training examples": training_examples,
             "validation examples": validation_examples,
         }
     return save_figure(
         fig,
         destination,
-        n=effective or {"logged steps": len(train)},
+        n=sizes or {"logged steps": len(train)},
         source=SOURCE,
         note="one run, seed 42 — nothing here estimates run-to-run variation",
     )
@@ -355,8 +355,8 @@ def dpo_alignment(history: list[dict], destination: Path, *, pairs: int = 0) -> 
     right.set_xlabel("optimiser step")
     right.set_ylabel("reward margin (log-probability ratio)")
     right.set_title("Separation opened between the two answers")
-    # Both series are dimensionless and of the same order here, so they share one axis. A
-    # second vertical scale would let the eye read a crossing that means nothing.
+    # Both series are dimensionless, so they share one axis. A second vertical scale would let
+    # the eye read a crossing that means nothing.
     if accuracy:
         right.plot(
             *zip(*accuracy, strict=True),
@@ -364,7 +364,9 @@ def dpo_alignment(history: list[dict], destination: Path, *, pairs: int = 0) -> 
             linestyle=":",
             label="pairs ordered correctly (share)",
         )
-    right.legend(loc="lower right")
+    # The margin starts near zero and climbs: the upper left corner is the one left empty, the
+    # lower right one is crossed by the share once it settles at 1.
+    right.legend(loc="upper left")
 
     fig.tight_layout()
     return save_figure(
@@ -516,7 +518,7 @@ def accuracy_by_case_type(by_system: dict[str, dict], destination: Path) -> Path
         positions = [i + (offset - (len(names) - 1) / 2) * width for i in range(len(categories))]
         bars = ax.bar(positions, values, width=width * 0.92, color=colours[name], label=name)
         # Below six cases no interval is publishable, and a zero-length error bar would draw
-        # caps that read as near-certainty — the opposite of what the effective supports. Those
+        # caps that read as near-certainty — the opposite of what the sample size supports. Those
         # bars are hatched instead, and the hatch survives a greyscale print.
         measurable = [i for i, interval in enumerate(intervals) if interval is not None]
         if measurable:
@@ -549,7 +551,9 @@ def accuracy_by_case_type(by_system: dict[str, dict], destination: Path) -> Path
     return save_figure(
         fig,
         destination,
-        n=sizes,
+        # The axis already carries each group's count: one n() per group, under their artefact
+        # names, would run past the plot's width.
+        n=f"n(cases) = {sum(sizes.values())}, split as on the axis",
         dispersion=(
             "95% interval on each proportion; below six cases no interval is publishable and "
             "the bar is hatched instead"
@@ -731,7 +735,7 @@ def endpoint_latency(measures: dict[str, dict], destination: Path) -> Path:
 def subgroup_undertriage(by_subgroup: dict[str, dict], destination: Path) -> Path:
     """Undertriage of the shipped model on each subgroup, with its exact interval.
 
-    Exact rather than Wilson, and drawn even below six cases. Everywhere else a thin effective
+    Exact rather than Wilson, and drawn even below six cases. Everywhere else a thin sample
     means no interval; here it means the opposite, because this is the number patients pay for.
     """
 
@@ -778,11 +782,9 @@ def subgroup_undertriage(by_subgroup: dict[str, dict], destination: Path) -> Pat
     return save_figure(
         fig,
         destination,
-        n={
-            f"urgent, {CASE_TYPE_LABELS.get(n, n)}".replace("\n", " "): s
-            for n, s in zip(names, sizes, strict=True)
-        },
-        dispersion="95% exact (Clopper-Pearson) interval, drawn at every effective",
+        # One count, split as on the axis: one n() per group would run past the plot's width.
+        n=f"n(urgent cases) = {sum(sizes)}, split as on the axis",
+        dispersion="95% exact (Clopper-Pearson) interval, drawn even on the smallest groups",
         source=SOURCE,
     )
 
