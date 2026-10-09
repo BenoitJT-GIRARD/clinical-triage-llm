@@ -14,11 +14,11 @@ keywords = ["llm", "fine-tuning", "lora", "dpo", "triage", "healthcare"]
 # it here would install 2.5 GB of CUDA on every continuous-integration run.
 dependencies = [
     # --- Data ---
-    # Upper bound imposed by Unsloth (`datasets<4.4.0`), which supplies the training
-    # kernels. PYSEC-2026-3716, in versions below 5.0.1, affects the folder-based
-    # dataset builders, which this project never uses: it reads local JSONL and Hub
-    # repositories. The exception is recorded in the CI audit.
-    "datasets>=4.2,<4.4",
+    # Upper bound imposed by Unsloth (`datasets<5.0`, without 4.4 and 4.5.0), which
+    # supplies the training kernels. PYSEC-2026-3716, below 5.0.1, affects the
+    # folder-based dataset builders, which this project never uses: it reads local
+    # JSONL and Hub repositories. The exception is recorded in the CI audit.
+    "datasets>=4.6,<5.0",
     "numpy>=1.26,<2.2",
     # `datasets` pulls pandas in. The upper bound avoids version 3.0.4, withdrawn
     # from the index by its authors over crashes on dates.
@@ -67,16 +67,14 @@ build-backend = "uv_build"
 # Fine-tuning and alignment. Installed by default in development; continuous
 # integration does without it, through `uv sync --no-group train`.
 train = [
-    "torch>=2.12,<2.13",
+    "torch>=2.14,<2.15",
     # Unsloth supplies the project's LoRA fine-tuning kernels. It is what fixes the
-    # bounds on `transformers` and `trl`: it rewrites internal functions of both
-    # libraries, and a version it does not know about shows up as an import failure,
-    # not as a silent degradation. `datasets`, on the other hand, stays at the fixed
-    # version: Unsloth depends on it through a lower bound only, and the 4.3 it would
-    # accept carries a directory-traversal flaw.
-    "unsloth>=2026.9",
-    "transformers>=4.57,<=5.5",
-    "trl>=0.23,<=0.24",
+    # bounds on `torch`, `transformers` and `trl`: it rewrites internal functions of
+    # those libraries, and a version it does not know about shows up as an import
+    # failure, not as a silent degradation.
+    "unsloth>=2026.10.3",
+    "transformers>=5.10,<=5.17",
+    "trl>=1.0,<=1.13",
     "accelerate>=1.15",
     "peft>=0.21",
     "sentencepiece>=0.2",

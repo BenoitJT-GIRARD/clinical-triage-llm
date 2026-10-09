@@ -88,31 +88,23 @@ jobs:
             --format requirements-txt -o locked-dependencies.txt
           grep -v 'spacy-models/releases' locked-dependencies.txt \
             | sed -E 's/\+cu[0-9]+$//' > audited-dependencies.txt
-          # Four exceptions, all in the `train` group — the one that never goes to production:
-          # the service image contains neither torch, nor transformers, nor datasets, and its
-          # own audit below carries no derogation. Each is bounded by a version ceiling the
-          # training stack imposes, and none is reachable in this project:
+          # Two exceptions, both outside the service image — the one that goes to production:
+          # it contains neither datasets nor fsspec, and its own audit below carries no
+          # derogation. Both are held back by the one ceiling the training stack still imposes,
+          # and neither is reachable in this project:
           #
-          #   PYSEC-2026-3716  datasets  — directory traversal in the *folder-based* dataset
+          #   PYSEC-2026-3716  datasets — directory traversal in the *folder-based* dataset
           #     builders. This project loads local JSONL and Hub repositories, never a folder
           #     with metadata.
-          #   PYSEC-2025-194   torch     — memory corruption in `torch.jit.script`, which the
-          #     project never calls.
-          #   PYSEC-2026-3929  transformers — write outside the directory through the keys of a
-          #     `chat_template` supplied as a dictionary. The project installs its own template,
-          #     a single string, and loads only official repositories or its own.
-          #   PYSEC-2026-3447  setuptools — Unicode normalisation of `MANIFEST.in` exclusions on
-          #     APFS and HFS+, so macOS only, and only when building a source distribution.
-          #     Version imposed by the `torch 2.12.1+cu130` wheel.
+          #   CVE-2026-104851  fsspec   — template injection in `ReferenceFileSystem`, which reads
+          #     Kerchunk reference documents. The project never opens one; fsspec is here for
+          #     `datasets` alone, which caps it.
           #
-          # To be reconsidered at every Unsloth upgrade: the ceilings it imposes (torch < 2.13,
-          # transformers <= 5.5, datasets < 4.4) are the only reason these fixes stay out of
-          # reach.
+          # To be reconsidered at every Unsloth upgrade: its ceiling on `datasets` (< 5.0) is the
+          # only reason these fixes stay out of reach.
           uv run --no-sync pip-audit --strict -r audited-dependencies.txt \
             --ignore-vuln PYSEC-2026-3716 \
-            --ignore-vuln PYSEC-2025-194 \
-            --ignore-vuln PYSEC-2026-3929 \
-            --ignore-vuln PYSEC-2026-3447
+            --ignore-vuln CVE-2026-104851
 
       # The deployed image does not install the lock file but its own pinned list: without this
       # second audit, what actually runs in production would be the one thing left unchecked.
