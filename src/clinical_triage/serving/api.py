@@ -83,6 +83,8 @@ class Settings:
     vllm_url: str
     vllm_model: str
     vllm_api_key: str
+    engine_proxy_key: str
+    engine_proxy_secret: str
     requests_per_minute: int
 
     @property
@@ -93,8 +95,16 @@ class Settings:
         on-demand host — it must ask for a key, otherwise it offers free GPU inference, with no
         quota and no audit trail, to whoever finds its address. vLLM can do that with
         ``--api-key``; the gateway presents it here.
+
+        An on-demand host can do better, and refuse the request before the GPU even starts.
+        Modal's proxy authentication reads a token pair from two headers; the gateway presents
+        it when it is configured, and the same code runs unchanged where there is none.
         """
-        return {"Authorization": f"Bearer {self.vllm_api_key}"} if self.vllm_api_key else {}
+        headers = {"Authorization": f"Bearer {self.vllm_api_key}"} if self.vllm_api_key else {}
+        if self.engine_proxy_key and self.engine_proxy_secret:
+            headers["Modal-Key"] = self.engine_proxy_key
+            headers["Modal-Secret"] = self.engine_proxy_secret
+        return headers
 
     @staticmethod
     def from_env() -> Settings:
@@ -112,6 +122,8 @@ class Settings:
             # local stack the engine asks for none and the header is ignored, on a host it asks
             # and the gateway has one.
             vllm_api_key=os.getenv("TRIAGE_VLLM_API_KEY") or os.getenv("TRIAGE_API_KEY", ""),
+            engine_proxy_key=os.getenv("TRIAGE_ENGINE_PROXY_KEY", ""),
+            engine_proxy_secret=os.getenv("TRIAGE_ENGINE_PROXY_SECRET", ""),
             requests_per_minute=int(os.getenv("TRIAGE_RATE_LIMIT", "60")),
         )
 

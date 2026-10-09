@@ -350,3 +350,17 @@ def test_a_normal_description_is_not_flagged_as_bounded(client):
         headers={"X-API-Key": KEY},
     )
     assert reply.json()["description_truncated"] is False
+
+
+def test_the_hosts_proxy_pass_is_presented_to_the_engine_only_when_configured(monkeypatch):
+    """On an on-demand host the engine refuses a request without it, before the GPU starts."""
+    monkeypatch.setenv("TRIAGE_API_KEY", KEY)
+    monkeypatch.delenv("TRIAGE_ENGINE_PROXY_KEY", raising=False)
+    monkeypatch.delenv("TRIAGE_ENGINE_PROXY_SECRET", raising=False)
+    assert "Modal-Key" not in module_api.Settings.from_env().vllm_headers
+
+    monkeypatch.setenv("TRIAGE_ENGINE_PROXY_KEY", "wk-test")
+    monkeypatch.setenv("TRIAGE_ENGINE_PROXY_SECRET", "ws-test")
+    headers = module_api.Settings.from_env().vllm_headers
+    assert (headers["Modal-Key"], headers["Modal-Secret"]) == ("wk-test", "ws-test")
+    assert headers["Authorization"] == f"Bearer {KEY}"

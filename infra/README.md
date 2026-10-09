@@ -264,6 +264,7 @@ Variables the gateway itself reads, from `.env` at the root or from the containe
 | `TRIAGE_VLLM_URL` | address of the inference server | `http://localhost:8000` |
 | `TRIAGE_VLLM_MODEL` | name of the model vLLM serves | `qwen3-1.7b-clinical-triage` |
 | `TRIAGE_VLLM_API_KEY` | key presented to the inference engine | failing that, `TRIAGE_API_KEY` |
+| `TRIAGE_ENGINE_PROXY_KEY`, `TRIAGE_ENGINE_PROXY_SECRET` | token pair of the host's proxy authentication, presented to the engine | empty: none presented |
 | `TRIAGE_BASE_MODEL` | model loaded in `transformers` mode | the merged SFT model |
 | `TRIAGE_ADAPTER_DIR` | adapter applied in `transformers` mode | the DPO adapter |
 | `TRIAGE_MODEL_VERSION` | version written to the audit log | `qwen3-1.7b-clinical-triage` |

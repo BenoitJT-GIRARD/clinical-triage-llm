@@ -11,6 +11,7 @@ environment that holds nothing of the deployment's.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import sys
 
@@ -96,3 +97,44 @@ def test_the_continuous_deployment_account_is_used(monkeypatch):
     descriptor = _load()
 
     assert descriptor.MODEL_ID == "another-account/qwen3-1.7b-clinical-triage"
+
+
+# --- What the deployment may cost, and who can reach the engine -------------------------------
+
+
+def _decorator_keywords(name: str) -> dict[str, ast.expr]:
+    """The keywords of the Modal decorator on ``name``, read from the source."""
+    tree = ast.parse(PATH.read_text(encoding="utf-8"))
+    node = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, (ast.ClassDef, ast.FunctionDef)) and n.name == name
+    )
+    call = next(
+        d
+        for d in node.decorator_list
+        if isinstance(d, ast.Call) and getattr(d.func, "attr", "") in ("server", "function")
+    )
+    return {k.arg: k.value for k in call.keywords}
+
+
+def test_the_engine_never_lights_more_than_one_gpu():
+    assert ast.literal_eval(_decorator_keywords("Engine")["max_containers"]) == 1
+
+
+def test_the_engine_stays_behind_the_hosts_authentication():
+    """Open, its address alone would start a GPU billed to the account."""
+    assert "unauthenticated" not in _decorator_keywords("Engine")
+
+
+def test_one_gateway_container_writes_the_audit_log_on_a_volume(descriptor):
+    keywords = _decorator_keywords("gateway")
+    assert ast.literal_eval(keywords["max_containers"]) == 1
+    assert descriptor.GATEWAY_ENVIRONMENT["TRIAGE_AUDIT_DIR"] in descriptor.GATEWAY_VOLUMES
+
+
+def test_the_engine_image_carries_the_cuda_compiler():
+    """FlashInfer compiles kernels at startup: without nvcc the engine stops before serving."""
+    assert (
+        "devel" in PATH.read_text(encoding="utf-8").split("from_registry(", 1)[1].split(")", 1)[0]
+    )
