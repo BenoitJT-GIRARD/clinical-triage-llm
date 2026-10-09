@@ -1,34 +1,51 @@
 name: CD
 
-# Continuous deployment. The pipeline separates two objects that move at different rates:
+# Continuous deployment of the demonstration endpoint, which runs on a GPU billed by the minute.
 #
-#   - the **API gateway**, rebuilt on every push to `main`;
-#   - the **model**, whose version is frozen on the Hugging Face Hub when the repository is
-#     tagged `model-v*`.
+# Its normal state is "stopped". The workflow is started by hand, with one of three actions:
 #
-# The two meet in the deployment job, which hands the host the pair (image, model revision). The
-# inference server reloads the weights from the Hub at the revision asked for: no image has to
-# carry three gigabytes. A new model version therefore ships without rebuilding the gateway, and
-# the other way round.
+#   - `verify` deploys, checks, and stops again — the run that proves the chain still works;
+#   - `start`  deploys and checks, then leaves the service up for a demonstration;
+#   - `stop`   stops it.
+#
+# Only the repository owner can do any of it. A dispatch is open to accounts with write access
+# alone; on top of that, every job that touches the Hub or Modal waits for the owner's approval
+# through the `production` environment, which alone holds the tokens, and refuses any other
+# actor. A job that has not passed the approval cannot read a token: they live in the
+# environment, not in the repository.
+#
+# Two objects move at different rates here: the API gateway, whose image is rebuilt from the
+# commit, and the model, whose version is frozen on the Hugging Face Hub under a `model-v*` tag.
+# They meet in the deployment job, which hands Modal the pair (code, model revision): the engine
+# reloads the weights from the Hub at that revision, and no image carries four gigabytes.
 #
 # Every action is referenced by commit rather than by tag. A tag can be moved onto other code,
-# and that code would run here with the secrets below.
+# and that code would run here with the tokens below.
 
-# Publishing an image is deliberate now, never a side effect of a commit.
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: "verify: deploy, check, stop — start: deploy, check, leave up — stop"
+        type: choice
+        options: [verify, start, stop]
+        default: verify
 
 permissions:
   contents: read
   packages: write
 
+# Two runs never touch Modal at once: their deployments would overwrite each other.
+concurrency:
+  group: modal-deployment
+  cancel-in-progress: false
+
 jobs:
   image:
     name: Publish the gateway image
+    if: inputs.action != 'stop'
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    outputs:
-      image: ${{ steps.name.outputs.image }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -59,8 +76,8 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       # `sbom` and `provenance` attach to the image the list of what it contains and the
-      # attestation of how it was built. That is what makes it possible, the day a vulnerability
-      # is published, to answer without rebuilding: does that image contain the package?
+      # attestation of how it was built: the day a vulnerability is published, they answer
+      # without rebuilding whether this image contains the package.
       - name: Build and publish
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -75,10 +92,14 @@ jobs:
           cache-to: type=gha,mode=max
 
   model:
-    name: Publish the model version
-    if: startsWith(github.ref, 'refs/tags/model-v')
+    name: Gate and publish the model version
+    if: >-
+      ${{ inputs.action != 'stop'
+          && startsWith(github.ref, 'refs/tags/model-v')
+          && github.actor == github.repository_owner }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: production
     outputs:
       revision: ${{ github.ref_name }}
     steps:
@@ -92,54 +113,45 @@ jobs:
       - name: Install Python 3.12
         run: uv python install 3.12
 
-      # The `train` group stays out: publishing a model card needs neither torch nor Unsloth.
-      # The commands that follow carry `--no-sync`, without which `uv run` resynchronises with
-      # the default groups (`dev` and `train`) and reinstalls what this step has just left out.
-      # As in continuous integration, both syncs of this file carry `--locked`: that flag
-      # fails when `uv.lock` no longer matches `pyproject.toml`, where `--frozen` merely
-      # refrains from updating it and would publish from a stale lock.
+      # The `train` group stays out: gating a version and publishing its cards needs neither
+      # torch nor Unsloth. `--locked` fails when `uv.lock` no longer matches `pyproject.toml`.
       - name: Sync the dependencies
         run: uv sync --locked --no-group train
 
-      # The runner publishes only what it actually has: the **model cards**, which are
-      # versioned. Neither the weights nor the training sets are in the repository — the first
-      # weigh gigabytes, the second are rebuilt by `scripts/build_dataset.py` and published from
-      # the machine that produced them. A runner that tried would send two files of the six and
-      # report a success.
-      #
-      # The tag is the heart of the mechanism: it freezes a citable revision on the Hub, which
-      # the inference server will ask for explicitly. Without it, a deployment would point at
-      # `main`, which moves at every publication. It is placed on every Hub repository this run
-      # touched, the dataset included.
-      - name: Publish the model cards and tag the version
+      # The criteria were fixed before the model they judge existed: every answer usable, and no
+      # more urgent cases missed than the explicit rule. A version that fails them is not
+      # published, and not served.
+      - name: Release gate
+        run: uv run --no-sync python scripts/check_release.py
+
+      # The weights and the dataset are published from the machine that trained them; the runner
+      # has neither. What it publishes is what is versioned: the two cards, byte for byte, and the
+      # tag that makes the version citable — the revision the engine asks the Hub for.
+      - name: Publish the cards and tag the version
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_NAMESPACE: ${{ vars.HF_NAMESPACE }}
         run: uv run --no-sync python scripts/publish_to_hub.py --what cards --tag "$GITHUB_REF_NAME"
 
-      - name: Summarise the published version
-        run: |
-          echo "### Model version $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Model cards published, tag $GITHUB_REF_NAME placed on the Hub repositories." >> "$GITHUB_STEP_SUMMARY"
-          echo "Weights and datasets: uploaded from the training machine." >> "$GITHUB_STEP_SUMMARY"
-          echo "The inference server will load this revision at deployment." >> "$GITHUB_STEP_SUMMARY"
-
   deployment:
-    name: Deploy the endpoint
+    name: Deploy, check, and stop unless asked to stay up
     needs: [image, model]
-    # `model` only runs on a model tag. Without `always()`, its absence alone would cancel the
+    # `model` runs on a model tag only: without `always()`, its absence would cancel the
     # deployment of the gateway on its own.
     if: >-
       ${{ always()
-          && vars.DEPLOY_ENABLED == 'true'
+          && inputs.action != 'stop'
+          && github.actor == github.repository_owner
           && needs.image.result == 'success'
           && needs.model.result != 'failure' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     environment: production
     steps:
+      # The whole history, tags included: without it, `git describe` below sees no model tag.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
@@ -150,45 +162,75 @@ jobs:
         run: uv python install 3.12
 
       # The package itself, not only the tooling: `infra/modal_app.py` imports `clinical_triage`
-      # at deployment time, so that the remote container receives the service code. The `train`
-      # group stays out — the runner trains nothing — and the deployment below carries
-      # `--no-sync`: otherwise `uv run` would resynchronise with the default groups, that is
-      # several gigabytes of CUDA wheels reinstalled inside a fifteen-minute job that still has
-      # a health probe to wait for.
+      # at deployment time, so that the remote container receives the service code.
       - name: Sync the dependencies
         run: uv sync --locked --no-group train
 
-      # Modal rebuilds its two containers from `infra/modal_app.py`: the vLLM engine, which
-      # reads the weights from the Hub at the revision below, and the FastAPI gateway. Outside a
-      # model tag the revision is `main`: only the gateway changes, and the model in place goes
-      # on being served.
-      #
-      # The image published to GHCR by the `image` job is not what Modal deploys — it serves the
-      # on-site installation, described in `infra/`. Both paths start from the same service
-      # code; the `image` job therefore remains a condition of the deployment, since it compiles
-      # and exercises it.
+      # Modal rebuilds both containers from `infra/modal_app.py`, so the engine is redeployed
+      # every time, and its revision cannot be `main`, which moves with every publication. On a
+      # model tag it is that tag; on any other commit, the latest `model-v*` tag of the
+      # repository — the version already in service.
       - name: Deploy to Modal
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-          # The account alone: the full identifier is composed in `modal_app.py`, with the same
-          # fallback as `config.py`. Interpolated bare, an undefined repository variable arrives
-          # empty and gives "/qwen3-1.7b-clinical-triage".
           HF_NAMESPACE: ${{ vars.HF_NAMESPACE }}
-          TRIAGE_MODEL_REVISION: ${{ needs.model.outputs.revision || 'main' }}
-        run: uv run --no-sync modal deploy infra/modal_app.py
+          PUBLISHED_REVISION: ${{ needs.model.outputs.revision }}
+        run: |
+          TRIAGE_MODEL_REVISION="${PUBLISHED_REVISION:-$(git describe --tags --abbrev=0 --match 'model-v*')}"
+          echo "Model revision deployed: $TRIAGE_MODEL_REVISION"
+          export TRIAGE_MODEL_REVISION
+          uv run --no-sync modal deploy infra/modal_app.py
 
-      # A deployment that does not check its result is not a deployment.
-      - name: Check the endpoint's health after deployment
+      # A deployment that does not check its result is not a deployment. The engine starts cold:
+      # the CUDA image and the weights on a fresh machine, then vLLM — up to six minutes measured.
+      # The wait therefore goes up to ten.
+      - name: Wait until the engine is ready
         env:
           ENDPOINT: ${{ vars.DEPLOY_ENDPOINT_URL }}
+          TRIAGE_API_KEY: ${{ secrets.TRIAGE_API_KEY }}
         run: |
-          for attempt in $(seq 1 20); do
-            if curl -fs "$ENDPOINT/health" | grep -q '"status":"ok"'; then
-              echo "Endpoint healthy."
+          for attempt in $(seq 1 40); do
+            status=$(curl -s -o /dev/null -w '%{http_code}' "$ENDPOINT/ready" -H "X-API-Key: $TRIAGE_API_KEY")
+            if [ "$status" = "200" ]; then
+              echo "Engine ready."
               exit 0
             fi
             sleep 15
           done
-          echo "The endpoint does not answer correctly after deployment."
+          echo "The engine is not ready ten minutes after deployment."
           exit 1
+
+      # Ready is not enough: the engine must answer what the evaluated model answered.
+      - name: Check that the deployed model is the evaluated one
+        env:
+          ENDPOINT: ${{ vars.DEPLOY_ENDPOINT_URL }}
+          TRIAGE_API_KEY: ${{ secrets.TRIAGE_API_KEY }}
+        run: uv run --no-sync python scripts/check_deployment.py --url "$ENDPOINT" --key "$TRIAGE_API_KEY"
+
+      # A verification ends stopped, and so does a failed one: a GPU left up by a red run would
+      # cost the rest of the month.
+      - name: Stop the application
+        if: ${{ always() && inputs.action == 'verify' }}
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: uv run --no-sync modal app stop clinical-triage --yes
+
+  stop:
+    name: Stop the application
+    if: ${{ inputs.action == 'stop' && github.actor == github.repository_owner }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+
+      - name: Stop
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: uvx --from "modal==1.5.5" modal app stop clinical-triage --yes
