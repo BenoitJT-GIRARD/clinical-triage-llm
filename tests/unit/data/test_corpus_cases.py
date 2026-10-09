@@ -24,6 +24,7 @@ from clinical_triage.data.corpus_cases import (
     is_an_exam_question,
 )
 from clinical_triage.data.corpus_sources import CorpusEntry
+from clinical_triage.data.diagnostics import exam_residue
 
 # --- The marker must recognise the syntax MediQAl actually uses ---
 
@@ -180,6 +181,18 @@ def test_each_loss_is_charged_to_the_right_column():
         "BEST prognostic factor for head injury is",
         "Parmi les affirmations suivantes, une seule est fausse",
         "What is the next step in management?",
+        # Stems with no interrogative word, found ending 7.8 % of the delivered MedMCQA cases.
+        "Diagnosis?",
+        "ECG shows?",
+        "The etiological agent is?",
+        "Best treatment is.",
+        "To achieve rapid control of severe ketoacidosis, appropriate drug is.",
+        "Physical examination of the patient is likely to show.",
+        "This condition is mostly associated with ?",
+        "The risk of future stroke is determined by ______ score.",
+        "A 40 year old presenting with dizziness on standing; appropriate treatment.",
+        "The stool microscopy reveals the following.",
+        "Poisoning is due to.",
     ],
 )
 def test_an_exam_statement_is_recognised(statement: str):
@@ -194,6 +207,9 @@ def test_an_exam_statement_is_recognised(statement: str):
         "A 50-year-old lady presented with a lump in the left breast, which developed suddenly.",
         "Il décrit une douleur qui irradie vers la mâchoire.",
         "Le patient ne sait plus quel traitement il prend.",
+        "His blood pressure is 90/60 mmHg and his pulse is 120.",
+        "She was treated with amoxicillin.",
+        "The pain is associated with nausea.",
     ],
 )
 def test_a_narrative_sentence_is_not_taken_for_a_question(narrative: str):
@@ -215,3 +231,16 @@ def test_the_exam_question_is_removed_but_the_narrative_stays():
     assert "All of the following" not in vignette
     # The narrative sentence carries a relative "which": it must survive.
     assert "which started this morning" in vignette
+
+
+# --- What the cleaning leaves behind is measured, by a detector that is not the cleaner ---
+
+
+def test_the_residue_detector_counts_the_descriptions_that_still_read_as_an_exam():
+    descriptions = [
+        "A 60 yr old man presents with chest pain for two hours.",
+        "A 30 year old woman with fever. Most probable diagnosis would be",
+        "A 25-year-old with burns over the trunk. Which fluid?",
+        "Homme de 58 ans, douleur thoracique depuis une heure.",
+    ]
+    assert exam_residue(descriptions) == {"n": 4, "with_residue": 2, "share": 0.5}

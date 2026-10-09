@@ -103,10 +103,30 @@ INTERROGATIVE = re.compile(
 )
 
 
+# A stem the statement left open, waiting for the option the student picks: it ends on a copula,
+# a preposition or a bare noun of the answer sheet — "Best treatment is.", "Poisoning is due
+# to.", "... appropriate treatment." The full stop that `_vignette_narrative` may have appended
+# is ignored. A narrative sentence ends on what was observed: "... associated with nausea."
+OPEN_STEM = re.compile(
+    r"(?:\b(?:is|are|was|were|be|includes?|shows?|reveals?|suggests?|due to|caused by"
+    r"|associated with|the following|with|by|to|of)"
+    r"|\b(?:appropriate|best|preferred|initial|definitive|next) (?:treatment|management|drug"
+    r"|diagnosis|investigation|step))\s*[-–:]?\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+
+#: A blank to fill in belongs to an answer sheet, never to a narrative.
+BLANK = re.compile(r"_{2,}")
+
+
 def is_an_exam_question(sentence: str) -> bool:
     """Say whether a sentence is the question put to the student rather than narrative."""
     text = sentence.strip()
-    if EXAM_STEM.search(text):
+    if EXAM_STEM.search(text) or OPEN_STEM.search(text) or BLANK.search(text):
+        return True
+    # A patient narrative states; it does not ask. "Diagnosis?", "ECG shows?" carry no
+    # interrogative word, and the question mark alone says what they are.
+    if text.endswith("?"):
         return True
     match = INTERROGATIVE.search(text)
     if match is None:

@@ -58,6 +58,7 @@ from clinical_triage.data.dataset_io import (
 )
 from clinical_triage.data.diagnostics import (
     distinct_completions,
+    exam_residue,
     metadata_leakage,
     separability,
 )
@@ -516,10 +517,23 @@ def main() -> None:
     # metadata alone. These three measurements condition the reading of the results and are
     # taken up as they are by the published protocol.
     logger.info("  diagnostics of the produced set.")
+    delivered_turns = {example.user_turn for example in examples}
     meta["diagnostics"] = {
         "completions": distinct_completions(examples),
         "separability": separability(examples),
         "metadata_leakage": metadata_leakage(examples, PRESENTATIONS),
+        # The exam statements the cleaning left in the corpus cases actually delivered, corpus
+        # by corpus, measured by a detector that is not the cleaner.
+        "exam_residue": {
+            name: exam_residue(
+                [
+                    case.description
+                    for case in corpus_cases
+                    if case.source == name and case.user_turn in delivered_turns
+                ]
+            )
+            for name, _ in CORPUS_NAMES
+        },
     }
     meta["gdpr"] = {
         "principle": "Minimisation: no real patient data. The vignettes are synthetic, and the "

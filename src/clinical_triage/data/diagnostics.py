@@ -21,6 +21,7 @@ left to the reader's judgement.
 
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 
 
@@ -144,4 +145,35 @@ def metadata_leakage(examples: list, presentations) -> dict:
         "cells": len(cells),
         "majority_vote_accuracy": round(correct / total, 4),
         "share_in_homogeneous_cell": round(homogeneous / total, 4),
+    }
+
+
+# --- What the cleaning of exam statements leaves behind ---
+
+#: The detector is deliberately not the cleaner of `corpus_cases`: measuring the residue with the
+#: rules that removed it would find zero by construction. It is broader, and it reads the whole
+#: description rather than its sentences one by one.
+EXAM_RESIDUE = re.compile(
+    r"\?\s*$|\?\s+\S|_{2,}"
+    r"|\b(?:which of|the following|most (?:likely|probable|common|appropriate)"
+    r"|best (?:treatment|next|initial|option)|(?:probable |likely )?diagnosis (?:is|would be)"
+    r"|next step|(?:drug|investigation|treatment) of choice|true about|except\b)"
+    r"|\b(?:is|are|due to|associated with|with|by|of)\s*[.:]?\s*$",
+    re.IGNORECASE,
+)
+
+
+def exam_residue(descriptions: list[str]) -> dict:
+    """How many delivered descriptions still read as an exam statement.
+
+    The 1.0.0 change log announced half a percent; read by hand before the 2.0.0 build, the
+    MedMCQA cases carried several times that. The share is now measured at every build, on the
+    descriptions actually delivered, and published with its definition.
+    """
+    flagged = sum(bool(EXAM_RESIDUE.search(text.strip())) for text in descriptions)
+    total = len(descriptions)
+    return {
+        "n": total,
+        "with_residue": flagged,
+        "share": round(flagged / total, 4) if total else 0.0,
     }
