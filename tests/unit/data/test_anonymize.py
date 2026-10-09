@@ -19,6 +19,7 @@ from clinical_triage.data.anonymize import (
     analyze_and_anonymize,
     audit_corpus,
     default_setting_damage,
+    detect_language,
     residual_pii,
 )
 
@@ -203,3 +204,16 @@ def test_the_cost_of_the_default_setting_is_measured_on_the_sample_it_is_given()
     )
     assert (damage["n"], damage["damaged"], damage["share"]) == (2, 1, 0.5)
     assert damage["blood_pressure_read_as_a_place"] == 1
+
+
+@pytest.mark.parametrize(
+    ("text", "language"),
+    [
+        ("Patiente de 80 ans, ce matin incapable de parler, bouche déviée.", "fr"),
+        ("Il a mal au ventre depuis hier, sans fièvre.", "fr"),
+        ("Mr Jenkins, 72, reports chest pain since this morning.", "en"),
+        ("The patient has had a fever for two days and is very tired.", "en"),
+    ],
+)
+def test_the_language_of_a_narrative_is_told_by_its_function_words(text, language):
+    assert detect_language(text) == language

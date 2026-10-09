@@ -199,6 +199,33 @@ def anonymize_text(text: str, lang: str = "fr") -> str:
     return analyze_and_anonymize(text, lang)[0]
 
 
+#: Short words each language uses constantly and the other almost never. Counting them is enough
+#: to tell a French narrative from an English one; it does not have to be a language model.
+# A list of words reads best as the words: hence the split, which SIM905 would turn into sixty
+# lines of quotes.
+FRENCH_WORDS = frozenset(
+    "le la les un une des du de et est il elle avec pour pas sans depuis dans sur au aux "  # noqa: SIM905
+    "son sa ses ce cette qui que ne se plus très".split()
+)
+ENGLISH_WORDS = frozenset(
+    "the an and is was he she with for not without since in at his her this that who "  # noqa: SIM905
+    "which of to has had very".split()
+)
+
+
+def detect_language(text: str) -> str:
+    """French or English, by the share of each language's function words. French on a tie.
+
+    Running the English engine over French text is not harmless: it reads ordinary French words
+    as names, and "ce matin incapable de parler" came out of the log as ``<PERSON>``. Each text
+    is masked by the engine of its own language.
+    """
+    words = re.findall(r"[a-zà-ÿ]+", text.lower())
+    french = sum(word in FRENCH_WORDS for word in words)
+    english = sum(word in ENGLISH_WORDS for word in words)
+    return "en" if english > french else "fr"
+
+
 def default_setting_damage(texts: list[tuple[str, str]]) -> dict:
     """What the entities left out would have masked, on a sample of clinical narratives.
 
