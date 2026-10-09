@@ -4,29 +4,33 @@ The requirement is to trace every interaction for medical audits. Concretely: to
 months later, to find what was asked, what the agent answered, with which model, how fast, and
 what the explicit rule would have said about it.
 
-Two compliance points that are not obvious:
+Five properties, none of which goes without saying:
 
-- **both texts are anonymised before being written.** The log is the only place in the system
-  where real patient data would settle durably. The description received therefore goes through
-  GDPR masking before reaching the disk — **and so does the answer**, because the justification
-  the model produces echoes the nurse's narrative and would bring back through one door a name
-  masked at the other. A module that claims to write anonymised data must anonymise it itself,
-  not trust its caller;
+- **both texts are anonymised before being written**, each by the engine of its own language.
+  The log is the only place in the system where real patient data would settle durably. The
+  description received goes through GDPR masking before reaching the disk — and so does the
+  answer, because the justification echoes the nurse's narrative and would bring back through
+  one door a name masked at the other;
 - **the model version is the one actually loaded**, passed by the service at call time. A
-  configuration constant could describe a model that is not the one that answered, and
-  falsifiable traceability traces nothing.
-
-The file is JSONL: one line per interaction, readable without a tool, and appended atomically
-as long as writes come from a single process.
+  configuration constant could describe a model that is not the one that answered;
+- **the retention is applied, not only announced.** One file per day; the files older than
+  the retention period are deleted at startup and on the first write of each day;
+- **a modification shows.** Each line carries the SHA-256 digest of the line before it, across
+  files: editing, inserting or deleting a line breaks the chain from that point on, and
+  :func:`verify` says where. It detects, it does not prevent — a log a user can delete is still
+  a file — and that is the property an audit needs;
+- **one writer.** Appending to a file is atomic for one process; the deployment runs a single
+  gateway container for that reason.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from clinical_triage.config import PATHS
@@ -34,39 +38,60 @@ from clinical_triage.utils import get_logger
 
 logger = get_logger("audit")
 
-# Retention period announced to users of the service. It is written into every line so that the
-# obligation is carried by the data itself.
+# Retention period announced to the users of the service, written into every line so that the
+# obligation travels with the data, and applied by `purge_expired`.
 RETENTION_DAYS = 365
 
-
-def audit_log_path() -> Path:
-    """Path of the audit log, overridable for container deployment."""
-    configured = os.getenv("TRIAGE_AUDIT_LOG")
-    return Path(configured) if configured else PATHS.logs / "audit_triage.jsonl"
+#: The link of the first line ever written: no line precedes it.
+GENESIS = "0" * 64
 
 
-def check_log_is_writable(log_path: Path | None = None) -> Path:
-    """Open the log for writing at startup, and refuse to serve otherwise.
+def audit_directory() -> Path:
+    """Directory of the audit log, overridable for container deployment."""
+    configured = os.getenv("TRIAGE_AUDIT_DIR")
+    return Path(configured) if configured else PATHS.logs / "audit"
 
-    Traceability is a compliance requirement: a service that answers without being able to
-    record what it answered does not meet the contract. Without this check, an unavailable log
-    only shows up at the first request, after the decision has been produced, as a 500 whose
-    cause appears only in the container logs.
 
-    The case occurs as soon as a mounted volume belongs to a user other than the one running
-    the service.
+def _day_file(directory: Path, day: date) -> Path:
+    return directory / f"{day.isoformat()}.jsonl"
+
+
+def _files(directory: Path) -> list[Path]:
+    """The day files, oldest first: their names sort as their dates do."""
+    return sorted(directory.glob("????-??-??.jsonl"))
+
+
+def purge_expired(directory: Path, today: date, retention_days: int = RETENTION_DAYS) -> list[Path]:
+    """Delete the day files older than the retention period, and return them."""
+    limit = today - timedelta(days=retention_days)
+    expired = [path for path in _files(directory) if date.fromisoformat(path.stem) < limit]
+    for path in expired:
+        path.unlink()
+    if expired:
+        logger.info("Audit log: %d day file(s) past the retention deleted.", len(expired))
+    return expired
+
+
+def check_log_is_writable(directory: Path | None = None) -> Path:
+    """Open the log for writing at startup, purge it, and refuse to serve otherwise.
+
+    Traceability is a requirement of this service: answering without being able to record the
+    answer does not meet it. Without this check, an unwritable log only shows up at the first
+    request, after the decision has been produced, as a 500 whose cause is in the container logs.
+    The case occurs as soon as a mounted volume belongs to another user.
     """
-    path = log_path or audit_log_path()
+    directory = directory or audit_directory()
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a", encoding="utf-8"):
+        directory.mkdir(parents=True, exist_ok=True)
+        purge_expired(directory, datetime.now(UTC).date())
+        with _day_file(directory, datetime.now(UTC).date()).open("a", encoding="utf-8"):
             pass
     except OSError as error:
         raise RuntimeError(
-            f"Audit log not writable ({path}): {error}. Tracing every interaction is a "
+            f"Audit log not writable ({directory}): {error}. Tracing every interaction is a "
             "requirement of this service: it does not start without it."
         ) from error
-    return path
+    return directory
 
 
 def new_request_id() -> str:
@@ -85,31 +110,33 @@ class AuditEntry:
     rule_level: str | None
     rule_reasons: list[str]
     anonymised_answer: str
-    # True when the description exceeds the model window and is bounded before the call: the
-    # model then reads only part of the narrative. A triage decision taken on an incomplete
-    # narrative must leave a trace — that is the very purpose of this log.
+    # True when the local engine bounded a description longer than its window: the model then
+    # read part of the narrative only, and a decision taken that way must leave a trace.
     description_truncated: bool
     latency_ms: float
     model: str
     engine: str
     retention_days: int
+    previous_digest: str
 
 
-def mask(text: str) -> str:
-    """Mask personal data in a text without knowing which language it is in.
+def mask(text: str, lang: str | None = None) -> str:
+    """Mask personal data in a text, with the engine of the text's language."""
+    from clinical_triage.data.anonymize import anonymize_text, detect_language
 
-    The API accepts free text and the model is bilingual: a description arrives in English as
-    readily as in French. Anonymising with the French engine alone would leave "Mr Jenkins" in
-    the clear in the log — the one place in the system where personal data is kept, and for a
-    year.
+    return anonymize_text(text, lang or detect_language(text))
 
-    Rather than guessing the language, both passes are chained. Both spaCy engines are already
-    loaded in the service image, and the second pass sees of the first's text only what it did
-    not mask: the placeholders one leaves behind are not proper nouns to the other.
-    """
-    from clinical_triage.data.anonymize import anonymize_text
 
-    return anonymize_text(anonymize_text(text, "fr"), "en")
+def _digest(line: str) -> str:
+    return hashlib.sha256(line.encode("utf-8")).hexdigest()
+
+
+def _last_line(directory: Path) -> str | None:
+    for path in reversed(_files(directory)):
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        if lines:
+            return lines[-1]
+    return None
 
 
 def record_interaction(
@@ -123,9 +150,16 @@ def record_interaction(
     rule_level: str | None = None,
     rule_reasons: list[str] | None = None,
     description_truncated: bool = False,
-    log_path: Path | None = None,
+    directory: Path | None = None,
 ) -> AuditEntry:
-    """Anonymise then record one interaction, and return the line written."""
+    """Anonymise then record one interaction, chained to the line before it."""
+    directory = directory or audit_directory()
+    directory.mkdir(parents=True, exist_ok=True)
+    today = datetime.now(UTC).date()
+    day_file = _day_file(directory, today)
+    if not day_file.exists():
+        purge_expired(directory, today)
+    previous = _last_line(directory)
     entry = AuditEntry(
         request_id=request_id,
         timestamp=datetime.now(UTC).isoformat(),
@@ -133,25 +167,50 @@ def record_interaction(
         level=level,
         rule_level=rule_level,
         rule_reasons=rule_reasons or [],
+        # The model is asked to answer in French; an answer that breaks that contract is masked
+        # in its own language all the same.
         anonymised_answer=mask(answer),
         description_truncated=description_truncated,
         latency_ms=round(latency_ms, 1),
         model=model,
         engine=engine,
         retention_days=RETENTION_DAYS,
+        previous_digest=_digest(previous) if previous is not None else GENESIS,
     )
-    path = log_path or audit_log_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
+    with day_file.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(asdict(entry), ensure_ascii=False) + "\n")
     return entry
 
 
-def read_entries(log_path: Path | None = None, limit: int | None = None) -> list[dict]:
-    """Read the audit log back, for verification or export."""
-    path = log_path or audit_log_path()
-    if not path.exists():
+def read_entries(directory: Path | None = None, limit: int | None = None) -> list[dict]:
+    """Read the audit log back, oldest first, for verification or export."""
+    directory = directory or audit_directory()
+    if not directory.exists():
         return []
-    with path.open(encoding="utf-8") as handle:
-        lines = [json.loads(line) for line in handle if line.strip()]
-    return lines[-limit:] if limit else lines
+    rows = [
+        json.loads(line)
+        for path in _files(directory)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    return rows[-limit:] if limit else rows
+
+
+def verify(directory: Path | None = None) -> list[str]:
+    """Walk the chain and name every line whose link does not match the line before it.
+
+    The first line kept is the anchor: after a purge, the line it points to is legitimately
+    gone.
+    """
+    directory = directory or audit_directory()
+    problems = []
+    previous: str | None = None
+    for path in _files(directory) if directory.exists() else []:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if not line.strip():
+                continue
+            link = json.loads(line).get("previous_digest")
+            if previous is not None and link != _digest(previous):
+                problems.append(f"{path.name}, line {number}: the chain breaks here")
+            previous = line
+    return problems

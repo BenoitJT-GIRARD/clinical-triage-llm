@@ -104,7 +104,7 @@ living in a document beside it.
 
 In the container the log is a named volume. A host folder is mounted as root, and the service
 runs unprivileged: every request then failed on the write, after having produced its decision.
-`docker compose cp api:/app/var/logs/audit_triage.jsonl .` takes a copy out.
+`docker compose cp api:/app/var/logs/audit .` takes a copy out.
 
 ## When something is wrong
 

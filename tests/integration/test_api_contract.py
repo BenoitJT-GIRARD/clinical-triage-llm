@@ -7,7 +7,6 @@ authentication, rate limiting, health probe, traceability and the shape of the r
 
 from __future__ import annotations
 
-import json
 import time
 
 import pytest
@@ -15,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from clinical_triage.serving import api as module_api
 from clinical_triage.serving.api import RateLimiter
+from clinical_triage.serving.audit import read_entries
 
 pytestmark = pytest.mark.integration
 
@@ -34,7 +34,7 @@ def client(tmp_path, monkeypatch):
     """The service configured in vLLM mode, with a simulated generation."""
     monkeypatch.setenv("TRIAGE_BACKEND", "vllm")
     monkeypatch.setenv("TRIAGE_API_KEY", KEY)
-    monkeypatch.setenv("TRIAGE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("TRIAGE_AUDIT_DIR", str(tmp_path / "audit"))
     monkeypatch.setenv("TRIAGE_RATE_LIMIT", "5")
     monkeypatch.setattr(
         module_api,
@@ -58,7 +58,7 @@ def test_open_mode_has_to_be_asked_for_explicitly(monkeypatch, tmp_path):
     monkeypatch.setenv("TRIAGE_BACKEND", "vllm")
     monkeypatch.delenv("TRIAGE_API_KEY", raising=False)
     monkeypatch.setenv("TRIAGE_ALLOW_ANONYMOUS", "true")
-    monkeypatch.setenv("TRIAGE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("TRIAGE_AUDIT_DIR", str(tmp_path / "audit"))
     with TestClient(module_api.app) as tester:
         assert (
             tester.post("/questionnaire/next", json={"chief_complaint": "toux"}).status_code == 200
@@ -139,9 +139,9 @@ def test_a_disagreement_between_the_model_and_the_rule_is_flagged(client):
 
 def test_every_triage_leaves_a_trace(client, tmp_path):
     client.post("/triage", json={"symptoms": "Douleur thoracique."}, headers={"X-API-Key": KEY})
-    rows = (tmp_path / "audit.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    rows = read_entries(tmp_path / "audit")
     assert len(rows) == 1
-    trace = json.loads(rows[0])
+    trace = rows[0]
     assert trace["level"] == "URGENCE_VITALE"
     assert trace["engine"] == "vllm"
     assert trace["anonymised_symptoms"]
@@ -263,7 +263,7 @@ def test_in_open_mode_the_quota_is_not_evaded_by_changing_header(monkeypatch, tm
     monkeypatch.setenv("TRIAGE_BACKEND", "vllm")
     monkeypatch.delenv("TRIAGE_API_KEY", raising=False)
     monkeypatch.setenv("TRIAGE_ALLOW_ANONYMOUS", "true")
-    monkeypatch.setenv("TRIAGE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("TRIAGE_AUDIT_DIR", str(tmp_path / "audit"))
     monkeypatch.setenv("TRIAGE_RATE_LIMIT", "3")
     with TestClient(module_api.app) as tester:
         codes = [

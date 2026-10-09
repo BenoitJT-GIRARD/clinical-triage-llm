@@ -263,7 +263,7 @@ def prepare() -> None:
     os.environ.setdefault("TRIAGE_BACKEND", "vllm")
     os.environ["TRIAGE_API_KEY"] = CAPTURE_KEY
     os.environ["TRIAGE_VLLM_URL"] = "http://127.0.0.1:1"
-    os.environ["TRIAGE_AUDIT_LOG"] = str(ROOT_DIR / "var" / "logs" / "capture.jsonl")
+    os.environ["TRIAGE_AUDIT_DIR"] = str(ROOT_DIR / "var" / "logs" / "capture")
 
 
 # --- Starting the product, and knowing when it is up ------------------------

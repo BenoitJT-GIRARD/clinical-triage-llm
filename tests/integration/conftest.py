@@ -20,5 +20,5 @@ NO_ENGINE = "http://127.0.0.1:1"
 
 @pytest.fixture(autouse=True)
 def a_service_that_depends_on_nothing_else(tmp_path, monkeypatch):
-    monkeypatch.setenv("TRIAGE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("TRIAGE_AUDIT_DIR", str(tmp_path / "audit"))
     monkeypatch.setenv("TRIAGE_VLLM_URL", NO_ENGINE)

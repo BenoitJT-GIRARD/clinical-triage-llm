@@ -34,7 +34,7 @@ USER triage
 
 ENV TRIAGE_BACKEND=vllm \
     TRIAGE_VLLM_URL=http://vllm:8000 \
-    TRIAGE_AUDIT_LOG=/app/var/logs/audit_triage.jsonl
+    TRIAGE_AUDIT_DIR=/app/var/logs/audit
 
 EXPOSE 8080
 

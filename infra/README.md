@@ -267,7 +267,7 @@ Variables the gateway itself reads, from `.env` at the root or from the containe
 | `TRIAGE_BASE_MODEL` | model loaded in `transformers` mode | the merged SFT model |
 | `TRIAGE_ADAPTER_DIR` | adapter applied in `transformers` mode | the DPO adapter |
 | `TRIAGE_MODEL_VERSION` | version written to the audit log | `qwen3-1.7b-clinical-triage` |
-| `TRIAGE_AUDIT_LOG` | path of the audit log | `var/logs/audit_triage.jsonl` |
+| `TRIAGE_AUDIT_DIR` | directory of the audit log, one file per day | `var/logs/audit` |
 | `TRIAGE_RATE_LIMIT` | requests per minute and per caller | `60` |
 
 Variables the tools that raise the stack read, and not the service. They do not go through the
@@ -329,7 +329,7 @@ refuses to start, and says so. The volume survives `docker compose down`; `docke
 -v` erases it.
 
 ```bash
-docker compose -f infra/docker-compose.yml cp api:/app/var/logs/audit_triage.jsonl .
+docker compose -f infra/docker-compose.yml cp api:/app/var/logs/audit .
 ```
 
 Plan for its rotation and its centralisation, and respect the retention period written into every

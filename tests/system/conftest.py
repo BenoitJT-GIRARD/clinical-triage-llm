@@ -155,12 +155,9 @@ class Service:
         return {"X-API-Key": self.key if key is None else key}
 
     def traces(self) -> list[dict]:
-        import json
+        from clinical_triage.serving.audit import read_entries
 
-        if not self.audit_log.exists():
-            return []
-        lines = self.audit_log.read_text(encoding="utf-8").strip().splitlines()
-        return [json.loads(line) for line in lines if line]
+        return read_entries(self.audit_log)
 
     def prompts(self) -> list[str]:
         import json
@@ -183,7 +180,7 @@ def start_service(tmp_path_factory):
     def launch(**overrides: str) -> Service:
         workspace = tmp_path_factory.mktemp("service")
         engine_calls = workspace / "engine-calls.jsonl"
-        audit_log = workspace / "audit.jsonl"
+        audit_log = workspace / "audit"
         engine_port, gateway_port = free_port(), free_port()
 
         stub = workspace / "stub_engine.py"
@@ -218,7 +215,7 @@ def start_service(tmp_path_factory):
                     "TRIAGE_BACKEND": "vllm",
                     "TRIAGE_API_KEY": SERVICE_KEY,
                     "TRIAGE_VLLM_URL": f"http://127.0.0.1:{engine_port}",
-                    "TRIAGE_AUDIT_LOG": str(audit_log),
+                    "TRIAGE_AUDIT_DIR": str(audit_log),
                     "TRIAGE_RATE_LIMIT": "60",
                 }
                 | overrides,
@@ -274,7 +271,7 @@ def gateway_without_a_key(tmp_path) -> Launch:
         "PYTHONPATH": str(PATHS.root / "src"),
         "PYTHONIOENCODING": "utf-8",
         "TRIAGE_BACKEND": "vllm",
-        "TRIAGE_AUDIT_LOG": str(tmp_path / "audit.jsonl"),
+        "TRIAGE_AUDIT_DIR": str(tmp_path / "audit"),
     }
     for name in ("TRIAGE_API_KEY", "TRIAGE_ALLOW_ANONYMOUS"):
         environment.pop(name, None)

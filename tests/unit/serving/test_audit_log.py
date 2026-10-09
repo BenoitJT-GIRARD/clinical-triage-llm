@@ -7,16 +7,19 @@ value.
 
 from __future__ import annotations
 
-import json
+from datetime import date
 
 import pytest
 
 from clinical_triage.serving.audit import (
+    GENESIS,
     RETENTION_DAYS,
     check_log_is_writable,
     new_request_id,
+    purge_expired,
     read_entries,
     record_interaction,
+    verify,
 )
 
 
@@ -26,7 +29,7 @@ def test_the_identifiers_are_unique():
 
 
 def test_an_interaction_is_written_with_every_field(tmp_path):
-    log = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit"
     entry = record_interaction(
         request_id="abc123",
         symptoms="Homme de 62 ans, douleur thoracique.",
@@ -37,9 +40,9 @@ def test_an_interaction_is_written_with_every_field(tmp_path):
         engine="vllm",
         rule_level="URGENCE_VITALE",
         rule_reasons=["douleur thoracique"],
-        log_path=log,
+        directory=log,
     )
-    row = json.loads(log.read_text(encoding="utf-8").strip())
+    row = read_entries(log)[-1]
     assert row["request_id"] == "abc123"
     assert row["level"] == "URGENCE_VITALE"
     assert row["rule_level"] == "URGENCE_VITALE"
@@ -53,7 +56,7 @@ def test_an_interaction_is_written_with_every_field(tmp_path):
 
 
 def test_interactions_append_without_overwriting(tmp_path):
-    log = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit"
     for index in range(3):
         record_interaction(
             request_id=f"id{index}",
@@ -63,7 +66,7 @@ def test_interactions_append_without_overwriting(tmp_path):
             latency_ms=10.0,
             model="model",
             engine="vllm",
-            log_path=log,
+            directory=log,
         )
     rows = read_entries(log)
     assert [row["request_id"] for row in rows] == ["id0", "id1", "id2"]
@@ -71,13 +74,13 @@ def test_interactions_append_without_overwriting(tmp_path):
 
 
 def test_an_absent_log_reads_as_empty(tmp_path):
-    assert read_entries(tmp_path / "nonexistent.jsonl") == []
+    assert read_entries(tmp_path / "nonexistent") == []
 
 
 def test_the_patient_name_is_masked_before_writing(tmp_path):
     """The masking belongs to the writer, and is not left to the caller, without
     trusting its caller."""
-    log = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit"
     record_interaction(
         request_id="pii1",
         symptoms="Madame Dupont, 72 ans, joignable au 06 12 34 56 78, douleur thoracique.",
@@ -86,9 +89,9 @@ def test_the_patient_name_is_masked_before_writing(tmp_path):
         latency_ms=12.0,
         model="model",
         engine="vllm",
-        log_path=log,
+        directory=log,
     )
-    written = json.loads(log.read_text(encoding="utf-8").strip())["anonymised_symptoms"]
+    written = read_entries(log)[-1]["anonymised_symptoms"]
     assert "Dupont" not in written
     assert "06 12 34 56 78" not in written
     # The clinical information, on the other hand, must survive the masking.
@@ -101,7 +104,7 @@ def test_the_model_answer_is_masked_too(tmp_path):
     Masking the description and letting the answer through would bring back through the door
     what was chased out of the window.
     """
-    log = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit"
     record_interaction(
         request_id="pii2",
         symptoms="Madame Dupont, 72 ans, douleur thoracique.",
@@ -114,9 +117,9 @@ def test_the_model_answer_is_masked_too(tmp_path):
         latency_ms=12.0,
         model="model",
         engine="vllm",
-        log_path=log,
+        directory=log,
     )
-    row = json.loads(log.read_text(encoding="utf-8").strip())
+    row = read_entries(log)[-1]
     assert "Dupont" not in row["anonymised_answer"]
     assert "URGENCE_VITALE" in row["anonymised_answer"]
     assert "douleur thoracique" in row["anonymised_answer"]
@@ -129,7 +132,7 @@ def test_an_english_text_is_masked_like_a_french_one(tmp_path):
     syntax: "Mr Jenkins" stayed in the clear in the only file of the system that keeps personal
     data, and for a year.
     """
-    log = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit"
     record_interaction(
         request_id="pii3",
         symptoms="Mr Jenkins, 72, reachable at +33 6 12 34 56 78, reports chest pain.",
@@ -138,9 +141,9 @@ def test_an_english_text_is_masked_like_a_french_one(tmp_path):
         latency_ms=12.0,
         model="model",
         engine="vllm",
-        log_path=log,
+        directory=log,
     )
-    row = json.loads(log.read_text(encoding="utf-8").strip())
+    row = read_entries(log)[-1]
     assert "Jenkins" not in row["anonymised_symptoms"]
     assert "Jenkins" not in row["anonymised_answer"]
     assert "chest pain" in row["anonymised_symptoms"]
@@ -153,7 +156,7 @@ def test_a_decision_taken_on_a_truncated_narrative_leaves_a_trace(tmp_path):
     generation stops. The triage is then given on an incomplete narrative, and an audit must be
     able to find that out months later.
     """
-    log = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit"
     record_interaction(
         request_id="trq1",
         symptoms="Description très longue " * 200,
@@ -163,14 +166,14 @@ def test_a_decision_taken_on_a_truncated_narrative_leaves_a_trace(tmp_path):
         model="model",
         engine="vllm",
         description_truncated=True,
-        log_path=log,
+        directory=log,
     )
-    row = json.loads(log.read_text(encoding="utf-8").strip())
+    row = read_entries(log)[-1]
     assert row["description_truncated"] is True
 
 
 def test_a_normal_interaction_is_not_marked_truncated(tmp_path):
-    log = tmp_path / "audit.jsonl"
+    log = tmp_path / "audit"
     record_interaction(
         request_id="trq2",
         symptoms="Homme de 62 ans, douleur thoracique.",
@@ -179,18 +182,17 @@ def test_a_normal_interaction_is_not_marked_truncated(tmp_path):
         latency_ms=12.0,
         model="model",
         engine="vllm",
-        log_path=log,
+        directory=log,
     )
-    assert json.loads(log.read_text(encoding="utf-8").strip())["description_truncated"] is False
+    assert read_entries(log)[-1]["description_truncated"] is False
 
 
-def test_a_writable_log_is_created_empty(tmp_path):
-    """The startup check prepares the file without writing a line into it."""
-    log = tmp_path / "traces" / "audit_triage.jsonl"
+def test_a_writable_log_is_prepared_without_a_line(tmp_path):
+    """The startup check prepares today's file without writing a line into it."""
+    log = tmp_path / "traces"
 
     assert check_log_is_writable(log) == log
-    assert log.exists()
-    assert log.read_text(encoding="utf-8") == ""
+    assert read_entries(log) == []
 
 
 def test_an_unreachable_log_stops_the_startup(tmp_path):
@@ -204,4 +206,80 @@ def test_an_unreachable_log_stops_the_startup(tmp_path):
     obstacle.write_text("this is not a folder", encoding="utf-8")
 
     with pytest.raises(RuntimeError, match="Audit log not writable"):
-        check_log_is_writable(obstacle / "audit_triage.jsonl")
+        check_log_is_writable(obstacle / "audit")
+
+
+# --- A French narrative keeps its words ----------------------------------------
+
+
+def test_a_french_narrative_is_not_masked_by_the_english_engine(tmp_path):
+    """The English pass read ordinary French words as a name: the log lost the very sign."""
+    log = tmp_path / "audit"
+    record_interaction(
+        request_id="fr1",
+        symptoms="Patiente de 80 ans, ce matin incapable de parler, bouche déviée.",
+        level="URGENCE_VITALE",
+        answer="Niveau de priorité : URGENCE_VITALE",
+        latency_ms=12.0,
+        model="model",
+        engine="vllm",
+        directory=log,
+    )
+    assert "ce matin incapable de parler" in read_entries(log)[-1]["anonymised_symptoms"]
+
+
+# --- The retention is applied, and a modification shows -------------------------
+
+
+def _write(log, count: int) -> None:
+    for index in range(count):
+        record_interaction(
+            request_id=f"id{index}",
+            symptoms="Rhume banal.",
+            level="CONSULTATION_DIFFEREE",
+            answer="Niveau de priorité : CONSULTATION_DIFFEREE",
+            latency_ms=10.0,
+            model="model",
+            engine="vllm",
+            directory=log,
+        )
+
+
+def test_an_untouched_log_verifies(tmp_path):
+    log = tmp_path / "audit"
+    _write(log, 3)
+    assert read_entries(log)[0]["previous_digest"] == GENESIS
+    assert verify(log) == []
+
+
+def test_an_edited_line_breaks_the_chain_where_it_was_edited(tmp_path):
+    log = tmp_path / "audit"
+    _write(log, 3)
+    (day,) = log.glob("*.jsonl")
+    lines = day.read_text(encoding="utf-8").splitlines()
+    lines[1] = lines[1].replace("CONSULTATION_DIFFEREE", "URGENCE_VITALE", 1)
+    day.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    assert verify(log) == [f"{day.name}, line 3: the chain breaks here"]
+
+
+def test_a_deleted_line_breaks_the_chain(tmp_path):
+    log = tmp_path / "audit"
+    _write(log, 3)
+    (day,) = log.glob("*.jsonl")
+    lines = day.read_text(encoding="utf-8").splitlines()
+    day.write_text("\n".join([lines[0], lines[2]]) + "\n", encoding="utf-8")
+
+    assert verify(log)
+
+
+def test_the_files_past_the_retention_are_deleted(tmp_path):
+    log = tmp_path / "audit"
+    log.mkdir()
+    (log / "2025-01-01.jsonl").write_text("", encoding="utf-8")
+    (log / "2026-10-01.jsonl").write_text("", encoding="utf-8")
+
+    deleted = purge_expired(log, date(2026, 10, 12), retention_days=RETENTION_DAYS)
+
+    assert [path.name for path in deleted] == ["2025-01-01.jsonl"]
+    assert [path.name for path in log.iterdir()] == ["2026-10-01.jsonl"]

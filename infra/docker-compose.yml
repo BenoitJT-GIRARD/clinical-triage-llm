@@ -69,7 +69,7 @@ services:
       TRIAGE_VLLM_URL: http://vllm:8000
       TRIAGE_VLLM_MODEL: qwen3-1.7b-clinical-triage
       TRIAGE_MODEL_VERSION: qwen3-1.7b-clinical-triage
-      TRIAGE_AUDIT_LOG: /app/var/logs/audit_triage.jsonl
+      TRIAGE_AUDIT_DIR: /app/var/logs/audit
       # Quota per caller. Sixty a minute matches a reception desk; a load bench, on the other
       # hand, holds a single key and passes that count from its first concurrency level. It
       # raises the quota for the duration of the measurement, without changing the service
@@ -94,6 +94,6 @@ services:
         condition: service_healthy
 
 volumes:
-  # `docker compose cp api:/app/var/logs/audit_triage.jsonl .` takes a copy out;
+  # `docker compose cp api:/app/var/logs/audit .` takes a copy out;
   # `docker compose down` without `-v` keeps it.
   audit:
