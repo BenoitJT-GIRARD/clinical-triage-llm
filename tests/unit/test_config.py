@@ -76,8 +76,7 @@ def test_a_capped_run_never_writes_over_a_delivered_artefact():
 def test_the_repository_identifiers_follow_the_account(monkeypatch):
     monkeypatch.setenv("HF_NAMESPACE", "another-account")
     assert MODEL.hub_dataset_id.startswith("another-account/")
-    assert MODEL.hub_merged_model_id.startswith("another-account/")
-    assert MODEL.hub_sft_merged_model_id.startswith("another-account/")
+    assert MODEL.hub_model_id.startswith("another-account/")
 
 
 def test_an_empty_account_falls_back_to_the_default_one(monkeypatch):

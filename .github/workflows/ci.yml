@@ -142,6 +142,11 @@ jobs:
       - name: Tests and coverage
         run: uv run --no-sync pytest
 
+      # The Hub cards are published byte for byte, and every figure in them is read from the
+      # committed results: a card that no longer matches them would publish stale numbers.
+      - name: Hub cards up to date with the results
+        run: uv run --no-sync python scripts/build_hub_cards.py --check
+
   image:
     name: Service image
     runs-on: ubuntu-latest

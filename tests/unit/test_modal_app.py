@@ -46,7 +46,7 @@ def test_the_descriptor_loads(descriptor):
 
 
 def test_the_engine_serves_the_projects_final_model(descriptor):
-    assert MODEL.hub_merged_model_id == descriptor.MODEL_ID
+    assert MODEL.hub_model_id == descriptor.MODEL_ID
 
 
 def test_the_model_references_are_baked_into_the_image(descriptor):
@@ -72,7 +72,7 @@ def test_an_empty_variable_falls_back_to_the_pinned_version(monkeypatch):
     monkeypatch.setenv("TRIAGE_MODEL_ID", "")
     monkeypatch.setenv("TRIAGE_MODEL_REVISION", "")
     descriptor = _load()
-    assert MODEL.hub_merged_model_id == descriptor.MODEL_ID
+    assert MODEL.hub_model_id == descriptor.MODEL_ID
     assert descriptor.REVISION.startswith("model-v")
 
 

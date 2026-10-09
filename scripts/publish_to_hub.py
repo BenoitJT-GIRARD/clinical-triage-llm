@@ -1,24 +1,24 @@
-"""Publish the dataset and the models to the Hugging Face Hub.
+"""Publish the final model and the dataset to the Hugging Face Hub, then check what arrived.
 
-The git repository already carries the dataset and its card; the Hub adds online browsing, a
-data preview and the download of weights too large for a git repository.
+Two repositories, and nothing else: the model served, the supervised and the preference steps
+merged into it, and the dataset it was trained and evaluated on. The adapters and the intermediate
+merged model are not published; the pipeline rebuilds them, and the model card says how.
 
-Requires a write token in ``HF_TOKEN``. The target account is set through ``HF_NAMESPACE``,
-without touching the code::
+Requires a write token in ``HF_TOKEN``; the target account is set through ``HF_NAMESPACE``::
 
     $env:HF_TOKEN = "hf_..."
     uv run python scripts/publish_to_hub.py --what dataset
-    uv run python scripts/publish_to_hub.py --what final-model
+    uv run python scripts/publish_to_hub.py --what model
+    uv run python scripts/publish_to_hub.py --what cards --tag model-v2.0.0
+    uv run python scripts/publish_to_hub.py --what verify --tag model-v2.0.0
 
-``--tag`` additionally places a tag on the repositories touched. That is what makes a model
-version citable: an inference server can then ask for ``revision=model-v1.0.0`` and always get
-the same weights, where ``main`` moves at every publication. Continuous deployment uses it to
-pin the version it puts online::
+The cards are the files ``scripts/build_hub_cards.py`` renders, sent byte for byte: what the Hub
+shows is what the repository versions. ``--tag`` places a tag on the repositories touched, and
+refuses one the model card does not pin: an inference server asks for ``revision=model-v2.0.0`` and must
+get the weights the card describes, where ``main`` moves at every publication.
 
-    uv run python scripts/publish_to_hub.py --what cards --tag model-v1.0.0
-
-Model folders contain intermediate checkpoints, useful locally but worthless on the Hub: they
-are excluded from publication.
+``--what verify`` reads back what the Hub holds at the tag: each card equal to its file, each
+weight file with the digest of the weights evaluated, each subset of the dataset loadable.
 """
 
 from __future__ import annotations
@@ -31,45 +31,21 @@ from pathlib import Path
 
 from clinical_triage.config import MODEL, PATHS
 from clinical_triage.data.dataset_io import DATASET_FILES
+from clinical_triage.training.export import export_problems, weight_digests
 from clinical_triage.utils import get_logger
 
 logger = get_logger("publish")
 
-# Files excluded from every publication: intermediate checkpoints and optimiser states, which
-# weigh a lot and only serve to resume an interrupted training run.
-EXCLUSIONS = [
-    "checkpoint-*/*",
-    "optimizer.pt",
-    "scheduler.pt",
-    "rng_state.pth",
-    # The training library drops its own card into the adapter folder, and writes the **local
-    # path** of the base model into it. The Hub refuses the whole upload for that single line,
-    # and the project's card arrives right after anyway, under the same name.
-    "README.md",
-]
+MODEL_CARD = PATHS.root / "infra" / "hub" / "model-card.md"
+DATASET_CARD = PATHS.root / "infra" / "hub" / "dataset-card.md"
+EVALUATION = PATHS.reports / "evaluation_results.json"
 
-# The four model repositories, with the local folder that feeds each.
-MODELS = {
-    "sft-adapter": "sft_adapter",
-    "merged-sft-model": "sft_merged",
-    "dpo-adapter": "dpo_adapter",
-    "final-model": "dpo_merged",
-}
+# What goes up from the merged model's folder: the weights, the configuration and the tokenizer.
+# Anything else — a checkpoint, a card written by a library — stays on the machine.
+MODEL_FILES = ["*.safetensors", "*.json", "*.txt", "*.jinja"]
 
-# What ``--what all`` publishes: the four models and the dataset.
-#
-# The merged supervised model is part of it, although it weighs four gigabytes and nobody serves
-# it. There is a reason, and it is not negotiable: **the DPO adapter is trained on top of it**,
-# and its configuration designates it as the base model. Not publishing it would make the DPO
-# adapter an unloadable artefact — ``PeftModel.from_pretrained`` would look for a repository that
-# does not exist. Four gigabytes of storage are better than a public artefact nobody can open.
-EVERYTHING = [
-    "dataset",
-    "sft-adapter",
-    "merged-sft-model",
-    "dpo-adapter",
-    "final-model",
-]
+# The subsets the dataset card declares, as `datasets` loads them.
+SUBSETS = {"sft": ("train", "validation", "test"), "dpo": ("train",), "clinical_eval": ("test",)}
 
 
 def _token() -> str:
@@ -82,151 +58,101 @@ def _token() -> str:
     return token
 
 
-def _model_repository(what: str) -> str:
-    identifiers = {
-        "sft-adapter": MODEL.hub_sft_model_id,
-        "merged-sft-model": MODEL.hub_sft_merged_model_id,
-        "dpo-adapter": MODEL.hub_dpo_model_id,
-        "final-model": MODEL.hub_merged_model_id,
-    }
-    return identifiers[what]
+def evaluated_weights(results: Path = EVALUATION) -> dict[str, str]:
+    """The digests of the weight files the committed evaluation measured."""
+    if not results.exists():
+        raise SystemExit(
+            f"Evaluation not found ({results}): nothing says which weights to publish."
+        )
+    digests = json.loads(results.read_text(encoding="utf-8")).get("evaluated_weights")
+    if not digests:
+        raise SystemExit(
+            "The evaluation records no weight digest: run `scripts/run_evaluation.py`."
+        )
+    return digests
 
 
-def _model_card(what: str) -> Path:
-    return PATHS.root / "infra" / "model-cards" / f"{what}.md"
+def publishable_model(folder: Path = PATHS.dpo_merged, results: Path = EVALUATION) -> None:
+    """Refuse an export that is wrong, or that is not the one the evaluation measured."""
+    if not folder.exists():
+        raise SystemExit(f"Folder not found: {folder}")
+    problems = export_problems(folder)
+    if problems:
+        raise SystemExit("Export refused: " + "; ".join(problems))
+    if weight_digests(folder) != evaluated_weights(results):
+        raise SystemExit(
+            "These weights are not the ones evaluated: their digests differ from those recorded "
+            "in the evaluation. Evaluate them, or publish the weights that were."
+        )
 
 
-def publish_dataset(api) -> str:
-    """Publish the JSONL files, the data card and the metadata."""
-    # The four training sets are not versioned: they are rebuilt by ``scripts/build_dataset.py``.
-    # Without this refusal, a publication launched from a freshly cloned repository would upload
-    # two files out of six and announce it as a success.
-    missing = [n for n in DATASET_FILES if not (PATHS.data_processed / n).exists()]
+def pinned_revision() -> str | None:
+    """The revision the model card's serving command pins."""
+    for line in MODEL_CARD.read_text(encoding="utf-8").splitlines():
+        if "--revision" in line:
+            return line.split("--revision", 1)[1].split()[0]
+    return None
+
+
+def complete_dataset(folder: Path = PATHS.data_processed) -> None:
+    """Refuse an incomplete set rather than publish part of it as a success.
+
+    The four training files are not versioned: they are rebuilt by ``scripts/build_dataset.py``.
+    A publication launched from a fresh clone would otherwise upload two files out of six.
+    """
+    missing = [name for name in DATASET_FILES if not (folder / name).exists()]
     if missing:
         raise SystemExit(
             "Incomplete dataset, publication refused. Missing: "
             + ", ".join(missing)
             + ".\nRun `python scripts/build_dataset.py` on the machine that publishes."
         )
-    repository = MODEL.hub_dataset_id
-    # ``private=False`` is explicit on purpose: the set is meant to be public, and publishing
-    # data cannot be undone with a click. That choice is not left to a library default.
-    api.create_repo(repository, repo_type="dataset", exist_ok=True, private=False)
+
+
+def publish_dataset(api) -> None:
+    complete_dataset()
+    # `private=False` is explicit on purpose: publishing data cannot be undone with a click, and
+    # that choice is not left to a library default.
+    api.create_repo(MODEL.hub_dataset_id, repo_type="dataset", exist_ok=True, private=False)
     api.upload_folder(
         folder_path=str(PATHS.data_processed),
-        repo_id=repository,
+        repo_id=MODEL.hub_dataset_id,
         repo_type="dataset",
-        allow_patterns=["*.jsonl", "*.json"],
+        allow_patterns=list(DATASET_FILES),
     )
-    api.upload_file(
-        path_or_fileobj=str(PATHS.data / "README.md"),
-        path_in_repo="README.md",
-        repo_id=repository,
-        repo_type="dataset",
-    )
-    return f"https://huggingface.co/datasets/{repository}"
+    publish_card(api, DATASET_CARD, MODEL.hub_dataset_id, "dataset")
 
 
-def publish_model(api, what: str, tag: str | None = None) -> str:
-    """Publish a LoRA adapter or the final merged model, with its card."""
-    folder = getattr(PATHS, MODELS[what])
-    repository = _model_repository(what)
-    if not folder.exists():
-        raise SystemExit(f"Folder not found: {folder}")
-    api.create_repo(repository, repo_type="model", exist_ok=True, private=False)
+def publish_model(api) -> None:
+    publishable_model()
+    api.create_repo(MODEL.hub_model_id, repo_type="model", exist_ok=True, private=False)
     api.upload_folder(
-        folder_path=str(folder),
-        repo_id=repository,
+        folder_path=str(PATHS.dpo_merged),
+        repo_id=MODEL.hub_model_id,
         repo_type="model",
-        ignore_patterns=EXCLUSIONS,
+        allow_patterns=MODEL_FILES,
     )
-    publish_card(api, what, tag)
-    return f"https://huggingface.co/{repository}"
+    publish_card(api, MODEL_CARD, MODEL.hub_model_id, "model")
 
 
-# Which evaluated model matches which card. The supervised adapter and the merged supervised
-# model carry the same training: they share their figures, as they share their weights to the
-# rounding.
-CARD_EVALUATION = {
-    "sft-adapter": "sft",
-    "merged-sft-model": "sft",
-    "dpo-adapter": "dpo",
-    "final-model": "dpo-merged",
-}
-
-
-def _evaluation_table(what: str) -> str:
-    """Render the model's figures, as they will be read on the Hub.
-
-    A model card with no measurable performance is not a model card: it is the first page anyone
-    opening the repository sees, and a pointer to a document hosted elsewhere does not do.
-    """
-    results = PATHS.reports / "evaluation_results.json"
-    if not results.exists():
-        raise SystemExit(
-            f"Evaluation not found ({results}). Run `python scripts/run_evaluation.py` before "
-            "publishing: a model card with no figures has no purpose."
-        )
-    block = json.loads(results.read_text(encoding="utf-8"))["clinical_set"]
-    name = CARD_EVALUATION[what]
-    measures = block["models"].get(name)
-    if measures is None:
-        raise SystemExit(f"Model `{name}` was not evaluated: card `{what}` cannot be published.")
-
-    low, high = measures["accuracy_ci95"]
-
-    def percent(value: float) -> str:
-        return f"{value * 100:.1f}%".replace(".0%", "%")
-
-    return "\n".join(
-        [
-            f"| Measure | Value on {block['n']} cases |",
-            "|---|---|",
-            f"| Triage level accuracy | {measures['accuracy']:.3f} [{low:.2f} - {high:.2f}] |",
-            f"| **Undertriage of urgent cases** | **{percent(measures['undertriage'])}** |",
-            f"| Overtriage, all cases | {percent(measures['overtriage'])} |",
-            (
-                "| Answers the information system can parse | "
-                f"{percent(measures['format_compliance'])} |"
-            ),
-        ]
-    )
-
-
-def publish_card(api, what: str, tag: str | None = None) -> str:
-    """Update a model's card alone, without touching the weights.
-
-    That is what continuous integration needs: the cards are versioned in the git repository and
-    evolve with the documentation, whereas the weights are uploaded from the training machine.
-    The figures are injected here from the results file: the published card therefore carries the
-    measurements of the version it describes, with nothing copied by hand.
-
-    The serving command it gives pins the tag placed by the same run. Hard-coded, it would
-    designate the first publication after every new one: the card would describe one set of
-    weights and have another served.
-    """
-    repository = _model_repository(what)
-    card = _model_card(what)
+def publish_card(api, card: Path, repository: str, repo_type: str) -> None:
+    """Send a rendered card as the repository's README, unchanged."""
     if not card.exists():
-        raise SystemExit(f"Card not found: {card}")
-    text = card.read_text(encoding="utf-8").replace("{{EVALUATION}}", _evaluation_table(what))
-    text = text.replace("{{REVISION}}", tag or "main")
-    api.create_repo(repository, repo_type="model", exist_ok=True, private=False)
+        raise SystemExit(f"Card not found: {card}. Run `python scripts/build_hub_cards.py`.")
     api.upload_file(
-        path_or_fileobj=text.encode("utf-8"),
+        path_or_fileobj=card.read_bytes(),
         path_in_repo="README.md",
         repo_id=repository,
-        repo_type="model",
+        repo_type=repo_type,
     )
-    return f"https://huggingface.co/{repository}"
+    logger.info("Card of %s published.", repository)
 
 
 def place_tag(api, repository: str, repo_type: str, name: str) -> None:
-    """Place a tag on a Hub repository, replacing the previous one.
+    """Place a tag, replacing the previous one of the same name.
 
-    Re-tagging is useful when a publication is redone after a correction: ``create_tag`` can
-    ignore an existing tag, but not move it onto the new content. So it is removed first, if it
-    is there.
+    ``create_tag`` can ignore an existing tag but not move it onto new content: a publication
+    redone after a correction removes it first.
     """
     from huggingface_hub.errors import RevisionNotFoundError
 
@@ -236,59 +162,85 @@ def place_tag(api, repository: str, repo_type: str, name: str) -> None:
     logger.info("Tag %s placed on %s", name, repository)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--what",
-        choices=["dataset", *MODELS, "cards", "all"],
-        required=True,
-        help="dataset, one specific model, `cards` for the cards alone, or `all`",
-    )
-    parser.add_argument(
-        "--tag",
-        help="tag name to place on the repositories touched, for example model-v1.0.0",
-    )
+def verify(api, tag: str) -> list[str]:
+    """What differs between the Hub at ``tag`` and what the repository says it should hold."""
+    from huggingface_hub import hf_hub_download
+
+    problems = []
+    for card, repository, repo_type in (
+        (MODEL_CARD, MODEL.hub_model_id, "model"),
+        (DATASET_CARD, MODEL.hub_dataset_id, "dataset"),
+    ):
+        published = Path(
+            hf_hub_download(repository, "README.md", repo_type=repo_type, revision=tag)
+        ).read_bytes()
+        if published != card.read_bytes():
+            problems.append(f"{repository}: the card differs from {card.name}")
+
+    stored = {
+        entry.path: entry.lfs.sha256
+        for entry in api.list_repo_tree(MODEL.hub_model_id, revision=tag, expand=True)
+        if getattr(entry, "lfs", None)
+    }
+    for name, digest in evaluated_weights().items():
+        if stored.get(name) != digest:
+            problems.append(f"{MODEL.hub_model_id}: {name} is not the file evaluated")
+
+    from datasets import load_dataset
+
+    for subset, splits in SUBSETS.items():
+        try:
+            loaded = load_dataset(MODEL.hub_dataset_id, subset, revision=tag)
+        except Exception as error:  # noqa: BLE001 - any failure to load is the finding itself
+            problems.append(f"{MODEL.hub_dataset_id}: subset {subset} does not load ({error})")
+            continue
+        if tuple(loaded) != splits:
+            problems.append(f"{MODEL.hub_dataset_id}: subset {subset} has splits {tuple(loaded)}")
+    return problems
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--what", choices=["dataset", "model", "cards", "verify"], required=True)
+    parser.add_argument("--tag", help="the version to tag, or to verify: model-v2.0.0")
     args = parser.parse_args()
+    if args.tag and pinned_revision() != args.tag:
+        raise SystemExit(
+            f"The model card pins {pinned_revision()}, not {args.tag}: the tag would point "
+            "readers to weights the card does not describe."
+        )
+    if args.what == "verify" and not args.tag:
+        parser.error("--what verify needs the --tag to read back")
 
     from huggingface_hub import HfApi
 
     api = HfApi(token=_token())
+    if args.what == "verify":
+        problems = verify(api, args.tag)
+        for problem in problems:
+            logger.error(problem)
+        if not problems:
+            logger.info("The Hub holds, at %s, what the repository describes.", args.tag)
+        return 1 if problems else 0
 
-    if args.what == "all":
-        requested = list(EVERYTHING)
-    elif args.what == "cards":
-        # Only the models actually published: refreshing the card of a repository that was never
-        # created would create it, empty, with a README for all content.
-        requested = [name for name in EVERYTHING if name != "dataset"]
-    else:
-        requested = [args.what]
-
-    cards_only = args.what == "cards"
-    touched: list[tuple[str, str]] = []
-    for request in requested:
-        if request == "dataset":
-            address = publish_dataset(api)
-            repository, repo_type = MODEL.hub_dataset_id, "dataset"
-        elif cards_only:
-            address = publish_card(api, request, args.tag)
-            repository, repo_type = _model_repository(request), "model"
+    touched = []
+    if args.what in ("model", "cards"):
+        if args.what == "model":
+            publish_model(api)
         else:
-            address = publish_model(api, request, args.tag)
-            repository, repo_type = _model_repository(request), "model"
-        touched.append((repository, repo_type))
-        logger.info("Published: %s", address)
-
-    # With ``--what cards`` the dataset is not republished — the continuous-integration runner
-    # does not have its files — but its repository must receive the tag like the others: the tag
-    # is what makes the version citable, and a revision where the dataset is untagged is
-    # incomplete.
-    if cards_only and api.repo_exists(MODEL.hub_dataset_id, repo_type="dataset"):
+            publish_card(api, MODEL_CARD, MODEL.hub_model_id, "model")
+        touched.append((MODEL.hub_model_id, "model"))
+    if args.what in ("dataset", "cards"):
+        if args.what == "dataset":
+            publish_dataset(api)
+        else:
+            publish_card(api, DATASET_CARD, MODEL.hub_dataset_id, "dataset")
         touched.append((MODEL.hub_dataset_id, "dataset"))
-
     if args.tag:
         for repository, repo_type in touched:
             place_tag(api, repository, repo_type, args.tag)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

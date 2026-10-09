@@ -122,19 +122,7 @@ class ModelConfig:
         return f"{self.hub_namespace}/clinical-triage-bilingual"
 
     @property
-    def hub_sft_model_id(self) -> str:
-        return f"{self.hub_namespace}/qwen3-1.7b-clinical-triage-sft"
-
-    @property
-    def hub_dpo_model_id(self) -> str:
-        return f"{self.hub_namespace}/qwen3-1.7b-clinical-triage-dpo"
-
-    @property
-    def hub_sft_merged_model_id(self) -> str:
-        return f"{self.hub_namespace}/qwen3-1.7b-clinical-triage-sft-merged"
-
-    @property
-    def hub_merged_model_id(self) -> str:
+    def hub_model_id(self) -> str:
         return f"{self.hub_namespace}/qwen3-1.7b-clinical-triage"
 
 

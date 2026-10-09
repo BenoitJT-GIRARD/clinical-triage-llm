@@ -1,18 +1,14 @@
-"""Consistency of what is published on the Hugging Face Hub.
+"""What the publication sends to the Hugging Face Hub, and what it refuses to send.
 
-A LoRA adapter contains no model: it describes a correction to apply to specific weights, which
-it designates by their repository. Publishing the adapter without those weights produces an
-artefact nobody can open — and the mistake only shows at the first download, that is to say too
-late.
-
-These tests read the publication configuration and the model cards: they touch no network.
+The Hub is replaced by a recorder: these tests read what the script would upload, and touch no
+network.
 """
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
-import re
 import sys
 
 import pytest
@@ -36,85 +32,67 @@ def publication():
     return _publication_script()
 
 
-def _declared_base(card) -> str | None:
-    """Read ``base_model`` from the YAML header of a model card."""
-    found = re.search(r"^base_model:\s*(\S+)\s*$", card.read_text(encoding="utf-8"), re.MULTILINE)
-    return found.group(1) if found else None
+class RecordingHub:
+    """Stands for ``HfApi``: records every call instead of sending anything."""
+
+    def __init__(self):
+        self.calls = []
+
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: self.calls.append((name, args, kwargs))
 
 
-def test_every_published_model_has_its_card(publication):
-    missing = [
-        what
-        for what in publication.EVERYTHING
-        if what != "dataset" and not publication._model_card(what).exists()
-    ]
-    assert missing == []
+def _export(folder, weights=b"weights", tied=False):
+    folder.mkdir()
+    (folder / "config.json").write_text(json.dumps({"tie_word_embeddings": tied}), encoding="utf-8")
+    (folder / "model.safetensors").write_bytes(weights)
+    index = {"weight_map": {"lm_head.weight": "model.safetensors"}}
+    (folder / "model.safetensors.index.json").write_text(json.dumps(index), encoding="utf-8")
+    return folder
 
 
-def test_the_base_model_of_every_adapter_is_published(publication):
-    """Pins the rule that every adapter's declared base is itself published."""
-    published = {
-        publication._model_repository(what) for what in publication.EVERYTHING if what != "dataset"
-    }
-    published.add(MODEL.base_model)  # the base model comes from its own publisher
-
-    for what in publication.EVERYTHING:
-        if not what.endswith("-adapter"):
-            continue
-        base = _declared_base(publication._model_card(what))
-        assert base is not None, f"{what}: the card does not declare its base model"
-        assert base in published, f"{what}: its base model {base} is not published"
+def _evaluation(path, weights=b"weights"):
+    digests = {"model.safetensors": hashlib.sha256(weights).hexdigest()}
+    path.write_text(json.dumps({"evaluated_weights": digests}), encoding="utf-8")
+    return path
 
 
-def test_the_dpo_adapter_on_disk_designates_the_public_repository(publication):
-    """The local path written by the library would make the weights unloadable elsewhere."""
-    configuration = PATHS.dpo_adapter / "adapter_config.json"
-    if not configuration.exists():
-        pytest.skip("DPO adapter absent: run `python scripts/train_dpo.py` to produce it.")
-    content = json.loads(configuration.read_text(encoding="utf-8"))
-    assert content["base_model_name_or_path"] == MODEL.hub_sft_merged_model_id
+def test_the_weights_evaluated_are_publishable(publication, tmp_path):
+    publication.publishable_model(_export(tmp_path / "merged"), _evaluation(tmp_path / "e.json"))
 
 
-def test_the_repository_identifiers_are_all_distinct():
-    """Two artefacts sharing a repository would overwrite each other."""
-    identifiers = [
-        MODEL.hub_dataset_id,
-        MODEL.hub_sft_model_id,
-        MODEL.hub_sft_merged_model_id,
-        MODEL.hub_dpo_model_id,
-        MODEL.hub_merged_model_id,
-    ]
-    assert len(set(identifiers)) == len(identifiers)
+def test_weights_other_than_the_ones_evaluated_are_refused(publication, tmp_path):
+    """A later export, even a correct one, is not what the published figures describe."""
+    folder = _export(tmp_path / "merged", weights=b"retrained")
+    with pytest.raises(SystemExit, match="not the ones evaluated"):
+        publication.publishable_model(folder, _evaluation(tmp_path / "e.json"))
 
 
-def test_an_incomplete_dataset_does_not_go_to_the_hub(publication, tmp_path, monkeypatch):
-    """Pins the refusal: an incomplete set stops the publication instead of truncating it.
+def test_an_export_that_lost_its_output_head_is_refused(publication, tmp_path):
+    folder = _export(tmp_path / "merged", tied=True)
+    with pytest.raises(SystemExit, match="Export refused"):
+        publication.publishable_model(folder, _evaluation(tmp_path / "e.json"))
 
-    The refusal names what is missing, and names only that — a file already on disk must not
-    appear in the message, or the operator looks for a problem that is not there.
-    """
-    import dataclasses
 
+def test_an_evaluation_without_digests_says_which_step_to_run(publication, tmp_path):
+    results = tmp_path / "e.json"
+    results.write_text("{}", encoding="utf-8")
+    with pytest.raises(SystemExit, match="run_evaluation"):
+        publication.evaluated_weights(results)
+
+
+def test_an_incomplete_dataset_does_not_go_to_the_hub(publication, tmp_path):
+    """The refusal names what is missing, and only that."""
     (tmp_path / "clinical_eval.jsonl").write_text("{}", encoding="utf-8")
     (tmp_path / "metadata.json").write_text("{}", encoding="utf-8")
-    monkeypatch.setattr(
-        publication, "PATHS", dataclasses.replace(publication.PATHS, data_processed=tmp_path)
-    )
-
     with pytest.raises(SystemExit) as refusal:
-        publication.publish_dataset(api=None)
+        publication.complete_dataset(tmp_path)
     assert "sft_train.jsonl" in str(refusal.value)
     assert "clinical_eval.jsonl" not in str(refusal.value)
 
 
 def test_the_six_expected_files_are_the_ones_the_preparation_produces(publication):
-    """The list must not drift from what ``scripts/build_dataset.py`` actually writes.
-
-    It is written once, in ``dataset_io``, and both the preparation script and the publication
-    read it from there. The training set not being versioned — four files out of six — comparing
-    it with the contents of the disk would pass on the machine that just built the set and fail
-    everywhere else: the expected list is therefore written out here.
-    """
+    """Written out here: the four training files are not versioned, so the disk cannot say."""
     assert publication.DATASET_FILES is dataset_io.DATASET_FILES
     assert set(publication.DATASET_FILES) == {
         "sft_train.jsonl",
@@ -126,83 +104,71 @@ def test_the_six_expected_files_are_the_ones_the_preparation_produces(publicatio
     }
 
 
-def test_every_card_carries_the_marker_for_its_figures(publication):
-    """Pins the marker every card must carry, since the figures are substituted into it."""
-    for what in publication.MODELS:
-        card = publication._model_card(what)
-        assert "{{EVALUATION}}" in card.read_text(encoding="utf-8"), what
+def test_a_card_goes_up_byte_for_byte(publication, tmp_path):
+    card = tmp_path / "card.md"
+    card.write_bytes("---\nlicense: apache-2.0\n---\n\n# Titre accentué\n".encode())
+    hub = RecordingHub()
+    publication.publish_card(hub, card, "account/model", "model")
+    [(name, _, arguments)] = hub.calls
+    assert name == "upload_file"
+    assert arguments["path_or_fileobj"] == card.read_bytes()
+    assert arguments["path_in_repo"] == "README.md"
 
 
-def test_every_card_knows_which_evaluated_model_it_describes(publication):
-    assert set(publication.CARD_EVALUATION) == set(publication.MODELS)
+def test_a_tag_the_model_card_does_not_pin_is_refused(publication, tmp_path, monkeypatch):
+    """The tag would send readers to weights the card does not describe."""
+    card = tmp_path / "model-card.md"
+    card.write_text("vllm serve account/model --revision model-v2.0.0\n", encoding="utf-8")
+    monkeypatch.setattr(publication, "MODEL_CARD", card)
+    monkeypatch.setattr(sys, "argv", ["publish", "--what", "cards", "--tag", "model-v9.9.9"])
+    with pytest.raises(SystemExit, match="pins model-v2.0.0"):
+        publication.main()
 
 
-def test_a_card_without_an_evaluation_cannot_be_published(publication, tmp_path, monkeypatch):
-    import dataclasses
-
-    monkeypatch.setattr(
-        publication, "PATHS", dataclasses.replace(publication.PATHS, reports=tmp_path)
-    )
-    with pytest.raises(SystemExit, match="Evaluation not found"):
-        publication._evaluation_table("final-model")
-
-
-def test_the_card_table_carries_the_figures_of_the_model_it_describes(
+def test_the_cards_go_to_the_two_repositories_and_both_are_tagged(
     publication, tmp_path, monkeypatch
 ):
-    import dataclasses
-    import json as json_
-
-    (tmp_path / "evaluation_results.json").write_text(
-        json_.dumps(
-            {
-                "clinical_set": {
-                    "n": 60,
-                    "models": {
-                        "dpo-merged": {
-                            "accuracy": 0.917,
-                            "accuracy_ci95": [0.82, 0.96],
-                            "undertriage": 0.048,
-                            "overtriage": 0.117,
-                            "format_compliance": 1.0,
-                        }
-                    },
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    card = tmp_path / "model-card.md"
+    card.write_text("vllm serve account/model --revision model-v2.0.0\n", encoding="utf-8")
+    monkeypatch.setattr(publication, "MODEL_CARD", card)
+    monkeypatch.setattr(publication, "DATASET_CARD", card)
+    monkeypatch.setenv("HF_TOKEN", "hf_test")
+    hub = RecordingHub()
+    monkeypatch.setattr("huggingface_hub.HfApi", lambda token: hub)
     monkeypatch.setattr(
-        publication, "PATHS", dataclasses.replace(publication.PATHS, reports=tmp_path)
+        publication,
+        "place_tag",
+        lambda api, repo, kind, tag: hub.calls.append(("tag", (repo, kind, tag), {})),
     )
-    table = publication._evaluation_table("final-model")
-    assert "0.917 [0.82 - 0.96]" in table
-    assert "4.8%" in table
-    assert "100%" in table
-    assert "on 60 cases" in table
+    monkeypatch.setattr(sys, "argv", ["publish", "--what", "cards", "--tag", "model-v2.0.0"])
+
+    assert publication.main() == 0
+    uploads = {arguments["repo_id"] for name, _, arguments in hub.calls if name == "upload_file"}
+    tags = {args for name, args, _ in hub.calls if name == "tag"}
+    assert uploads == {MODEL.hub_model_id, MODEL.hub_dataset_id}
+    assert tags == {
+        (MODEL.hub_model_id, "model", "model-v2.0.0"),
+        (MODEL.hub_dataset_id, "dataset", "model-v2.0.0"),
+    }
 
 
-def test_no_card_freezes_a_revision_in_its_serving_command(publication):
-    """The serving command must pin the published version, not the first one.
-
-    Hard-coded, it went on designating ``model-v1.0.0`` after every new publication: the card
-    described one set of weights and had another served.
-    """
-    for what in publication.MODELS:
-        text = publication._model_card(what).read_text(encoding="utf-8")
-        assert "--revision model-v" not in text, what
-        if "--revision" in text:
-            assert "{{REVISION}}" in text, what
+def test_the_model_and_the_dataset_repositories_are_distinct():
+    """Two artefacts sharing a repository would overwrite each other."""
+    assert MODEL.hub_model_id != MODEL.hub_dataset_id
 
 
-def test_the_card_written_by_the_library_is_not_published(publication):
-    """It carries the local path of the base model, which the Hub rejects.
+def test_the_subsets_verified_are_the_ones_the_dataset_card_declares(publication):
+    """The verification loads what the card announces, not a list of its own."""
+    import re
 
-    Uploading the whole folder failed on it, before even starting.
-    """
-    assert "README.md" in publication.EXCLUSIONS
+    import yaml
 
-    folder = PATHS.dpo_adapter
-    card = folder / "README.md"
-    if card.exists():
-        assert "base_model: " in card.read_text(encoding="utf-8")
+    template = (PATHS.root / "infra" / "hub" / "dataset-card.in.md").read_text(encoding="utf-8")
+    header = yaml.safe_load(re.sub(r"\{\{[^}]+\}\}", "0", template.split("---\n")[1]))
+    declared = {
+        config["config_name"]: tuple(item["split"] for item in config["data_files"])
+        for config in header["configs"]
+    }
+    assert declared == publication.SUBSETS
+    files = {item["path"] for config in header["configs"] for item in config["data_files"]}
+    assert files == {name for name in publication.DATASET_FILES if name.endswith(".jsonl")}

@@ -184,7 +184,7 @@ takes a minute when the cache is warm, and a minute of silence in front of an au
    ```bash
    export HF_TOKEN="hf_..."      # a write token
    export HF_NAMESPACE="your-account"
-   uv run python scripts/publish_to_hub.py --what final-model
+   uv run python scripts/publish_to_hub.py --what model
    ```
 2. Create an inference endpoint at the host, choosing the model repository, an L4-class GPU or
    equivalent, and the vLLM container.
@@ -202,37 +202,33 @@ takes a minute when the cache is warm, and a minute of silence in front of an au
 
 ### Shipping a new model version
 
-The weights are uploaded from the training machine; they do not travel through continuous
-integration. The **version tag** is what ties the two together.
+The weights and the dataset are uploaded from the training machine; they do not travel through
+continuous integration. The **version tag** is what ties the two together.
 
 ```bash
-uv run python scripts/publish_to_hub.py --what all      # weights, dataset, cards
-git tag model-v1.0.0 && git push origin model-v1.0.0    # triggers the pipeline
+uv run python scripts/build_hub_cards.py                  # render both cards, then commit them
+uv run python scripts/publish_to_hub.py --what model      # refused unless these are the weights evaluated
+uv run python scripts/publish_to_hub.py --what dataset
+git tag model-v2.0.0 && git push origin model-v2.0.0
 ```
 
-The tag triggers the `model` job of `cd.yml`: the model cards are republished, then the
-`model-v1.0.0` tag is placed on the Hub repositories, the dataset included. The dataset files
-themselves are not republished from there — the pipeline did not rebuild them and holds only two
-of the six. They travel with the weights, from the training machine, through the command above.
-The deployment job then runs `modal deploy` with that revision, and the inference server restarts
-on those weights:
+A dispatch of `cd.yml` on that tag runs its `model` job: the release gate, then the two cards,
+byte for byte, and the `model-v2.0.0` tag on both Hub repositories. The deployment job then runs
+`modal deploy` with that revision, and the inference server restarts on those weights. What
+arrived is read back from the Hub, card by card, digest by digest and subset by subset:
 
 ```bash
-vllm serve <account>/qwen3-1.7b-clinical-triage --revision model-v1.0.0 \
-  --served-model-name qwen3-1.7b-clinical-triage --max-model-len 1024
+uv run python scripts/publish_to_hub.py --what verify --tag model-v2.0.0
 ```
 
 Pinning the revision instead of the default branch is what makes a deployment reproducible:
-`main` designates content that changes at every publication, `model-v1.0.0` always designates the
+`main` designates content that changes at every publication, `model-v2.0.0` always designates the
 same weights. Rolling back becomes trivial too: redeploy the previous tag.
 
-The four cards published beside the weights are versioned here, and the continuous-deployment job
-is what substitutes the evaluation figures and the served revision into them:
-[`model-cards/final-model.md`](model-cards/final-model.md) for the model the service serves,
-[`model-cards/sft-adapter.md`](model-cards/sft-adapter.md) and
-[`model-cards/dpo-adapter.md`](model-cards/dpo-adapter.md) for the two adapters, and
-[`model-cards/merged-sft-model.md`](model-cards/merged-sft-model.md) for the intermediate model
-the second adapter needs in order to load at all.
+The two cards, [`hub/model-card.md`](hub/model-card.md) and
+[`hub/dataset-card.md`](hub/dataset-card.md), are rendered by `scripts/build_hub_cards.py` from
+the templates beside them and the committed results; continuous integration fails when either
+falls behind those results.
 
 ### What the GitHub repository has to know
 

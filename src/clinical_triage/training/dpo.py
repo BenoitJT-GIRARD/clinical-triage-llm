@@ -23,7 +23,6 @@ Four method choices, all meant to stop the alignment from undoing the work of th
 
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,25 +34,6 @@ from clinical_triage.training.tracking import track
 from clinical_triage.utils import get_logger, path_for_log
 
 logger = get_logger("dpo")
-
-
-def _reference_the_public_base(output_dir: Path) -> None:
-    """Replace the local path of the reference model by its public identifier.
-
-    The adapter is trained above the merged SFT model, present on disk. The library therefore
-    writes the **absolute path** of that folder into the adapter configuration, which makes the
-    weights unloadable on any other machine — including after publication on the Hub. The
-    identifier of the corresponding public repository is substituted for it.
-    """
-    configuration = output_dir / "adapter_config.json"
-    if not configuration.exists():
-        return
-    content = json.loads(configuration.read_text(encoding="utf-8"))
-    content["base_model_name_or_path"] = MODEL.hub_sft_merged_model_id
-    configuration.write_text(
-        json.dumps(content, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
-    logger.info("Adapter reference model: %s", content["base_model_name_or_path"])
 
 
 @dataclass
@@ -196,7 +176,6 @@ def train_dpo(
         trainer.save_model(str(output_dir))
         tokenizer.save_pretrained(str(output_dir))
         trainer.save_state()
-        _reference_the_public_base(output_dir)
 
         history = trainer.state.log_history
         last_eval = next((e for e in reversed(history) if "eval_rewards/accuracies" in e), {})
