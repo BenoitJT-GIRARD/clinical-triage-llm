@@ -163,8 +163,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       # An image that does not start is not an image, and an authentication nobody tested is not
-      # one either. The vLLM engine is absent from a CI run: the probe must therefore answer
-      # "degraded" while staying reachable.
+      # one either. The vLLM engine is absent from a CI run: the gateway must say it lives, and
+      # its readiness probe must answer 503 to a key holder and 401 to anyone else.
       - name: Check that the service starts, answers, and refuses a call without a key
         run: |
           docker run -d --name triage-api -p 8080:8080 \
@@ -176,8 +176,13 @@ jobs:
             sleep 3
           done
           cat health.json
-          grep -q '"backend":"vllm"' health.json
-          grep -q '"status":"degraded"' health.json
+          grep -q '"status":"alive"' health.json
+
+          ready=$(curl -s -o ready.json -w '%{http_code}' http://localhost:8080/ready -H 'X-API-Key: ci-test-key')
+          cat ready.json
+          test "$ready" = "503"
+          grep -q '"status":"degraded"' ready.json
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/ready)" = "401"
 
           without_key=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8080/triage \
             -H 'Content-Type: application/json' -d '{"symptoms":"douleur thoracique"}')

@@ -38,11 +38,10 @@ ENV TRIAGE_BACKEND=vllm \
 
 EXPOSE 8080
 
-# The probe is green only when the inference engine answers: the gateway reports itself as
-# "degraded" for as long as vLLM is not serving, although it has started perfectly well.
-# The grace period covers exactly that — uvicorn starting, then the engine — without
-# counting a failure.
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s \
-    CMD python -c "import httpx,sys; sys.exit(0 if httpx.get('http://localhost:8080/health', timeout=4).json()['status']=='ok' else 1)"
+# The container's probe asks whether the gateway lives, which it can answer without a key and
+# without waking the engine. Whether the engine answers is `/ready`'s question, asked with the
+# key by whoever needs to know before sending traffic.
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=30s \
+    CMD python -c "import httpx,sys; sys.exit(0 if httpx.get('http://localhost:8080/health', timeout=4).json()['status']=='alive' else 1)"
 
 CMD ["uvicorn", "clinical_triage.serving.api:app", "--host", "0.0.0.0", "--port", "8080"]
