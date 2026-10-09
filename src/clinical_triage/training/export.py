@@ -7,10 +7,14 @@ trained output head, the one that learnt to stop, is gone.
 
 The merge script deletes an export that fails; the publication script refuses to send one. The
 same function decides both, so that what is published is what was checked.
+
+The evaluation records the digest of every weight file it read, and the publication refuses
+weights whose digests differ: what goes to the Hub is what was measured, not a later export.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -40,3 +44,19 @@ def export_problems(folder: Path) -> list[str]:
     if "lm_head.weight" not in keys:
         problems.append(f"{folder.name}: `lm_head.weight` absent from the exported weights")
     return problems
+
+
+def weight_digests(folder: Path) -> dict[str, str]:
+    """The SHA-256 of every weight file of a model folder, by file name.
+
+    The Hub reports the same digest for every file it stores in large-file storage: the two
+    compare without downloading anything.
+    """
+    digests = {}
+    for path in sorted(folder.glob("*.safetensors")):
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+        digests[path.name] = digest.hexdigest()
+    return digests

@@ -60,6 +60,7 @@ from clinical_triage.evaluation.runner import (
 )
 from clinical_triage.evaluation.task_preferences import task_preference_pairs
 from clinical_triage.inference import TriageAgent
+from clinical_triage.training.export import weight_digests
 from clinical_triage.utils import free_gpu_memory, get_logger, set_seed
 
 logger = get_logger("evaluation")
@@ -432,6 +433,10 @@ def main() -> None:
             logger.warning("Model %s not found (%s) — model skipped.", name, base)
             continue
         logger.info("=== Evaluating model: %s ===", name)
+        if adapter is None and base != MODEL.base_model:
+            # A merged model is what gets published and served: the publication compares what
+            # it uploads with the digests of the files measured here.
+            results["evaluated_weights"] = weight_digests(Path(base))
         free_gpu_memory()
         agent = TriageAgent(adapter_dir=adapter, base_model=base)
 
