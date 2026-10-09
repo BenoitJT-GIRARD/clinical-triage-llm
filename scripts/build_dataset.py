@@ -146,7 +146,7 @@ def _write_yield_into_the_card(corpus_yield: dict) -> None:
     )
     rows.append(closing)
 
-    card.write_text(text[:start] + "\n".join(rows) + text[end:], encoding="utf-8")
+    card.write_text(text[:start] + "\n".join(rows) + text[end:], encoding="utf-8", newline="\n")
     logger.info("Yield table updated → %s", card)
 
 

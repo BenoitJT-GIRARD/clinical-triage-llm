@@ -90,9 +90,13 @@ DATASET_FILES = (
 
 
 def write_jsonl(rows: list[dict], path: Path) -> None:
-    """Write a list of records as UTF-8 JSONL, one object per line."""
+    """Write a list of records as UTF-8 JSONL, one object per line.
+
+    Lines end in LF on every platform: the files go to the Hub as they are on disk, and a set
+    built on Windows would otherwise publish other bytes than the same set built on Linux.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
         for row in rows:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
     logger.info("Wrote %d lines → %s", len(rows), path_for_log(path))
@@ -253,9 +257,9 @@ def metadata_schema() -> dict:
 
 
 def write_metadata(meta: dict, path: Path) -> None:
-    """Write the dataset card as indented JSON."""
+    """Write the dataset card as indented JSON, with LF line endings like the data files."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
         json.dump(meta, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
     logger.info("Metadata written → %s", path_for_log(path))
