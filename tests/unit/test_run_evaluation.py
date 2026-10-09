@@ -200,3 +200,48 @@ def test_the_two_deliveries_are_compared_on_what_separates_them(evaluation):
 def test_deliveries_are_not_compared_when_only_one_was_evaluated(evaluation):
     results = {"clinical_set": {"models": {"dpo-merged": {}}}, "_predictions": {}}
     assert evaluation._compare_deliveries(results) == {}
+
+
+# --- The worse of the two opinions, pre-registered ------------------------------
+
+
+def test_the_worse_of_two_opinions_keeps_the_more_urgent(evaluation):
+    model = ["URGENCE_MODEREE", "URGENCE_VITALE", None, "CONSULTATION_DIFFEREE"]
+    rule = ["URGENCE_VITALE", "URGENCE_MODEREE", "URGENCE_MODEREE", "CONSULTATION_DIFFEREE"]
+    assert evaluation.worse_of_two(model, rule) == [
+        "URGENCE_VITALE",
+        "URGENCE_VITALE",
+        "URGENCE_MODEREE",  # the model gave nothing readable: the rule's opinion stands
+        "CONSULTATION_DIFFEREE",
+    ]
+
+
+def test_the_paired_analyses_compare_the_two_training_stages_on_the_same_cases(evaluation):
+    cases = [
+        {
+            "level": "URGENCE_VITALE",
+            "description": "arrêt cardiaque",
+            "lang": "fr",
+            "case_type": "",
+        },
+        {
+            "level": "URGENCE_MODEREE",
+            "description": "fracture du poignet",
+            "lang": "fr",
+            "case_type": "",
+        },
+    ]
+    results = {
+        "clinical_set": {
+            "baselines": {"linear_classifier": {"_predictions": ["URGENCE_VITALE"] * 2}}
+        },
+        "_predictions": {
+            "sft": ["URGENCE_MODEREE", "URGENCE_MODEREE"],
+            "dpo-merged": ["URGENCE_VITALE", "URGENCE_MODEREE"],
+        },
+    }
+    evaluation._paired_analyses(results, cases)
+    stages = results["aligned_versus_supervised"]
+    assert (stages["model"], stages["baseline"]) == ("dpo-merged", "sft")
+    assert stages["undertriage"]["model_only"] == 1
+    assert results["worse_of_two"]["model"] == "dpo-merged"

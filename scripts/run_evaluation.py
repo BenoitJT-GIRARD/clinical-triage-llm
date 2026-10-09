@@ -15,10 +15,19 @@ the explicit rule, and an ordinary classifier trained on the same pairs as the m
 two are the ones to beat, and the fourth is the most demanding: it says what fine-tuning adds
 over ordinary learning on the same data.
 
+Three analyses are fixed before any result exists, and published whatever they show: the
+supervised model against the aligned one, on the same cases; the **worse of the two opinions**,
+model or rule, against the model alone; and the cause of each urgent case the rule misses.
+
+``--seed`` evaluates another training seed of the same method, whose results go under
+``reports/seeds/``; ``--model-path`` evaluates one merged model given by its folder, on the
+clinical set alone — that is how the served system of an earlier version is measured.
+
 Usage::
 
     uv run python scripts/run_evaluation.py
-    uv run python scripts/run_evaluation.py --models sft dpo --internal 0
+    uv run python scripts/run_evaluation.py --seed 43 --models sft dpo dpo-merged --preferences 0
+    uv run python scripts/run_evaluation.py --model-path <folder> --label previous-release
 """
 
 from __future__ import annotations
@@ -32,7 +41,7 @@ import json
 import random
 from pathlib import Path
 
-from clinical_triage.config import MODEL, PATHS, SEED, TRIAGE
+from clinical_triage.config import MODEL, PATHS, SEED, TRIAGE, Paths
 from clinical_triage.data.corpus_sources import load_ultramedical_preferences
 from clinical_triage.data.dataset_io import read_jsonl
 from clinical_triage.evaluation import preference, robustness
@@ -43,11 +52,13 @@ from clinical_triage.evaluation.baselines import (
     majority_class,
 )
 from clinical_triage.evaluation.metrics import mcnemar_exact
+from clinical_triage.evaluation.rule_anatomy import rule_misses
 from clinical_triage.evaluation.runner import (
     error_table,
     evaluate_agent,
     evaluate_predictions,
 )
+from clinical_triage.evaluation.task_preferences import task_preference_pairs
 from clinical_triage.inference import TriageAgent
 from clinical_triage.utils import free_gpu_memory, get_logger, set_seed
 
@@ -60,7 +71,7 @@ logger = get_logger("evaluation")
 EVALUABLE_MODELS = ("base", "sft", "dpo", "dpo-merged")
 
 
-def _specification(name: str) -> tuple[str, str | None]:
+def _specification(name: str, paths: Paths = PATHS) -> tuple[str, str | None]:
     """Return (base model, adapter) for each model to evaluate.
 
     DPO having been trained above the merged SFT model, it must be evaluated with that model as
@@ -73,9 +84,9 @@ def _specification(name: str) -> tuple[str, str | None]:
     """
     return {
         "base": (MODEL.base_model, None),
-        "sft": (MODEL.base_model, str(PATHS.sft_adapter)),
-        "dpo": (str(PATHS.sft_merged), str(PATHS.dpo_adapter)),
-        "dpo-merged": (str(PATHS.dpo_merged), None),
+        "sft": (MODEL.base_model, str(paths.sft_adapter)),
+        "dpo": (str(paths.sft_merged), str(paths.dpo_adapter)),
+        "dpo-merged": (str(paths.dpo_merged), None),
     }[name]
 
 
@@ -88,7 +99,7 @@ def _weights_on_disk(path: Path) -> float:
     return round(size / 1024**2, 1)
 
 
-def _compare_deliveries(results: dict) -> dict:
+def _compare_deliveries(results: dict, paths: Paths = PATHS) -> dict:
     """Compare delivery by adapter with delivery as a merged model.
 
     Both carry the same weights, to the bf16 rounding. What separates them is operational: what
@@ -117,14 +128,14 @@ def _compare_deliveries(results: dict) -> dict:
             "accuracy": adapter["accuracy"],
             "accuracy_ci95": adapter["accuracy_ci95"],
             "median_latency_ms": adapter.get("latency", {}).get("p50_ms"),
-            "download_size_mb": _weights_on_disk(PATHS.dpo_adapter),
-            "base_model_required": str(PATHS.sft_merged.name),
+            "download_size_mb": _weights_on_disk(paths.dpo_adapter),
+            "base_model_required": str(paths.sft_merged.name),
         },
         "merged": {
             "accuracy": merged["accuracy"],
             "accuracy_ci95": merged["accuracy_ci95"],
             "median_latency_ms": merged.get("latency", {}).get("p50_ms"),
-            "download_size_mb": _weights_on_disk(PATHS.dpo_merged),
+            "download_size_mb": _weights_on_disk(paths.dpo_merged),
             "base_model_required": None,
         },
     }
@@ -272,6 +283,65 @@ def _compare_undertriage(
     }
 
 
+def worse_of_two(model: list[str | None], rule: list[str]) -> list[str]:
+    """For each case, the more urgent of the two opinions; the rule's alone when the model gave none.
+
+    Pre-registered on 2026-10-09: an earlier version imagined this combination after seeing its
+    errors, which makes a result unreadable. It is now computed on every run, before anyone looks.
+    """
+    combined = []
+    for predicted, ruled in zip(model, rule, strict=True):
+        if predicted is None or TRIAGE.severity[ruled] > TRIAGE.severity[predicted]:
+            combined.append(ruled)
+        else:
+            combined.append(predicted)
+    return combined
+
+
+def _shipped(predictions: dict) -> str | None:
+    return next((n for n in ("dpo-merged", "dpo", "sft", "base") if n in predictions), None)
+
+
+def _paired_analyses(results: dict, cases: list[dict]) -> None:
+    """The comparisons fixed before the results: against the baselines, between the two training
+    stages, and the worse of the two opinions."""
+    predictions = results["_predictions"]
+    shipped = _shipped(predictions)
+    if shipped is None:
+        return
+    rule = explicit_rule([c["description"] for c in cases])
+    results["model_versus_rule"] = _compare_to_baseline(
+        cases, predictions[shipped], shipped, rule, "explicit_rule"
+    )
+    # Both sets of predictions were just computed on these same cases: the classifier's is read
+    # back rather than the classifier retrained.
+    classical = results["clinical_set"]["baselines"]["linear_classifier"]["_predictions"]
+    results["model_versus_classifier"] = _compare_to_baseline(
+        cases, predictions[shipped], shipped, classical, "linear_classifier"
+    )
+    aligned = next((n for n in ("dpo-merged", "dpo") if n in predictions), None)
+    if "sft" in predictions and aligned:
+        results["aligned_versus_supervised"] = _compare_to_baseline(
+            cases, predictions[aligned], aligned, predictions["sft"], "sft"
+        )
+    combined = worse_of_two(predictions[shipped], rule)
+    results["worse_of_two"] = {
+        "model": shipped,
+        **evaluate_predictions(cases, combined),
+        "versus_model_alone": _compare_to_baseline(
+            cases, combined, "worse_of_two", predictions[shipped], shipped
+        ),
+    }
+
+
+def _default_output(seed: int, label: str | None) -> Path:
+    if label:
+        return PATHS.reports / f"evaluation_{label}.json"
+    if seed == SEED:
+        return PATHS.reports / "evaluation_results.json"
+    return PATHS.reports / "seeds" / f"seed-{seed}.json"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -281,6 +351,9 @@ def main() -> None:
         default=list(EVALUABLE_MODELS),
         help="models to evaluate, in this order",
     )
+    parser.add_argument("--seed", type=int, default=SEED, help="training seed whose models to read")
+    parser.add_argument("--model-path", type=Path, help="one merged model to evaluate instead")
+    parser.add_argument("--label", help="the name of the model given by --model-path")
     parser.add_argument("--internal", type=int, default=120, help="cases of the internal split")
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument(
@@ -289,10 +362,21 @@ def main() -> None:
         default=777,
         help="pairs of the external preference set, 777 in all (0 to skip)",
     )
+    parser.add_argument("--task-preferences", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--robustness", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if bool(args.model_path) != bool(args.label):
+        parser.error("--model-path and --label go together")
 
     set_seed(SEED)
+    paths = PATHS.for_seed(args.seed)
     clinical_cases = read_jsonl(PATHS.data_processed / "clinical_eval.jsonl")
+    if args.model_path:
+        # A model given by its folder is measured where published numbers are read: the clinical
+        # set, against the same baselines, and nothing else.
+        args.models, args.internal, args.preferences = [args.label], 0, 0
+        args.task_preferences = args.robustness = False
     internal_cases = _internal_cases(args.internal) if args.internal else []
     # The classical baseline learns from the same pairs as the model: the training split to
     # learn, the validation split to choose its setting. It never sees the cases it is judged on.
@@ -302,15 +386,19 @@ def main() -> None:
     external_pairs = (
         load_ultramedical_preferences(limit=args.preferences) if args.preferences else []
     )
+    task_pairs = task_preference_pairs() if args.task_preferences else []
     logger.info(
-        "Independent clinical set: %d cases. Internal test split: %d cases. "
-        "External preferences: %d pairs.",
+        "Seed %d. Clinical set: %d cases. Internal split: %d cases. External preferences: %d "
+        "pairs. Task-format preferences: %d pairs.",
+        args.seed,
         len(clinical_cases),
         len(internal_cases),
         len(external_pairs),
+        len(task_pairs),
     )
 
     results: dict = {
+        "seed": args.seed,
         "clinical_set": {
             "n": len(clinical_cases),
             "baselines": _baselines(clinical_cases, training_levels, training, validation),
@@ -319,9 +407,10 @@ def main() -> None:
         "internal_set": {"n": len(internal_cases), "baselines": {}, "models": {}},
         "robustness": {},
         "external_preferences": {},
+        "task_preferences": {},
         "errors": {},
-        # Kept for the duration of the delivery comparison, then removed: raw predictions have
-        # no place in the results file.
+        # Kept for the duration of the paired comparisons, then removed: raw predictions have no
+        # place in the results file.
         "_predictions": {},
     }
     if internal_cases:
@@ -330,15 +419,16 @@ def main() -> None:
         )
 
     for name in args.models:
-        base, adapter = _specification(name)
+        if args.model_path:
+            base, adapter = str(args.model_path), None
+        else:
+            base, adapter = _specification(name, paths)
         if adapter is not None and not Path(adapter).exists():
             logger.warning("Adapter %s not found (%s) — model skipped.", name, adapter)
             continue
         # `base` is either the identifier of the base model on the Hub — which cannot be looked
-        # for on disk — or one of the two folders produced by the merge, which is missing if that
-        # step was not run.
-        local_bases = {str(PATHS.sft_merged), str(PATHS.dpo_merged)}
-        if base in local_bases and not Path(base).exists():
+        # for on disk — or a folder, which is missing if the step that writes it was not run.
+        if base != MODEL.base_model and not Path(base).exists():
             logger.warning("Model %s not found (%s) — model skipped.", name, base)
             continue
         logger.info("=== Evaluating model: %s ===", name)
@@ -364,105 +454,76 @@ def main() -> None:
                 "safety": internal.safety,
             }
 
-        # Degraded inputs: a three-letter entry, a two-page paste, an off-domain question, a
-        # hijacked prompt. No level is correct for any of them; what is measured is whether
-        # keeps its output contract.
-        checks = robustness.run(agent)
-        results["robustness"][name] = robustness.summarize(checks)
+        if args.robustness:
+            results["robustness"][name] = robustness.summarize(robustness.run(agent))
 
-        # What the alignment changed, on an external preference set kept out of training. It is
-        # measured on the model that carries the DPO adapter alone: each answer is read with and
-        # without it, that is after and before the alignment.
-        if external_pairs and name == "dpo":
-            effects = preference.measure_alignment(
-                agent.model, agent.tokenizer, external_pairs, agent.device
-            )
-            results["external_preferences"] = {
-                **preference.summarize(effects),
-                "clipped_answers": preference.clipped_answers(agent.tokenizer, external_pairs),
-                "preferred_is_longer_outside_length_group": preference.preferred_longer_share(
-                    external_pairs
-                ),
-            }
+        # What the alignment changed is read on the model that carries the DPO adapter alone:
+        # each answer is read with and without it, that is after and before the alignment.
+        if name == "dpo":
+            if external_pairs:
+                effects = preference.measure_alignment(
+                    agent.model, agent.tokenizer, external_pairs, agent.device
+                )
+                results["external_preferences"] = {
+                    **preference.summarize(effects),
+                    "clipped_answers": preference.clipped_answers(agent.tokenizer, external_pairs),
+                    "preferred_is_longer_outside_length_group": (
+                        preference.preferred_longer_share(external_pairs)
+                    ),
+                }
+            if task_pairs:
+                effects = preference.measure_alignment(
+                    agent.model, agent.tokenizer, task_pairs, agent.device, separator=""
+                )
+                results["task_preferences"] = preference.summarize(effects)
 
         del agent
         free_gpu_memory()
 
-    shipped = next(
-        (n for n in ("dpo-merged", "dpo", "sft", "base") if n in results["_predictions"]), None
-    )
-    if shipped:
-        shipped_predictions = results["_predictions"][shipped]
-        results["model_versus_rule"] = _compare_to_baseline(
-            clinical_cases,
-            shipped_predictions,
-            shipped,
-            explicit_rule([c["description"] for c in clinical_cases]),
-            "explicit_rule",
-        )
-        # The same paired comparison against the classical classifier. Both sets of predictions
-        # have just been computed on these same cases: the baseline's is read back rather than
-        # the classifier retrained.
-        classical_predictions = results["clinical_set"]["baselines"]["linear_classifier"][
-            "_predictions"
-        ]
-        results["model_versus_classifier"] = _compare_to_baseline(
-            clinical_cases,
-            shipped_predictions,
-            shipped,
-            classical_predictions,
-            "linear_classifier",
-        )
-    results["adapter_versus_merged"] = _compare_deliveries(results)
+    _paired_analyses(results, clinical_cases)
+    results["rule_anatomy"] = rule_misses(clinical_cases)
+    if not args.model_path:
+        results["adapter_versus_merged"] = _compare_deliveries(results, paths)
     del results["_predictions"]
     for block in ("clinical_set", "internal_set"):
         classical = results[block]["baselines"].get("linear_classifier")
         if classical:
             classical.pop("_predictions", None)
 
-    PATHS.reports.mkdir(parents=True, exist_ok=True)
-    destination = PATHS.reports / "evaluation_results.json"
+    destination = args.output or _default_output(args.seed, args.label)
+    destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
         json.dumps(results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
     logger.info("Results written → %s", destination)
+    _print_summary(results)
 
+
+def _print_summary(results: dict) -> None:
     print("\n=== Independent clinical set ===")
-    header = (
-        f"{'system':24s} | {'accuracy':>18s} | {'undertriage':>11s} | "
-        f"{'format':>6s} | {'overtriage':>10s}"
-    )
+    header = f"{'system':24s} | {'accuracy':>8s} | {'undertriage':>11s} | {'format':>6s}"
     print(header)
     print("-" * len(header))
-    rows = [
-        *results["clinical_set"]["baselines"].items(),
-        *results["clinical_set"]["models"].items(),
-    ]
-    for name, measures in rows:
-        low, high = measures["accuracy_ci95"]
+    rows = {**results["clinical_set"]["baselines"], **results["clinical_set"]["models"]}
+    if "worse_of_two" in results:
+        rows["worse of the two opinions"] = results["worse_of_two"]
+    for name, measures in rows.items():
         print(
-            f"{name:24s} | {measures['accuracy']:.3f} [{low:.2f}-{high:.2f}] | "
-            f"{measures['undertriage']:>11.3f} | {measures['format_compliance']:>6.3f} | "
-            f"{measures['overtriage']:>10.3f}"
+            f"{name:24s} | {measures['accuracy']:8.3f} | {measures['undertriage']:11.3f} | "
+            f"{measures['format_compliance']:6.3f}"
         )
-
-    if results["robustness"]:
-        print("\n=== Robustness on degraded inputs ===")
-        for name, measures in results["robustness"].items():
-            failures = ", ".join(measures["non_compliant_cases"]) or "none"
-            print(f"{name:24s} | compliant {measures['compliant_share']:.3f} | failing: {failures}")
-
-    preferences = results["external_preferences"]
-    if preferences:
-        print("\n=== External preferences (UltraMedical test split, outside training) ===")
-        print(
-            f"{'all':24s} | preferred raised more {preferences['correctly_ordered_share']:.3f} "
-            f"on {preferences['n']} pairs"
-        )
-        for group, measures in preferences["per_group"].items():
+    for key in ("model_versus_rule", "model_versus_classifier", "aligned_versus_supervised"):
+        comparison = results.get(key)
+        if comparison:
             print(
-                f"{group:24s} | preferred raised more {measures['correctly_ordered_share']:.3f} "
-                f"on {measures['n']} pairs"
+                f"{key:24s} | undertriage p = {comparison['undertriage']['p_mcnemar']:.4f} "
+                f"(McNemar, n = {comparison['undertriage']['urgent_cases']} urgent cases)"
+            )
+    for key in ("external_preferences", "task_preferences"):
+        block = results.get(key)
+        if block:
+            print(
+                f"{key:24s} | preferred raised more {block['correctly_ordered_share']:.3f} on {block['n']} pairs"
             )
 
 
