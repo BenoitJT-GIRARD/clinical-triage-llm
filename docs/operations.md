@@ -139,6 +139,7 @@ same.
 | 401 on every call | the key presented does not match | the contract page names the header; the service compares in constant time |
 | 429 under a bench | the quota, working | raise `TRIAGE_RATE_LIMIT` for the measurement, not for the service |
 | `verify_audit_log.py` names a line | the log was edited, or a line went missing, from there on | keep the copy as it is; the chain says where, not who |
+| accents garbled in Windows PowerShell 5.1 | `Invoke-RestMethod` decodes a JSON reply that declares no charset as Latin-1; the service sends UTF-8, as JSON requires | call it from PowerShell 7, or decode the raw bytes of `Invoke-WebRequest` as UTF-8 |
 
 <!-- source: data/processed/metadata.json -->
 The two 422 deserve their sentence. Cutting a patient's story without saying so is the one thing a
