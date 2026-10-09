@@ -17,10 +17,10 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Pinned dependencies, installed before the code: the layer is reused as long as the file does
-# not change. That file is generated from `requirements-api.in`, which carries the constraints
-# and the procedure.
+# not change. That file is generated from `requirements-api.in` with every package's digests,
+# and pip refuses a package whose digest differs.
 COPY infra/requirements-api.txt /app/infra/requirements-api.txt
-RUN pip install --no-cache-dir -r /app/infra/requirements-api.txt
+RUN pip install --no-cache-dir --require-hashes -r /app/infra/requirements-api.txt
 
 # The package code.
 COPY src/clinical_triage /app/src/clinical_triage

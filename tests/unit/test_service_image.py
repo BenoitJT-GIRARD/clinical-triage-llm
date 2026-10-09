@@ -73,3 +73,16 @@ def test_the_image_carries_neither_torch_nor_transformers(closure):
 def test_the_generated_file_declares_itself_as_such():
     """Without that warning, the next fix would be made in the wrong file."""
     assert "GENERATED FILE" in CLOSURE.read_text(encoding="utf-8")
+
+
+def test_every_package_of_the_image_carries_its_digest():
+    """The Dockerfile installs with `--require-hashes`: one package without a digest stops it."""
+    text = CLOSURE.read_text(encoding="utf-8")
+    requirements = re.split(r"\n(?=[a-zA-Z])", text.split("\n\n", 1)[1])
+    undigested = [r.split()[0] for r in requirements if r.strip() and "--hash=sha256:" not in r]
+    assert undigested == []
+
+
+def test_the_image_installs_nothing_whose_digest_differs():
+    dockerfile = (PATHS.root / "infra" / "api.Dockerfile").read_text(encoding="utf-8")
+    assert "--require-hashes -r /app/infra/requirements-api.txt" in dockerfile

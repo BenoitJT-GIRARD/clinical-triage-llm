@@ -108,10 +108,18 @@ jobs:
 
       # The deployed image does not install the lock file but its own pinned list: without this
       # second audit, what actually runs in production would be the one thing left unchecked.
+      # Every entry there spans several lines, its digests included: the two spaCy models are
+      # dropped as whole entries, for the reason given above. The list pins every package, so
+      # it is audited as it stands, without being installed.
       - name: Known vulnerabilities in the image dependencies
         run: |
-          grep -v 'spacy-models/releases' infra/requirements-api.txt > audited-image.txt
-          uv run --no-sync pip-audit --strict -r audited-image.txt
+          uv run --no-sync python -c "
+          import pathlib, re
+          entries = re.split(r'\n(?=[a-zA-Z])', pathlib.Path('infra/requirements-api.txt').read_text())
+          kept = [entry for entry in entries if 'spacy-models/releases' not in entry]
+          pathlib.Path('audited-image.txt').write_text('\n'.join(kept))
+          "
+          uv run --no-sync pip-audit --strict --disable-pip -r audited-image.txt
 
   tests:
     name: Tests

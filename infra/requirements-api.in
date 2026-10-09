@@ -9,10 +9,10 @@
 # durably. That choice costs about 400 MB of image; the alternative, a degraded anonymisation in
 # the container and a complete one elsewhere, would make production and development diverge.
 #
-# Regenerate after every `uv lock`:
+# Regenerate after every `uv lock`, with one command that constrains the resolution by the lock
+# and writes every package's digests:
 #
-#   uv export --frozen --no-emit-project --all-groups --no-hashes #     --format requirements-txt | grep -E '^[a-zA-Z]' | sed -E 's/\+cu[0-9]+$//' #     > /tmp/constraints.txt
-#   uv pip compile infra/requirements-api.in --python-version 3.12 #     --python-platform x86_64-unknown-linux-gnu --constraint /tmp/constraints.txt #     --no-header -o infra/requirements-api.txt
+#   uv run python scripts/compile_image_requirements.py
 #
 # Constraining by the project lock file is not a detail: without it, the image resolution drifts
 # from the repository's, and the deployed image no longer holds the versions continuous
@@ -30,6 +30,6 @@ presidio-anonymizer==2.2.362
 cryptography==50.0.1
 spacy==3.8.13
 
-# Modeles linguistiques utilises par Presidio (francais et anglais).
+# The language models Presidio uses, French and English.
 https://github.com/explosion/spacy-models/releases/download/fr_core_news_md-3.8.0/fr_core_news_md-3.8.0-py3-none-any.whl
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
