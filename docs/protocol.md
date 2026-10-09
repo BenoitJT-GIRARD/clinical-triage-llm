@@ -123,6 +123,26 @@ The same test, restricted to the urgent cases and to undertriage alone, is what 
 model from the rule. Accuracy dilutes: a system can be wrong often without danger and rarely with
 danger, and a triage tool is judged on the second.
 
+## What was fixed before the results
+
+These choices were written down and committed before any model of this version was evaluated,
+and the results are published whatever they show.
+
+- **The shipped model is the one trained on seed 42**, whatever its score. Seeds 43 and 44
+  measure the spread of the method and nothing else: keeping the best of three on the clinical
+  set would turn that set into a selection set.
+- **The primary analysis** is undertriage on the forty urgent cases, the shipped model against
+  the explicit rule, by an exact McNemar test.
+- **The secondary analyses**: the shipped model against the linear classifier; the supervised
+  model against the aligned one, for each seed; the *worse of the two opinions* — for each case,
+  the more urgent of the model's level and the rule's — against the model alone, on undertriage
+  and on overtriage; the model of version 1.0.0, as this repository served it, against this
+  version's, on the same cases; and the spread of the three seeds, as the range and the standard
+  deviation of accuracy and of undertriage.
+- **The release gate**: every answer of the clinical set in the expected format, and no more
+  urgent cases missed than the explicit rule. A version that fails it is neither published nor
+  served. `scripts/check_release.py` decides, and the deployment workflow runs it.
+
 ## Which intervals, and why
 
 | quantity | estimator | why this one |
