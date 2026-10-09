@@ -111,7 +111,10 @@ OPEN_STEM = re.compile(
     r"(?:\b(?:is|are|was|were|be|includes?|shows?|reveals?|suggests?|due to|caused by"
     r"|associated with|the following|with|by|to|of)"
     r"|\b(?:appropriate|best|preferred|initial|definitive|next) (?:treatment|management|drug"
-    r"|diagnosis|investigation|step))\s*[-–:]?\s*[.!]?\s*$",
+    r"|diagnosis|investigation|step)"
+    # A sentence that ends on "the following deformity", "the above ECG": it points at an
+    # image the statement showed, and the reader of a description will never see it.
+    r"|\bthe (?:following|above|below)(?:\s+\w+){1,2})\s*[-–:]?\s*[.!]?\s*$",
     re.IGNORECASE,
 )
 

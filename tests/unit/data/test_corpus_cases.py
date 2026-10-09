@@ -193,6 +193,8 @@ def test_each_loss_is_charged_to_the_right_column():
         "A 40 year old presenting with dizziness on standing; appropriate treatment.",
         "The stool microscopy reveals the following.",
         "Poisoning is due to.",
+        "The below ECG suggest the following diagnosis.",
+        "A 9-year-old child presents to your clinic with the following deformity.",
     ],
 )
 def test_an_exam_statement_is_recognised(statement: str):
@@ -210,6 +212,8 @@ def test_an_exam_statement_is_recognised(statement: str):
         "His blood pressure is 90/60 mmHg and his pulse is 120.",
         "She was treated with amoxicillin.",
         "The pain is associated with nausea.",
+        "Physical examination is normal except for wheezing on expiration.",
+        "After 48 hours he has the following findings: SpO2 60 %, pO2 60 mmHg.",
     ],
 )
 def test_a_narrative_sentence_is_not_taken_for_a_question(narrative: str):
@@ -242,5 +246,6 @@ def test_the_residue_detector_counts_the_descriptions_that_still_read_as_an_exam
         "A 30 year old woman with fever. Most probable diagnosis would be",
         "A 25-year-old with burns over the trunk. Which fluid?",
         "Homme de 58 ans, douleur thoracique depuis une heure.",
+        "A 40 year old with wheeze. Examination is normal except for wheezing on expiration.",
     ]
-    assert exam_residue(descriptions) == {"n": 4, "with_residue": 2, "share": 0.5}
+    assert exam_residue(descriptions) == {"n": 5, "with_residue": 2, "share": 0.4}

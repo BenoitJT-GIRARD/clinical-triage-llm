@@ -151,26 +151,36 @@ def metadata_leakage(examples: list, presentations) -> dict:
 # --- What the cleaning of exam statements leaves behind ---
 
 #: The detector is deliberately not the cleaner of `corpus_cases`: measuring the residue with the
-#: rules that removed it would find zero by construction. It is broader, and it reads the whole
-#: description rather than its sentences one by one.
+#: rules that removed it would find zero by construction. It reads each sentence for what an
+#: answer sheet leaves behind: a question mark, a blank, a stem waiting for its option, or a
+#: reference to an image the reader does not have. "Normal except for a rash" and "with the
+#: following findings: SpO2 60 %" are narrative, and are not counted.
 EXAM_RESIDUE = re.compile(
-    r"\?\s*$|\?\s+\S|_{2,}"
-    r"|\b(?:which of|the following|most (?:likely|probable|common|appropriate)"
-    r"|best (?:treatment|next|initial|option)|(?:probable |likely )?diagnosis (?:is|would be)"
-    r"|next step|(?:drug|investigation|treatment) of choice|true about|except\b)"
+    r"\?\s*$|_{2,}"
+    r"|\b(?:which of|most (?:likely|probable|appropriate)|best (?:treatment|next|initial|option)"
+    r"|(?:probable |likely )?diagnosis (?:is|would be)|next step"
+    r"|(?:drug|investigation|treatment) of choice|true about)\b"
+    r"|\bexcept\s*[-:.]?\s*$"
+    r"|\bthe (?:following|above|below)(?:\s+\w+){0,2}\s*[.]?\s*$"
     r"|\b(?:is|are|due to|associated with|with|by|of)\s*[.:]?\s*$",
     re.IGNORECASE,
 )
 
 
+def _sentences(text: str) -> list[str]:
+    return [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+
+
 def exam_residue(descriptions: list[str]) -> dict:
-    """How many delivered descriptions still read as an exam statement.
+    """How many delivered descriptions still read as an exam statement, in one sentence at least.
 
     The 1.0.0 change log announced half a percent; read by hand before the 2.0.0 build, the
     MedMCQA cases carried several times that. The share is now measured at every build, on the
     descriptions actually delivered, and published with its definition.
     """
-    flagged = sum(bool(EXAM_RESIDUE.search(text.strip())) for text in descriptions)
+    flagged = sum(
+        any(EXAM_RESIDUE.search(sentence) for sentence in _sentences(text)) for text in descriptions
+    )
     total = len(descriptions)
     return {
         "n": total,
