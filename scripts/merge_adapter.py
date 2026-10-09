@@ -19,6 +19,7 @@ Usage::
 
     uv run python scripts/merge_adapter.py --adapter sft
     uv run python scripts/merge_adapter.py --adapter dpo --seed 43
+    uv run python scripts/merge_adapter.py --adapter sft --capped   # after a chain check
 """
 
 from __future__ import annotations
@@ -52,8 +53,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--adapter", choices=["sft", "dpo"], required=True)
     parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument(
+        "--capped", action="store_true", help="merge the adapters of a run capped to a few steps"
+    )
     args = parser.parse_args()
-    paths = PATHS.for_seed(args.seed)
+    paths = PATHS.capped() if args.capped else PATHS.for_seed(args.seed)
 
     import torch
     from peft import PeftModel
