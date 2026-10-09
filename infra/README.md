@@ -128,77 +128,91 @@ uv run uvicorn clinical_triage.serving.api:app --port 8080
 The latencies of this mode are not comparable with the vLLM endpoint's, and must not be reported
 as if they were.
 
-## 4. Cloud deployment
+## 4. Cloud deployment, on Modal
 
-### The option taken — Modal
+### Stopped by default, woken by its owner alone
 
-[Modal](https://modal.com) allocates a GPU on demand, bills by the second and shuts the container
-down when nothing asks for it. The free account receives 30 $ of credit renewed every month,
-without a card; a demonstration consumes less than an hour of L4, about 0.80 $.
+[Modal](https://modal.com) allocates a GPU on demand, bills by the second and shuts a container
+down when nothing asks for it. `modal_app.py` raises the same two pieces as the Docker stack of
+this folder: a GPU container serving the merged model under vLLM, and the project's FastAPI
+gateway, exposed as is. That is the project's own split, not an adaptation to the host, and not a
+line of the service code changes.
 
-`modal_app.py` raises the same two pieces as the Docker stack of this folder: a GPU container
-serving the merged model under vLLM, and the project's FastAPI gateway exposed as is. That is the
-project's own split, not an adaptation to the host, and not a line of the service code changes.
+The application's normal state is **stopped**. It is deployed and verified, then stopped: stopped,
+it costs nothing and answers nothing. A demonstration starts it, and stops it afterwards. Three
+actions exist, all through the `CD` workflow, dispatched by hand on a `model-v*` tag:
+
+| Action | What it does |
+|---|---|
+| `verify` | deploys, waits for `/ready`, sends three fixed cases and requires the level the evaluation recorded for each, then stops |
+| `start` | the same, then leaves the service up for a demonstration |
+| `stop` | `modal app stop clinical-triage`, the only command that stops everything |
+
+**Only the owner of the repository can run them**, on two paths:
+
+1. **from GitHub.** Any account with write access can dispatch a workflow; none can deploy. The
+   jobs that touch the Hub or Modal declare the `production` environment, which waits for the
+   owner's approval and accepts `model-v*` tags only. The Modal and Hub tokens live in that
+   environment, not in the repository: a job that was not approved cannot read them. A guard on
+   `github.actor == github.repository_owner` doubles the whole;
+2. **from the owner's workstation**, with their own Modal token, by the commands below.
+
+While it runs, two doors stay shut:
+
+- the **engine** sits behind Modal's proxy authentication. A request that does not carry the
+  workspace's proxy token is refused before any container starts: the engine's address alone
+  buys nothing. The gateway presents that token, and the vLLM key stays as a second line;
+- the gateway's public probe, `/health`, answers whether the gateway is alive and touches
+  nothing else. `/ready`, which questions the engine, asks for the service key.
+
+One L4 GPU serves, and the engine shuts down after fifteen minutes without a request. Its image
+is a CUDA development image, heavier than a runtime one, because FlashInfer compiles its kernels
+at the first start and needs `nvcc` to do it; the compiled kernels, like the Hugging Face cache,
+are kept on volumes, so that a cold start neither recompiles nor re-downloads.
+
+### Deploying from the workstation
 
 ```bash
-uv run modal setup                      # authentication, opens the browser
+uv run modal setup                                  # authentication, opens the browser
+uv run modal workspace proxy-tokens create          # once: the gateway's pass to the engine
 uv run modal secret create clinical-triage \
     TRIAGE_API_KEY="a-key-of-your-choosing" \
-    HF_TOKEN="hf_..."
+    HF_TOKEN="hf_..." \
+    TRIAGE_ENGINE_PROXY_KEY="wk-..." TRIAGE_ENGINE_PROXY_SECRET="ws-..."
 uv run modal deploy infra/modal_app.py
 ```
 
-Two addresses are printed. The engine's belongs in the secret; redeploying afterwards is what
-tells the gateway where to send its requests:
+Two addresses are printed. The engine's belongs in the secret; deploying again is what tells the
+gateway where to send its requests:
 
 ```bash
-uv run modal secret create clinical-triage --force \
-    TRIAGE_API_KEY="a-key-of-your-choosing" \
-    HF_TOKEN="hf_..." \
+uv run modal secret create clinical-triage --force ... \
     TRIAGE_VLLM_URL="https://<account>--clinical-triage-engine.modal.run"
 uv run modal deploy infra/modal_app.py
+uv run modal app stop clinical-triage --yes         # once the check is done
 ```
+
+The engine loads the weights **from the Hub, at a tagged revision**: the deployment stays
+replayable identically even if the default branch moves afterwards. The repository and the
+revision are chosen through `HF_NAMESPACE`, `TRIAGE_MODEL_ID` and `TRIAGE_MODEL_REVISION`, set in
+the shell at `modal deploy` time: `infra/modal_app.py` runs on the workstation and reads its
+environment at import, before the project's package, and therefore `.env`, is loaded. Without
+them, the deployment serves the model and the revision pinned in the file.
 
 `modal setup` writes the account tokens into `~/.modal.toml`. In continuous integration, where
 there is neither a browser nor a configuration file, `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET`
-replace them in the job's environment.
+replace them, from the `production` environment.
 
-The engine loads the weights **from the Hub, at the revision tagged** by the deployment pipeline:
-the demonstration stays replayable identically even if the default branch moves afterwards. The
-Hugging Face cache is mounted on a persistent volume, without which every cold start would
-re-download three gigabytes.
+### Other hosts
 
-The repository and the revision are chosen through `HF_NAMESPACE`, `TRIAGE_MODEL_ID` and
-`TRIAGE_MODEL_REVISION`, set in the shell at `modal deploy` time: `infra/modal_app.py` runs on the
-workstation and reads its environment at import, before the project's package, and therefore
-`.env`, is loaded. Without them, the deployment serves the model and the revision pinned in the
-file.
+**A managed vLLM container.** Publish the merged model on the Hub, create an inference endpoint at
+the host on the model repository with an L4-class GPU and the vLLM container, then deploy the
+gateway — the image the pipeline publishes to GHCR — on a container service without a GPU, with
+`TRIAGE_VLLM_URL` pointing at the endpoint and `TRIAGE_API_KEY` as a secret.
 
-**On the day of a demonstration**, wake the endpoint five minutes before going on: a cold start
-takes a minute when the cache is warm, and a minute of silence in front of an audience is long.
-`GET /health` really questions the engine, and exists for exactly that.
-
-### Option A — a managed vLLM container
-
-1. Publish the merged model on the Hub:
-   ```bash
-   export HF_TOKEN="hf_..."      # a write token
-   export HF_NAMESPACE="your-account"
-   uv run python scripts/publish_to_hub.py --what model
-   ```
-2. Create an inference endpoint at the host, choosing the model repository, an L4-class GPU or
-   equivalent, and the vLLM container.
-3. Deploy the gateway, which is the image the pipeline publishes to GHCR, on a container service
-   without a GPU, with `TRIAGE_VLLM_URL` pointing at the inference endpoint and `TRIAGE_API_KEY`
-   as a secret.
-
-### Option B — a virtual machine with a GPU
-
-1. Provision a machine with a GPU, Docker and `nvidia-container-toolkit`.
-2. Copy `var/models/qwen3-1.7b-triage-dpo-merged` onto the machine, or let vLLM download it from
-   the Hub.
-3. `docker compose -f infra/docker-compose.yml up -d`
-4. Expose port 8080 behind a reverse proxy with a TLS certificate.
+**A virtual machine with a GPU.** Docker and `nvidia-container-toolkit`, the merged model copied
+from `var/models/` or downloaded by vLLM from the Hub, `docker compose -f
+infra/docker-compose.yml up -d`, and port 8080 behind a reverse proxy with a TLS certificate.
 
 ### Shipping a new model version
 
@@ -212,10 +226,11 @@ uv run python scripts/publish_to_hub.py --what dataset
 git tag model-v2.0.0 && git push origin model-v2.0.0
 ```
 
-A dispatch of `cd.yml` on that tag runs its `model` job: the release gate, then the two cards,
-byte for byte, and the `model-v2.0.0` tag on both Hub repositories. The deployment job then runs
-`modal deploy` with that revision, and the inference server restarts on those weights. What
-arrived is read back from the Hub, card by card, digest by digest and subset by subset:
+A dispatch of `cd.yml` on that tag, with the `verify` action, runs its `model` job: the release
+gate, then the two cards, byte for byte, and the `model-v2.0.0` tag on both Hub repositories. The
+deployment job then runs `modal deploy` with that revision, checks the served model against the
+evaluated one, and stops. What arrived on the Hub is read back, card by card, digest by digest
+and subset by subset:
 
 ```bash
 uv run python scripts/publish_to_hub.py --what verify --tag model-v2.0.0
@@ -223,7 +238,7 @@ uv run python scripts/publish_to_hub.py --what verify --tag model-v2.0.0
 
 Pinning the revision instead of the default branch is what makes a deployment reproducible:
 `main` designates content that changes at every publication, `model-v2.0.0` always designates the
-same weights. Rolling back becomes trivial too: redeploy the previous tag.
+same weights. Rolling back becomes trivial too: dispatch the workflow on the previous tag.
 
 The two cards, [`hub/model-card.md`](hub/model-card.md) and
 [`hub/dataset-card.md`](hub/dataset-card.md), are rendered by `scripts/build_hub_cards.py` from
@@ -232,21 +247,20 @@ falls behind those results.
 
 ### What the GitHub repository has to know
 
-Automatic deployment is **disabled until it is armed**. It runs only if the `DEPLOY_ENABLED`
-variable is `true`: without it the chain builds, tests and publishes, but touches nothing alive.
+The `production` environment, with the owner as required reviewer and `model-v*` as the only
+tags allowed to deploy, holds the secrets; the repository holds two variables.
 
-| Name | Type | Role |
+| Name | Kind, and where | Role |
 |---|---|---|
-| `MODAL_TOKEN_ID` | secret | Modal token, from `modal token new` |
-| `MODAL_TOKEN_SECRET` | secret | its secret half |
-| `HF_TOKEN` | secret | republishing the model cards and placing the tag on the Hub |
-| `DEPLOY_ENABLED` | variable | `true` to arm the deployment |
-| `DEPLOY_ENDPOINT_URL` | variable | address of the gateway, probed after deployment |
-| `HF_NAMESPACE` | variable | target Hugging Face account, when it is not the default |
+| `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET` | secrets of `production` | the owner's Modal token, from `modal token new` |
+| `HF_TOKEN` | secret of `production` | publishing the cards and placing the tag on the Hub |
+| `TRIAGE_API_KEY` | secret of `production` | the service key the checks present to `/ready` and `/triage` |
+| `DEPLOY_ENDPOINT_URL` | repository variable | address of the gateway, checked after deployment |
+| `HF_NAMESPACE` | repository variable | target Hugging Face account, when it is not the default |
 
-The service API key and the container's Hugging Face token do not go through GitHub: they live in
-the Modal secret `clinical-triage`, created above. GitHub needs to know how to deploy, not what
-the service handles.
+The container's Hugging Face token and the engine's proxy token do not go through GitHub: they
+live in the Modal secret `clinical-triage`, created above. GitHub needs to know how to deploy,
+not what the service handles.
 
 ## Configuration
 
@@ -281,7 +295,7 @@ set in the shell, as a prefix to the command or through `export`, as in the exam
 | `TRIAGE_VLLM_IMAGE` | `docker compose` | inference engine image | the version pinned by digest |
 | `HF_NAMESPACE` | `modal deploy`, and `config.py` for publication | Hugging Face account the engine pulls the weights from | `BenoitJT-GIRARD` |
 | `TRIAGE_MODEL_ID` | `modal deploy` | repository of the served model | `<HF_NAMESPACE>/qwen3-1.7b-clinical-triage` |
-| `TRIAGE_MODEL_REVISION` | `modal deploy` | pinned revision of the weights | `model-v1.0.0` |
+| `TRIAGE_MODEL_REVISION` | `modal deploy` | pinned revision of the weights | `model-v2.0.0` |
 
 `docker compose` also interpolates `TRIAGE_API_KEY` and `TRIAGE_RATE_LIMIT` before passing them
 to the container: on the container stack those two come from the shell as well. Without
@@ -313,7 +327,8 @@ Docker build context.
 
 | Indicator | Alert threshold | Reaction |
 |---|---|---|
-| `/health` probe | two consecutive failures | restart the container, raise an alert |
+| `/health` probe, the gateway | two consecutive failures | restart the container, raise an alert |
+| `/ready` probe, the engine | two consecutive failures | check the engine, then the GPU |
 | 95th-percentile latency | twice the reference | check the GPU load |
 | Off-format answers | more than 2% over an hour | freeze the version, roll back |
 | Model / rule disagreement | more than 25% over a day | clinical review of the sample |

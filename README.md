@@ -45,13 +45,14 @@ cases that describe a patient. How, and what each source really yielded, is in
 
 ## What it does
 
-Three routes, and the third is the point.
+Four routes, and the second is the point.
 
 | Route | What it answers |
 |---|---|
 | `POST /questionnaire/next` | the next question to ask, chosen from the complaint; collection stops as soon as a vital sign appears |
 | `POST /triage` | the triage level, why, what to do — **and what the explicit rule would have decided** |
-| `GET /health` | whether the gateway and its inference engine are answering |
+| `GET /health` | whether the gateway is alive — it touches nothing else, and needs no key |
+| `GET /ready` | whether the inference engine answers; it asks for the key, since on a managed host it can wake a GPU |
 
 <!-- source: docs/images/MANIFEST.json -->
 ![The published contract of the running service: three routes, the two that need a key marked with a padlock, and the schemas generated from the Pydantic models](docs/images/api-contract.png)

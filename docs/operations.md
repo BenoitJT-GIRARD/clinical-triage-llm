@@ -15,7 +15,7 @@ every failure is one of them being up while the other is not.
 | process | what it needs | what happens without it |
 |---|---|---|
 | gateway | a service key, a writable audit log | refuses to start, and says which of the two is missing |
-| engine | a GPU, the weights at a pinned revision | the gateway starts, answers the probe as degraded, and refuses every triage with 503 |
+| engine | a GPU, the weights at a pinned revision | the gateway starts, `/ready` answers 503, and every triage is refused with 503 |
 
 The gateway **refuses to start** without `TRIAGE_API_KEY`, unless open mode is asked for
 explicitly. A check that disappears when its setting does is not a check at all, and refusing to
@@ -26,19 +26,21 @@ interaction is one of this service's obligations, and answering without being ab
 the answer breaks it. The case is not theoretical: a volume mounted from the host arrives owned
 by root, and the service does not run as root.
 
-## The health probe, and what it does not say
+## Two probes, and what each one says
 
-`GET /health` questions the engine rather than reporting on itself. It answers `ok` only when the
-engine replies, `degraded` otherwise, and in the degraded case it says that the engine is not
-answering — never where the engine is. The technical cause, which carries the engine's address,
-goes to the log.
+`GET /health` is the gateway's liveness. It answers `alive` as soon as the process serves,
+touches nothing else and needs no key: an anonymous caller can probe it as often as it likes, and
+never reaches the engine through it.
 
-That matters on a managed host, where the engine's address is what protects it. The probe needs
-neither key nor quota, so anything that reaches the gateway reaches the probe.
+`GET /ready` questions the engine. It answers `ok` when the engine replies, and `degraded` with a
+503 otherwise; in the degraded case it says that the engine is not answering — never where the
+engine is. The technical cause, which carries the engine's address, goes to the log. It asks for
+the service key, because on a managed host a request that reaches the engine can wake a GPU, and
+the engine's address is part of what protects it.
 
-A consequence worth knowing when a container restarts: the gateway is up and healthy as a process
-long before the probe turns green, because the engine takes minutes to load three gigabytes of
-weights. The image's own health check gives it a grace period for exactly that.
+A consequence worth knowing when a container restarts: the gateway is alive long before it is
+ready, because the engine takes minutes to load three gigabytes of weights. A deployment waits on
+`/ready`, never on `/health`.
 
 ## What one decision costs
 
