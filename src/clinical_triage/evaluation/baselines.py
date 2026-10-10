@@ -12,9 +12,9 @@ whether it brings anything:
   caution;
 - **the explicit rule**: what would the system a department can deploy in one afternoon give,
   with no language model at all?
-- **an ordinary classifier**: what would a bag of n-grams trained on the same pairs as the
+- **an ordinary classifier**: what would a bag of n-grams trained on the same examples as the
   model give? This is the decisive one. Beating a keyword rule says nothing about the value of
-  fine-tuning, since a logistic regression trained in a second and a half beats it too. Without
+  fine-tuning, since a linear classifier trained in a second and a half beats it too. Without
   this comparison the evaluation cannot answer the question it asks.
 
 The ordinary classifier produces a level and nothing else. The service's output contract asks

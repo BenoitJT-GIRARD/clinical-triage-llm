@@ -202,7 +202,7 @@ def test_deliveries_are_not_compared_when_only_one_was_evaluated(evaluation):
     assert evaluation._compare_deliveries(results) == {}
 
 
-# --- The worse of the two opinions, pre-registered ------------------------------
+# --- The more urgent of the two opinions, pre-registered ------------------------
 
 
 def test_the_worse_of_two_opinions_keeps_the_more_urgent(evaluation):

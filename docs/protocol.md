@@ -162,12 +162,12 @@ and the results are published whatever they show.
   set would turn that set into a selection set.
 - **The primary analysis** is undertriage on the forty urgent cases, the shipped model against
   the explicit rule, by an exact McNemar test.
-- **The secondary analyses**: the shipped model against the linear classifier; the supervised
-  model against the aligned one, for each seed; the *worse of the two opinions* — for each case,
-  the more urgent of the model's level and the rule's — against the model alone, on undertriage
-  and on overtriage; the model of version 1.0.0, as this repository served it, against this
-  version's, on the same cases; and the spread of the three seeds, as the range and the standard
-  deviation of accuracy and of undertriage.
+- **The secondary analyses**: the shipped model against the linear classifier; the supervised model
+  against the aligned one, for each seed; the *more urgent of the two opinions* — for each case, the
+  more urgent of the model's level and the rule's — against the model alone, on undertriage and on
+  overtriage; the model of version 1.0.0, as this repository served it, against this version's, on
+  the same cases; and the spread of the three seeds, as the range and the standard deviation of
+  accuracy and of undertriage.
 - **The release gate**: every answer of the clinical set in the expected format, and no more
   urgent cases missed than the explicit rule. A version that fails it is neither published nor
   served. `scripts/check_release.py` decides, and the deployment workflow runs it.
@@ -198,14 +198,15 @@ separates them, in one direction, and the test gives **p = 1.0**.
 
 <!-- source: reports/seed_study.json -->
 On seeds 43 and 44, the two models miss exactly the same urgent cases: **9** each on seed 43, **13**
-each on seed 44. Over the three seeds, the alignment changes one urgent decision in a hundred and
-twenty. On accuracy, the aligned model is right on one or two more cases than the supervised one on
-every seed: **0.7833** against **0.75** on seed 43, **0.7** against **0.6833** on seed 44. No seed's
-test comes near significance; the largest gap, seed 43's, gives **p = 0.5**. The alignment does not
-move the triage decision. What it does move is measured where it acts, in [What the alignment
+each on seed 44. Over the three seeds, the alignment turns one urgent miss into a catch, out of a
+hundred and twenty urgent decisions, and loses none. On accuracy, the aligned model is right on one
+or two more cases than the supervised one on every seed: **0.7833** against **0.75** on seed 43,
+**0.7** against **0.6833** on seed 44. No seed's test comes near significance; the largest gap, seed
+43's, gives **p = 0.5**. The alignment does not move the triage decision. What it does move is
+measured where it acts, in [What the alignment
 bought](#what-the-alignment-bought-and-what-it-did-not).
 
-### The worse of the two opinions
+### The more urgent of the two opinions
 
 <!-- source: reports/evaluation_results.json -->
 For each case, keep the more urgent of the two levels, the model's and the rule's. On the n = 40

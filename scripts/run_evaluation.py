@@ -11,12 +11,12 @@ The evaluation covers two sets, deliberately:
   templates, not triage.
 
 Four baselines frame the results: always the majority class, always the life-threatening level,
-the explicit rule, and an ordinary classifier trained on the same pairs as the model. The last
+the explicit rule, and an ordinary classifier trained on the same examples as the model. The last
 two are the ones to beat, and the fourth is the most demanding: it says what fine-tuning adds
 over ordinary learning on the same data.
 
 Three analyses are fixed before any result exists, and published whatever they show: the
-supervised model against the aligned one, on the same cases; the **worse of the two opinions**,
+supervised model against the aligned one, on the same cases; the **more urgent of the two opinions**,
 model or rule, against the model alone; and the cause of each urgent case the rule misses.
 
 ``--seed`` evaluates another training seed of the same method, whose results go under
@@ -181,7 +181,7 @@ def _baselines(
     clinical set, on the other hand, is written by hand and never passes through ``classify``:
     the comparison is honest there, and that is the one the published protocol reports.
 
-    The classical baseline applies everywhere: it learns from the same pairs as the model, and
+    The classical baseline applies everywhere: it learns from the same examples as the model, and
     none of the lines it judges was in its training. On the internal set it has nonetheless seen
     rewordings of them — exactly as the model has, and that is what makes the comparison fair
     there.
@@ -309,7 +309,7 @@ def _shipped(predictions: dict) -> str | None:
 
 def _paired_analyses(results: dict, cases: list[dict]) -> None:
     """The comparisons fixed before the results: against the baselines, between the two training
-    stages, and the worse of the two opinions."""
+    stages, and the more urgent of the two opinions."""
     predictions = results["_predictions"]
     shipped = _shipped(predictions)
     if shipped is None:
@@ -399,7 +399,7 @@ def main() -> None:
         args.models, args.internal, args.preferences = [args.label], 0, 0
         args.task_preferences = args.robustness = False
     internal_cases = _internal_cases(args.internal) if args.internal else []
-    # The classical baseline learns from the same pairs as the model: the training split to
+    # The classical baseline learns from the same examples as the model: the training split to
     # learn, the validation split to choose its setting. It never sees the cases it is judged on.
     training = read_jsonl(PATHS.data_processed / "sft_train.jsonl")
     validation = read_jsonl(PATHS.data_processed / "sft_validation.jsonl")
@@ -532,7 +532,7 @@ def _print_summary(results: dict) -> None:
     print("-" * len(header))
     rows = {**results["clinical_set"]["baselines"], **results["clinical_set"]["models"]}
     if "worse_of_two" in results:
-        rows["worse of the two opinions"] = results["worse_of_two"]
+        rows["more urgent of the two opinions"] = results["worse_of_two"]
     for name, measures in rows.items():
         print(
             f"{name:24s} | {measures['accuracy']:8.3f} | {measures['undertriage']:11.3f} | "
