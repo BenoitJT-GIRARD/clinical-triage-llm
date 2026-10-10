@@ -1,9 +1,8 @@
 # Bilingual emergency triage dataset
 
-A training corpus for a triage decision-support agent. From a patient description — complaint,
-symptoms, history, vital signs taken at reception, in French or in English — the model must
-produce a **priority level**, a **clinical justification** and a **course of action**, always in
-French.
+A training corpus for a triage decision-support agent. From a patient description (complaint,
+symptoms, history, vital signs taken at reception, in French or in English), the model must produce
+a **priority level**, a **clinical justification** and a **course of action**, always in French.
 
 > This dataset is produced for a prototype. It contains no real patient data, and it has not
 > been validated by an emergency physician. It must not be used to train a system used in a real
@@ -11,10 +10,10 @@ French.
 
 ## Intended use
 
-The set exists to train and evaluate a small language model on one task: reading a written
-patient description and answering in a fixed three-line format. It serves to measure what a
-method — supervised fine-tuning, then preference alignment — changes in such a model, against an
-explicit triage rule and an ordinary classifier trained on the same examples.
+The set exists to train and evaluate a small language model on one task: reading a written patient
+description and answering in a fixed three-line format. It serves to measure what a method,
+supervised fine-tuning then preference alignment, changes in such a model, against an explicit
+triage rule and an ordinary classifier trained on the same examples.
 
 It is not clinical advice, and it is not a basis for any decision about a patient. It must not be
 used to train, tune or validate a system that will be used in care: its labels come from a
@@ -25,14 +24,14 @@ catalogue that no emergency physician has reviewed (see [Limitations](#limitatio
 ### Files and subsets
 
 <!-- source: data/processed/metadata.json -->
-| File | Hub subset and split | Content | Rows | In the code repository |
+| File | Hub subset and split | Content | n | In the code repository |
 |---|---|---|---|---|
 | `sft_train.jsonl` | `sft` / `train` | prompt and answer pairs, supervised training | 4,000 | no |
 | `sft_validation.jsonl` | `sft` / `validation` | the same, convergence tracking | 500 | no |
 | `sft_test.jsonl` | `sft` / `test` | the same, test at the training distribution | 500 | no |
 | `dpo_train.jsonl` | `dpo` / `train` | prompt, chosen and rejected answers, preference alignment | 2,400 | no |
 | `clinical_eval.jsonl` | `clinical_eval` / `test` | hand-written cases, **evaluation, never training** | 60 | yes |
-| `metadata.json` | — | schema, statistics, provenance, personal-data checks | — | yes |
+| `metadata.json` | none | schema, statistics, provenance, personal-data checks | n/a | yes |
 
 The four training files are not versioned in the [code repository](https://github.com/BenoitJT-GIRARD/clinical-triage-llm): they are
 derivatives of the code and of the public corpora, which `scripts/build_dataset.py` rebuilds
@@ -105,22 +104,22 @@ Five public corpora were read: MediQAl, MedMCQA, FrenchMedMCQA and MedQuAD as so
 and UltraMedical-Preference as a source of preferences. The first task was to check what they
 actually allow.
 
-**None is annotated with triage levels.** They are sets of medical questions and answers and of
-exam questions. Using them as they are — wrapping an exam question in a triage template and
-labelling it by keyword presence — produces absurd examples of the kind "A patient presents
-with: *Levamisole is used as all except -*", and a circular evaluation where the model merely
-relearns the rule that produced the labels.
+**None is annotated with triage levels.** They are sets of medical questions and answers and of exam
+questions. Using them as they are (wrapping an exam question in a triage template and labelling it
+by keyword presence) produces absurd examples of the kind "A patient presents with: *Levamisole is
+used as all except -*", and a circular evaluation where the model merely relearns the rule that
+produced the labels.
 
 Five findings, checked on the corpora themselves:
 
 <!-- source: data/processed/metadata.json -->
 - **MediQAl is the only one made of patient cases.** Its `clinical_case` column carries 3,075
-  distinct French vignettes — complaint, history, and for some of them the vital signs on
-  arrival. It is the only authentic French-language source;
+  distinct French vignettes: complaint, history, and for some of them the vital signs on arrival. It
+  is the only authentic French-language source;
 - **MedMCQA is the English source of vignettes.** Few of its exam questions describe a patient,
   but its size makes it the largest authentic source, and without it the English half of the
   authentic corpus would have no clinical vignette: MedQuAD describes conditions, not patients;
-- **FrenchMedMCQA holds 1,080 questions** across its three splits — n = 1,080 entries read, of
+- **FrenchMedMCQA holds 1,080 questions** across its three splits; n = 1,080 entries read, of
   which only six are recognised as a patient presentation, and none carries an identifiable
   triage sign. It is a set of pharmacy questions; it cannot carry the French half of a triage
   dataset;
@@ -128,7 +127,7 @@ Five findings, checked on the corpora themselves:
   patient complaints, which yields a few cases, but it does not describe clinical situations;
 - **UltraMedical-Preference rewards length.** On its expert-reviewed test split, outside the
   pairs built to compare answers of similar length, the preferred answer is the longer one in
-  470 pairs out of 597 — a signal which, used for an alignment, teaches the model that "longer
+  470 pairs out of 597, a signal which, used for an alignment, teaches the model that "longer
   is better". The evaluation recounts it at every run, in
   [`reports/evaluation_results.json`](../reports/evaluation_results.json).
 
@@ -293,7 +292,7 @@ splits, or if an evaluation case ends up in training. The counts are published i
 
 ## Licences and attribution
 
-The dataset is published under **CC BY 4.0**. It redistributes text derived from two corpora under
+The dataset is published under CC BY 4.0. It redistributes text derived from two corpora under
 that licence, and the attribution below is part of every reuse.
 
 | Source | Language | Licence | What the set takes from it, and what was done to it |
