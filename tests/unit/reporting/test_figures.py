@@ -4,7 +4,7 @@ A figure is a binary, and a binary is read by nobody. If one breaks, it has to b
 figure is also a claim — these tests check the claims as much as the files: that a subgroup too
 small to support a rate does not get drawn as if it were measured, that a value written on a bar
 sits above its interval rather than inside it, and that every figure leaves in the manifest the
-effective, the estimator and the script it came from.
+sample size, the estimator and the script it came from.
 """
 
 from __future__ import annotations
