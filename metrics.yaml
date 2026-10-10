@@ -90,6 +90,37 @@ metrics:
   # these numbers are what justifies the project's least obvious decision: that the ground
   # truth had to be written rather than found.
 
+  first_only:
+    definition: >-
+      In a paired comparison of two systems on the same cases, the cases the first system named
+      handles and the second does not. On the urgent cases, handled means not sent below the
+      reference level; on all cases, filed at the reference level.
+    unit: "cases"
+    direction: higher_is_better
+    anchor: "17 — reports/evaluation_results.json#model_versus_rule.undertriage.model_only"
+    business_reading: >-
+      The urgent patients one system would catch and the other would send down the queue. With
+      its mirror, second_only, it is all that separates the two: the cases both handle, or both
+      miss, say nothing about which is better.
+    source: "scripts/run_evaluation.py, the paired analyses fixed before the results"
+    uncertainty: >-
+      A count, not an estimate. Whether its gap with second_only can be chance is what the exact
+      McNemar test published beside it answers.
+
+  second_only:
+    definition: >-
+      The mirror of first_only: the cases the second system named handles and the first does
+      not, on the same cases and with the same meaning of handled.
+    unit: "cases"
+    direction: lower_is_better
+    anchor: "6 — reports/evaluation_results.json#model_versus_rule.undertriage.baseline_only"
+    business_reading: >-
+      What the first system would lose by replacing the second. Against the explicit rule it is
+      the urgent patients the rule catches and the model misses.
+    source: "scripts/run_evaluation.py, the paired analyses fixed before the results"
+    uncertainty: >-
+      A count, not an estimate; read with first_only and the exact McNemar test beside them.
+
   entries_read:
     definition: "The number of rows read from a corpus, before any filter."
     unit: "entries"
@@ -102,10 +133,10 @@ metrics:
     source: "scripts/build_dataset.py, counted while loading each corpus from the Hub"
     uncertainty: "An exhaustive count of a frozen corpus release. Nothing is estimated."
 
-  no_patient_described:
+  no_patient_presentation_recognised:
     definition: >-
-      Entries discarded because they describe no patient: an examination question, a
-      definition, a fact sheet about a condition.
+      Entries discarded because no patient presentation is recognised in them: an examination
+      question, a definition, a fact sheet about a condition, or a case the marker misses.
     unit: "entries"
     direction: lower_is_better
     anchor: >-
