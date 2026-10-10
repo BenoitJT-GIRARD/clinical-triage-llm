@@ -125,31 +125,46 @@ step, {{dpo:metrics.duration_s|minutes}} for the preference step, through Unslot
 <!-- source: reports/evaluation_results.json -->
 {{evaluation:clinical_set.n}} cases written one by one for the evaluation, none seen in training,
 {{data:statistics.evaluation_case_types.falsely_reassuring}} of them falsely reassuring and
-{{data:statistics.evaluation_case_types.falsely_alarming}} falsely alarming. Intervals are 95%.
+{{data:statistics.evaluation_case_types.falsely_alarming}} falsely alarming.
 
-| System | Accuracy | Urgent cases sent lower | Usable answers |
+| System | Accuracy | Urgent cases sent lower | Format compliance |
 |---|---|---|---|
 | **This model** | {{evaluation:clinical_set.models.dpo-merged.accuracy|f3}} {{evaluation:clinical_set.models.dpo-merged.accuracy_ci95|ci}} | {{evaluation:clinical_set.models.dpo-merged.undertriage_detail.misses}} of {{evaluation:clinical_set.models.dpo-merged.undertriage_detail.urgent_cases}} | {{evaluation:clinical_set.models.dpo-merged.format_compliance|pct}} |
 | Supervised step alone | {{evaluation:clinical_set.models.sft.accuracy|f3}} {{evaluation:clinical_set.models.sft.accuracy_ci95|ci}} | {{evaluation:clinical_set.models.sft.undertriage_detail.misses}} of {{evaluation:clinical_set.models.sft.undertriage_detail.urgent_cases}} | {{evaluation:clinical_set.models.sft.format_compliance|pct}} |
-| Keyword rule | {{evaluation:clinical_set.baselines.explicit_rule.accuracy|f3}} {{evaluation:clinical_set.baselines.explicit_rule.accuracy_ci95|ci}} | {{evaluation:clinical_set.baselines.explicit_rule.undertriage_detail.misses}} of {{evaluation:clinical_set.baselines.explicit_rule.undertriage_detail.urgent_cases}} | — |
-| Linear classifier, same examples | {{evaluation:clinical_set.baselines.linear_classifier.accuracy|f3}} {{evaluation:clinical_set.baselines.linear_classifier.accuracy_ci95|ci}} | {{evaluation:clinical_set.baselines.linear_classifier.undertriage_detail.misses}} of {{evaluation:clinical_set.baselines.linear_classifier.undertriage_detail.urgent_cases}} | — |
+| Keyword rule | {{evaluation:clinical_set.baselines.explicit_rule.accuracy|f3}} {{evaluation:clinical_set.baselines.explicit_rule.accuracy_ci95|ci}} | {{evaluation:clinical_set.baselines.explicit_rule.undertriage_detail.misses}} of {{evaluation:clinical_set.baselines.explicit_rule.undertriage_detail.urgent_cases}} | n/a |
+| Linear classifier, same examples | {{evaluation:clinical_set.baselines.linear_classifier.accuracy|f3}} {{evaluation:clinical_set.baselines.linear_classifier.accuracy_ci95|ci}} | {{evaluation:clinical_set.baselines.linear_classifier.undertriage_detail.misses}} of {{evaluation:clinical_set.baselines.linear_classifier.undertriage_detail.urgent_cases}} | n/a |
+> n = {{evaluation:clinical_set.n}} cases, of which n = {{evaluation:clinical_set.models.dpo-merged.undertriage_detail.urgent_cases}} urgent. The accuracy
+> intervals are 95% Wilson intervals.
+
+> **How to read it.** One row per system, all on the same cases. Accuracy is the share filed
+> at the reference level written for each case. The urgent cases sent lower are the failure
+> that reaches a patient, so they are counted on the urgent cases alone. Format compliance is
+> the share of answers the three-line format can parse; the rule and the classifier return a
+> level, not a text, so it does not apply to them (n/a).
 
 Every comparison below is paired on the same cases, by an exact McNemar test, and was fixed
-before the results. The first row is the primary analysis. "More urgent of the two" keeps, case by case,
-the more urgent of this model's level and the rule's, which every reply of the service carries.
+before the results. The first row is the primary analysis. "More urgent of the two" keeps, case
+by case, the more urgent of this model's level and the rule's, which every reply of the service
+carries. Each row counts the cases the first system handles and the second does not, and the
+reverse: on the urgent cases, handled means not sent lower; on all cases, filed at the
+reference level.
 
-| On the {{evaluation:model_versus_rule.undertriage.urgent_cases}} urgent cases | Caught by the first only | Caught by the second only | Test |
+<!-- source: reports/evaluation_results.json -->
+| On the {{evaluation:model_versus_rule.undertriage.urgent_cases}} urgent cases | First only | Second only | Test |
 |---|---|---|---|
 | This model against the rule | {{evaluation:model_versus_rule.undertriage.model_only}} | {{evaluation:model_versus_rule.undertriage.baseline_only}} | {{evaluation:model_versus_rule.undertriage.p_mcnemar|p}} |
 | This model against the classifier | {{evaluation:model_versus_classifier.undertriage.model_only}} | {{evaluation:model_versus_classifier.undertriage.baseline_only}} | {{evaluation:model_versus_classifier.undertriage.p_mcnemar|p}} |
 | Aligned against supervised | {{evaluation:aligned_versus_supervised.undertriage.model_only}} | {{evaluation:aligned_versus_supervised.undertriage.baseline_only}} | {{evaluation:aligned_versus_supervised.undertriage.p_mcnemar|p}} |
 | More urgent of the two against this model alone | {{evaluation:worse_of_two.versus_model_alone.undertriage.model_only}} | {{evaluation:worse_of_two.versus_model_alone.undertriage.baseline_only}} | {{evaluation:worse_of_two.versus_model_alone.undertriage.p_mcnemar|p}} |
+> n = {{evaluation:model_versus_rule.undertriage.urgent_cases}} urgent cases, the same in every row.
 
-| On all {{evaluation:clinical_set.n}} cases, accuracy | Right for the first only | Right for the second only | Test |
+<!-- source: reports/evaluation_results.json -->
+| On all {{evaluation:clinical_set.n}} cases, accuracy | First only | Second only | Test |
 |---|---|---|---|
 | This model against the rule | {{evaluation:model_versus_rule.accuracy.model_only}} | {{evaluation:model_versus_rule.accuracy.baseline_only}} | {{evaluation:model_versus_rule.accuracy.p_mcnemar|p}} |
 | This model against the classifier | {{evaluation:model_versus_classifier.accuracy.model_only}} | {{evaluation:model_versus_classifier.accuracy.baseline_only}} | {{evaluation:model_versus_classifier.accuracy.p_mcnemar|p}} |
 | Aligned against supervised | {{evaluation:aligned_versus_supervised.accuracy.model_only}} | {{evaluation:aligned_versus_supervised.accuracy.baseline_only}} | {{evaluation:aligned_versus_supervised.accuracy.p_mcnemar|p}} |
+> n = {{evaluation:clinical_set.n}} cases, the same in every row.
 
 <!-- source: reports/seed_study.json -->
 **Seeds.** The method was trained three times, on seeds 42, 43 and 44; these weights are seed 42,
@@ -161,8 +176,8 @@ chosen before any result. Across the three, accuracy on the clinical set ranges 
 that much, so a gap of that size between two systems trained once each can be the seed.
 
 <!-- source: reports/before_after.json -->
-**Against version 1.0.0.** The model this repository served before, evaluated by the same code
-on the same cases, scores {{before_after:before.clinical_accuracy|f3}} and misses
+**Against the previous version.** The model this repository served before, version 1.0.0,
+evaluated by the same code on the same cases, scores {{before_after:before.clinical_accuracy|f3}} and misses
 {{before_after:before.clinical_undertriage_misses|int}} urgent cases where this one misses
 {{before_after:after.clinical_undertriage_misses|int}}:
 {{before_after:undertriage.rescued_by_this_release|int}} caught by this version alone,
@@ -175,16 +190,16 @@ result on three seeds.
 **Alignment.** On {{evaluation:task_preferences.n}} preference pairs of the task, held out of
 training, the aligned model ranks the preferred answer first in
 {{evaluation:task_preferences.correctly_ordered_share|pct}} of pairs. On
-{{evaluation:external_preferences.n}} pairs of an external medical preference set, it does so in
+{{evaluation:external_preferences.n}} pairs from a medical preference set built outside the project, the share is
 {{evaluation:external_preferences.correctly_ordered_share|pct}}, and in
 {{evaluation:external_preferences.per_group.length.correctly_ordered_share|pct}} of the
 {{evaluation:external_preferences.per_group.length.n}} whose two answers are of similar length.
 It learnt the defects of the task, not medicine at large, and its score below chance comes from
 answer length, which it penalises.
 
-**Robustness.** On {{evaluation:robustness.dpo-merged.n}} inputs outside the nominal case — a
+**Robustness.** On {{evaluation:robustness.dpo-merged.n}} inputs outside the nominal case (a
 three-letter entry, a two-page paste, a description in another language, an attempt to make it
-say something else — the model keeps its contract in
+say something else), the model keeps its contract in
 {{evaluation:robustness.dpo-merged.compliant_share|pct}} of cases: the expected format, in
 French, its system prompt kept to itself, a clean stop, the identifying data it was given not
 echoed, and the level an input announces when it announces one.

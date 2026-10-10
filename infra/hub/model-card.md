@@ -135,31 +135,46 @@ step, 63 min for the preference step, through Unsloth.
 <!-- source: reports/evaluation_results.json -->
 60 cases written one by one for the evaluation, none seen in training,
 10 of them falsely reassuring and
-11 falsely alarming. Intervals are 95%.
+11 falsely alarming.
 
-| System | Accuracy | Urgent cases sent lower | Usable answers |
+| System | Accuracy | Urgent cases sent lower | Format compliance |
 |---|---|---|---|
 | **This model** | 0.717 [0.59 – 0.81] | 11 of 40 | 100% |
 | Supervised step alone | 0.700 [0.57 – 0.80] | 12 of 40 | 100% |
-| Keyword rule | 0.617 [0.49 – 0.73] | 22 of 40 | — |
-| Linear classifier, same examples | 0.667 [0.54 – 0.77] | 8 of 40 | — |
+| Keyword rule | 0.617 [0.49 – 0.73] | 22 of 40 | n/a |
+| Linear classifier, same examples | 0.667 [0.54 – 0.77] | 8 of 40 | n/a |
+> n = 60 cases, of which n = 40 urgent. The accuracy
+> intervals are 95% Wilson intervals.
+
+> **How to read it.** One row per system, all on the same cases. Accuracy is the share filed
+> at the reference level written for each case. The urgent cases sent lower are the failure
+> that reaches a patient, so they are counted on the urgent cases alone. Format compliance is
+> the share of answers the three-line format can parse; the rule and the classifier return a
+> level, not a text, so it does not apply to them (n/a).
 
 Every comparison below is paired on the same cases, by an exact McNemar test, and was fixed
-before the results. The first row is the primary analysis. "More urgent of the two" keeps, case by case,
-the more urgent of this model's level and the rule's, which every reply of the service carries.
+before the results. The first row is the primary analysis. "More urgent of the two" keeps, case
+by case, the more urgent of this model's level and the rule's, which every reply of the service
+carries. Each row counts the cases the first system handles and the second does not, and the
+reverse: on the urgent cases, handled means not sent lower; on all cases, filed at the
+reference level.
 
-| On the 40 urgent cases | Caught by the first only | Caught by the second only | Test |
+<!-- source: reports/evaluation_results.json -->
+| On the 40 urgent cases | First only | Second only | Test |
 |---|---|---|---|
 | This model against the rule | 17 | 6 | p = 0.035 |
 | This model against the classifier | 3 | 6 | p = 0.508 |
 | Aligned against supervised | 1 | 0 | p = 1.000 |
 | More urgent of the two against this model alone | 6 | 0 | p = 0.031 |
+> n = 40 urgent cases, the same in every row.
 
-| On all 60 cases, accuracy | Right for the first only | Right for the second only | Test |
+<!-- source: reports/evaluation_results.json -->
+| On all 60 cases, accuracy | First only | Second only | Test |
 |---|---|---|---|
 | This model against the rule | 16 | 10 | p = 0.327 |
 | This model against the classifier | 10 | 7 | p = 0.629 |
 | Aligned against supervised | 2 | 1 | p = 1.000 |
+> n = 60 cases, the same in every row.
 
 <!-- source: reports/seed_study.json -->
 **Seeds.** The method was trained three times, on seeds 42, 43 and 44; these weights are seed 42,
@@ -171,8 +186,8 @@ chosen before any result. Across the three, accuracy on the clinical set ranges 
 that much, so a gap of that size between two systems trained once each can be the seed.
 
 <!-- source: reports/before_after.json -->
-**Against version 1.0.0.** The model this repository served before, evaluated by the same code
-on the same cases, scores 0.717 and misses
+**Against the previous version.** The model this repository served before, version 1.0.0,
+evaluated by the same code on the same cases, scores 0.717 and misses
 10 urgent cases where this one misses
 11:
 1 caught by this version alone,
@@ -185,16 +200,16 @@ result on three seeds.
 **Alignment.** On 100 preference pairs of the task, held out of
 training, the aligned model ranks the preferred answer first in
 84% of pairs. On
-777 pairs of an external medical preference set, it does so in
+777 pairs from a medical preference set built outside the project, the share is
 36.5%, and in
 50% of the
 180 whose two answers are of similar length.
 It learnt the defects of the task, not medicine at large, and its score below chance comes from
 answer length, which it penalises.
 
-**Robustness.** On 41 inputs outside the nominal case — a
+**Robustness.** On 41 inputs outside the nominal case (a
 three-letter entry, a two-page paste, a description in another language, an attempt to make it
-say something else — the model keeps its contract in
+say something else), the model keeps its contract in
 85.4% of cases: the expected format, in
 French, its system prompt kept to itself, a clean stop, the identifying data it was given not
 echoed, and the level an input announces when it announces one.
