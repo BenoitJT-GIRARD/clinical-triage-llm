@@ -213,6 +213,27 @@ retraining left the triage decision where it was; what changed is what stands be
 dataset, a model trained on the prompt the service actually sends, and analyses fixed before the
 results and run on three seeds.
 
+### What moved the result, and what was left aside
+
+<!-- source: reports/training/module_comparison.json -->
+Training the output head beside the projections is what made the model finish its answers. On the
+n = 60 validation cases of that study, the share of answers that stop on their own went from
+**0.0** to **1.0**, and the median answer from the cap of **220** tokens to **96**, for an
+accuracy that barely moved.
+
+<!-- source: reports/training/engine_comparison.json -->
+Unsloth's kernels made the training fit and run faster on one card: over the same n = 30 steps,
+**3.69** seconds a step and **7.22** gigabytes, against **6.93** seconds and **10.13** gigabytes
+with plain Transformers.
+
+The largest gain on the urgent cases needs no training at all: keeping the more urgent of the two
+opinions, as shown above. Left aside, each for a measured reason: UltraMedical-Preference as
+training data, because outside its pairs of similar length the preferred answer is the longer one
+470 times in 597; three of the four LoRA settings, one tied with the kept setting on the validation
+cases and behind it on validation loss; harder preference pairs, which only a preference set
+independent of their construction could judge fairly; and, for the triage decision, the retraining
+itself, which moved nothing measurable against version 1.0.0.
+
 ## Why these numbers can be believed
 
 The evaluation set was written by hand, case by case, with the clinical reason for each label
