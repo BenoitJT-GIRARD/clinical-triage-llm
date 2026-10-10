@@ -119,6 +119,7 @@ def publish_dataset(api) -> None:
         repo_id=MODEL.hub_dataset_id,
         repo_type="dataset",
         allow_patterns=list(DATASET_FILES),
+        commit_message="Add the dataset files and their metadata",
     )
     publish_card(api, DATASET_CARD, MODEL.hub_dataset_id, "dataset")
 
@@ -131,12 +132,17 @@ def publish_model(api) -> None:
         repo_id=MODEL.hub_model_id,
         repo_type="model",
         allow_patterns=MODEL_FILES,
+        commit_message="Add the merged weights, their configuration and the tokenizer",
     )
     publish_card(api, MODEL_CARD, MODEL.hub_model_id, "model")
 
 
 def publish_card(api, card: Path, repository: str, repo_type: str) -> None:
-    """Send a rendered card as the repository's README, unchanged."""
+    """Send a rendered card as the repository's README, unchanged.
+
+    Each upload names what it adds: the Hub shows a repository's history to anyone who opens
+    it, and the library's default message says only which tool was used.
+    """
     if not card.exists():
         raise SystemExit(f"Card not found: {card}. Run `python scripts/build_hub_cards.py`.")
     api.upload_file(
@@ -144,6 +150,7 @@ def publish_card(api, card: Path, repository: str, repo_type: str) -> None:
         path_in_repo="README.md",
         repo_id=repository,
         repo_type=repo_type,
+        commit_message="Publish the card rendered from the committed results",
     )
     logger.info("Card of %s published.", repository)
 
