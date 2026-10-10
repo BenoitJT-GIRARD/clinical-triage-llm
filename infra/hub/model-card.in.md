@@ -55,7 +55,7 @@ emergency physician.
 
 ## How to use
 
-The chat template and the end-of-turn token travel with the tokenizer: the caller sets nothing.
+The chat template and the end-of-turn token travel with the tokenizer: the caller configures neither.
 The model expects the system prompt it was trained with, word for word:
 
 ```text
@@ -113,7 +113,7 @@ carries its chat tokens as one untrained vector and ties its output head to its 
 adapter on the projections alone produces a model that never emits its end-of-turn token. The
 exported weights therefore untie the head (`tie_word_embeddings: false`).
 
-**Preference step.** DPO above the merged supervised model, which is also its reference, with a
+**Preference step.** DPO on top of the merged supervised model, which is also its reference, with a
 supervised term on the preferred answer that keeps it likely. The rejected answers carry one
 defect each: a level too low, an unsafe course of action, an asserted diagnosis, or English.
 
@@ -134,9 +134,18 @@ step, {{dpo:metrics.duration_s|minutes}} for the preference step, through Unslot
 | Keyword rule | {{evaluation:clinical_set.baselines.explicit_rule.accuracy|f3}} {{evaluation:clinical_set.baselines.explicit_rule.accuracy_ci95|ci}} | {{evaluation:clinical_set.baselines.explicit_rule.undertriage_detail.misses}} of {{evaluation:clinical_set.baselines.explicit_rule.undertriage_detail.urgent_cases}} | — |
 | Linear classifier, same examples | {{evaluation:clinical_set.baselines.linear_classifier.accuracy|f3}} {{evaluation:clinical_set.baselines.linear_classifier.accuracy_ci95|ci}} | {{evaluation:clinical_set.baselines.linear_classifier.undertriage_detail.misses}} of {{evaluation:clinical_set.baselines.linear_classifier.undertriage_detail.urgent_cases}} | — |
 
-Paired on the same cases (exact McNemar test on accuracy):
+Every comparison below is paired on the same cases, by an exact McNemar test, and was fixed
+before the results. The first row is the primary analysis. "More urgent of the two" keeps, case by case,
+the more urgent of this model's level and the rule's, which every reply of the service carries.
 
-| Comparison | Right for the first only | Right for the second only | Test |
+| On the {{evaluation:model_versus_rule.undertriage.urgent_cases}} urgent cases | Caught by the first only | Caught by the second only | Test |
+|---|---|---|---|
+| This model against the rule | {{evaluation:model_versus_rule.undertriage.model_only}} | {{evaluation:model_versus_rule.undertriage.baseline_only}} | {{evaluation:model_versus_rule.undertriage.p_mcnemar|p}} |
+| This model against the classifier | {{evaluation:model_versus_classifier.undertriage.model_only}} | {{evaluation:model_versus_classifier.undertriage.baseline_only}} | {{evaluation:model_versus_classifier.undertriage.p_mcnemar|p}} |
+| Aligned against supervised | {{evaluation:aligned_versus_supervised.undertriage.model_only}} | {{evaluation:aligned_versus_supervised.undertriage.baseline_only}} | {{evaluation:aligned_versus_supervised.undertriage.p_mcnemar|p}} |
+| More urgent of the two against this model alone | {{evaluation:worse_of_two.versus_model_alone.undertriage.model_only}} | {{evaluation:worse_of_two.versus_model_alone.undertriage.baseline_only}} | {{evaluation:worse_of_two.versus_model_alone.undertriage.p_mcnemar|p}} |
+
+| On all {{evaluation:clinical_set.n}} cases, accuracy | Right for the first only | Right for the second only | Test |
 |---|---|---|---|
 | This model against the rule | {{evaluation:model_versus_rule.accuracy.model_only}} | {{evaluation:model_versus_rule.accuracy.baseline_only}} | {{evaluation:model_versus_rule.accuracy.p_mcnemar|p}} |
 | This model against the classifier | {{evaluation:model_versus_classifier.accuracy.model_only}} | {{evaluation:model_versus_classifier.accuracy.baseline_only}} | {{evaluation:model_versus_classifier.accuracy.p_mcnemar|p}} |
@@ -144,16 +153,34 @@ Paired on the same cases (exact McNemar test on accuracy):
 
 <!-- source: reports/seed_study.json -->
 **Seeds.** The method was trained three times, on seeds 42, 43 and 44; these weights are seed 42,
-chosen before any result. Accuracy on the clinical set ranges from
+chosen before any result. Across the three, accuracy on the clinical set ranges from
 {{seeds:spread.dpo-merged.clinical_accuracy.min|f3}} to
-{{seeds:spread.dpo-merged.clinical_accuracy.max|f3}} across the three.
+{{seeds:spread.dpo-merged.clinical_accuracy.max|f3}}, and the urgent cases missed from
+{{seeds:spread.dpo-merged.clinical_undertriage_misses.min|int}} to
+{{seeds:spread.dpo-merged.clinical_undertriage_misses.max|int}}. Training alone moves the result
+that much, so a gap of that size between two systems trained once each can be the seed.
+
+<!-- source: reports/before_after.json -->
+**Against version 1.0.0.** The model this repository served before, evaluated by the same code
+on the same cases, scores {{before_after:before.clinical_accuracy|f3}} and misses
+{{before_after:before.clinical_undertriage_misses|int}} urgent cases where this one misses
+{{before_after:after.clinical_undertriage_misses|int}}:
+{{before_after:undertriage.rescued_by_this_release|int}} caught by this version alone,
+{{before_after:undertriage.lost_by_this_release|int}} by the previous one alone,
+{{before_after:undertriage.p_mcnemar|p}}. The retraining did not make a better triage decision.
+It corrected the data the model learns from and the prompt it was trained with, and measured the
+result on three seeds.
 
 <!-- source: reports/evaluation_results.json -->
 **Alignment.** On {{evaluation:task_preferences.n}} preference pairs of the task, held out of
 training, the aligned model ranks the preferred answer first in
 {{evaluation:task_preferences.correctly_ordered_share|pct}} of pairs. On
-{{evaluation:external_preferences.n}} pairs of an external medical preference set, it does in
-{{evaluation:external_preferences.correctly_ordered_share|pct}}.
+{{evaluation:external_preferences.n}} pairs of an external medical preference set, it does so in
+{{evaluation:external_preferences.correctly_ordered_share|pct}}, and in
+{{evaluation:external_preferences.per_group.length.correctly_ordered_share|pct}} of the
+{{evaluation:external_preferences.per_group.length.n}} whose two answers are of similar length.
+It learnt the defects of the task, not medicine at large, and its score below chance comes from
+answer length, which it penalises.
 
 **Robustness.** On {{evaluation:robustness.dpo-merged.n}} inputs outside the nominal case — a
 three-letter entry, a two-page paste, a description in another language, an attempt to make it
@@ -175,7 +202,12 @@ evaluation recorded, and the publication refuses any other:
 - The catalogue, the triage rule and the evaluation set have the same author: there is no
   external ground truth.
 - {{evaluation:clinical_set.n}} evaluation cases: an interval of accuracy spans about twenty
-  points, and most differences between systems are not significant.
+  points, and most differences between systems are not significant. On
+  {{evaluation:clinical_set.resolution.urgent_cases}} urgent cases, even a model that missed none
+  would keep an upper bound of {{evaluation:clinical_set.resolution.upper_bound_without_miss|pct}}
+  on its undertriage; it takes
+  {{evaluation:clinical_set.resolution.urgent_cases_needed_for_target}} to bring it under
+  {{evaluation:clinical_set.resolution.target|pct}}.
 - The training data is mostly generated: it lacks the disorder of real language.
 - 1.7 billion parameters learn a format and three classes, not clinical reasoning.
 
