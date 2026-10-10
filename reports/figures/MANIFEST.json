@@ -14,7 +14,7 @@
       "sha256": "a4905dfb371c7e1a2b8544d8ddb221c18576d3093a3c1fdbc352f0ac7a9c19b3",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     },
     "confusion_matrices.png": {
       "axes": [
@@ -40,7 +40,7 @@
       "sha256": "3fd5c4debbe88de544059dddfca16e87cc4dcee451734f4811b116f85b28ae00",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     },
     "dataset_composition.png": {
       "axes": [
@@ -71,7 +71,7 @@
       "sha256": "1186b05764a1f307258f989e9343bc0f3fd866043f7cf75f4097aa57cce0224d",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     },
     "dpo_alignment.png": {
       "axes": [
@@ -92,7 +92,7 @@
       "sha256": "833924492b3c0566358b83dc7c8a06d79f7c3fb37fd76572daa338d516ba4a54",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     },
     "endpoint_latency.png": {
       "axes": [
@@ -110,10 +110,10 @@
       "dispersion": "order statistics: the bar spans the median to the 95th percentile",
       "dpi": 200,
       "n": "n(requests per concurrency level) = 40, n(requests) = 120",
-      "sha256": "9700041ef83d192109018d75dbc7f53538836f76341eaa2e82886a8a80417f7f",
+      "sha256": "8aaed96a16f16d1316e0dc5bbd1c8d71311d5644ced5272c7f21f10ccc9b896d",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     },
     "hyperparameter_tuning.png": {
       "axes": [
@@ -134,7 +134,7 @@
       "sha256": "8e0092c6cd906f5fe3abf1e8a3453ccbcfd3103a8f7bbace06cfa258c5f3fdd9",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     },
     "recall_versus_transfer.png": {
       "axes": [
@@ -155,7 +155,7 @@
       "sha256": "fec93ba930c2e512256cc098a5de16538f33dfb9e40fc5e73a31b8107edee7fe",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     },
     "sft_training.png": {
       "axes": [
@@ -171,7 +171,7 @@
       "sha256": "666298c6f8f6f0a7b9c24fc6f13243bc085760de008df054ae64294c1be4f1c3",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     },
     "systems_comparison.png": {
       "axes": [
@@ -197,7 +197,7 @@
       "sha256": "89ae3fb68b103c0d3b9e0f800140da3719513608bfea551cf4701bc59dfd5a3a",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     },
     "undertriage_by_case_type.png": {
       "axes": [
@@ -213,7 +213,7 @@
       "sha256": "4b53b77c3dec0ad9c6f47a75c19382bc534d0910f9238deed1b4ce0049c6643f",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-10-09"
+      "written": "2026-10-10"
     }
   },
   "schema": "image-manifest/1"

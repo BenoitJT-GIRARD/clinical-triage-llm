@@ -54,25 +54,28 @@ ready, because the engine takes minutes to load three gigabytes of weights. A de
 > while throughput flattens means the queue, and not the model, is the limit.
 
 <!-- source: reports/benchmark_endpoint.json -->
-One triage takes **1,548.8** milliseconds at the median with a single caller, n = 40 requests,
-and **1,886.3** at the 95th percentile. The gateway's own share of that is **16.9** milliseconds:
-validation, the questionnaire, the explicit rule, the anonymisation and the audit line together
-cost about a hundredth of the answer. Everything else is generation.
+On the Modal deployment of this version, one triage takes **2,095.2** milliseconds at the median
+with a single caller, n = 40 requests, and **2,422.7** at the 95th percentile. The engine was vLLM
+**0.29.0** on one L4 GPU, the version the deployment pins, as the engine itself reports it.
+Questioned directly, it answers in **1,739.4** milliseconds at the median. Of a triage, **388.8**
+milliseconds pass outside generation: the gateway's own work (validation, the questionnaire, the
+explicit rule, the anonymisation, the audit line) and, for the most part, distance, since the bench
+ran from a workstation in France and the engine sits in Modal's us-east region.
 
 <!-- source: reports/benchmark_endpoint.json -->
-With four callers at once, n = 40 requests each, the median moves to **1,616.5** milliseconds and
-the 95th percentile to **2,254.3**, past the two seconds the criteria below ask for. With eight, the
-median is **1,666.4** milliseconds and the throughput **4.42** requests per second. The engine
-absorbs concurrency well; what moves is the tail, and unevenly: the 95th percentile at eight
-callers, **2,103.6**, is lower than at four. On forty requests that percentile is simply the
-third-slowest request, so a single run cannot pin it down more closely.
+With four callers at once, n = 40 requests each, the median moves to **2,178.6** milliseconds and
+the 95th percentile to **2,670.3**, past the two seconds the criteria below ask for. With eight, the
+median is **2,227.8** milliseconds and the throughput **3.23** requests per second. The engine
+absorbs concurrency well; what moves is the tail.
 
 <!-- source: reports/benchmark_endpoint.json -->
-The engine was vLLM 0.11.0, the version a Windows workstation can run, not the 0.29.0 the deployment
-pins, which does not start under WSL 2
-([`infra/README.md`](../infra/README.md#2-the-full-container-stack)). These are order statistics on
-one machine, one run, against that engine. They are not a capacity plan, and the repository does not
-claim one.
+The bench ran three times in a row, and the figure draws the first run. From one run to the next
+the medians stay within a tenth of a second: **2,087.9** to **2,095.2** milliseconds with one
+caller, **2,222.7** to **2,309.0** with eight. The 95th percentile moves more: **2,604.9** to
+**2,774.9** with four callers, **2,731.9** to **3,083.6** with eight. On forty requests that
+percentile is the third-slowest request, and three runs show how far it wanders. These are order
+statistics on one deployment, from one workstation, on one evening. They are not a capacity plan,
+and the repository does not claim one.
 
 ## The quota
 
@@ -189,8 +192,8 @@ from `reports/benchmark_endpoint.json`.
    0.439.
 4. **Format compliance**, the lower bound of its 95% interval at least 0.99: undecided; 1.000,
    bound at 0.940.
-5. **Latency at the ninety-fifth percentile, four callers at once**, at most 2,000 ms: not met on a
-   workstation; 2,254 ms with vLLM 0.11.0.
+5. **Latency at the ninety-fifth percentile, four callers at once**, at most 2,000 ms: not met;
+   2,604.9 to 2,774.9 ms over three runs on the Modal deployment, with vLLM 0.29.0.
 6. **An audit log that persists and is anonymised**, verified: met; one file a day, a chain of
    digests, a retention applied.
 7. **An endpoint authenticated, rate-limited and served over HTTPS**, verified: met on Modal,

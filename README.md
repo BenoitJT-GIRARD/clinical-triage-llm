@@ -367,8 +367,9 @@ the data supports, not "the model is worse". Three seeds give the size of what t
 they say nothing about cases written by someone else.
 
 The alignment does not transfer beyond the defects it was trained on, and the service's latency
-([`docs/operations.md`](docs/operations.md#what-one-decision-costs)) was measured on one machine,
-one run, against an older engine than the deployment's. The three triage levels simplify the
+([`docs/operations.md`](docs/operations.md#what-one-decision-costs)) was measured on the
+deployment itself, three runs from one workstation far from the service: the profile of an
+evening, not a capacity plan. The three triage levels simplify the
 five of the French emergency triage scale, and the model reads French and English but always
 answers in French; the questionnaire is in French only.
 
