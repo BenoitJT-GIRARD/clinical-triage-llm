@@ -52,7 +52,7 @@ def wilson_interval(successes: int, total: int, z: float = 1.96) -> tuple[float,
     return (round(max(0.0, centre - half_width), 4), round(min(1.0, centre + half_width), 4))
 
 
-# The effective below which no rate is publishable.
+# The sample size below which no rate is publishable.
 #
 # On three cases the exact interval of a perfect score is [0.29, 1.00]: it covers 71% of the
 # scale. A bar topped by a whisker like that reads as "measured with uncertainty" when the
@@ -167,7 +167,7 @@ def difference_newcombe(
 
 
 def interval_for_proportion(successes: int, total: int) -> tuple[float, float] | None:
-    """The interval to publish for a proportion, or ``None`` if the effective forbids one.
+    """The interval to publish for a proportion, or ``None`` if the sample size forbids one.
 
     One door, so that the choice of estimator is made in the same place everywhere and can be
     re-read:
@@ -272,7 +272,7 @@ def overtriage_rate(gold: list[str], preds: list[str | None]) -> float:
 
 
 def per_class(gold: list[str], preds: list[str | None]) -> dict[str, dict[str, float]]:
-    """Precision, recall, F1 and effective for each triage level.
+    """Precision, recall, F1 and sample size for each triage level.
 
     One caveat before quoting **precision**: it is a positive predictive value, and it depends
     entirely on the prevalence of the set it is measured on. The clinical evaluation set is
@@ -331,7 +331,7 @@ def _percentile(sorted_values: list[float], share: float) -> float:
 def latency_summary(latencies_ms: list[float]) -> dict[str, float]:
     """Mean, median and 95th percentile of the observed latencies.
 
-    The median is the 50th percentile in the sense above: on an even effective it takes the
+    The median is the 50th percentile in the sense above: on an even sample size it takes the
     lower of the two central measurements, and not their average, for the same reason — only
     measured values are published.
     """
