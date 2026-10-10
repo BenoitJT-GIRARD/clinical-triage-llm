@@ -1,7 +1,7 @@
 {
   "command": "uv run python scripts/smoke.py",
-  "ran_at": "2026-10-09",
-  "git_revision": "a8d7238fef81b35d8e0678a2f3869edcd4b96e3d",
+  "ran_at": "2026-10-10",
+  "git_revision": "f8fd94b106357b7421d6caca9b0103a9a65d785b",
   "tool_versions": {
     "python": "3.12.12",
     "matplotlib": "3.11.0",
@@ -12,7 +12,7 @@
     "uv": "uv 0.11.6 (65950801c 2026-04-09 x86_64-pc-windows-msvc)",
     "docker": "Docker version 29.2.0, build 0b9d198"
   },
-  "duration_seconds": 2.2,
+  "duration_seconds": 2.3,
   "key_output": [
     "reports/figures/accuracy_by_case_type.png",
     "reports/figures/confusion_matrices.png",
