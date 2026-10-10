@@ -1,12 +1,16 @@
 {
   "protocol": {
     "steps": 75,
+    "training_examples": 1200,
     "validation_cases": 60,
-    "seed": 42
+    "seed": 42,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "learning_rate": 0.0002
   },
   "configurations": [
     {
-      "configuration": "projections seules",
+      "configuration": "projections only",
       "modules": [
         "q_proj",
         "k_proj",
@@ -17,14 +21,14 @@
         "down_proj"
       ],
       "trainable_parameters": 17432576,
-      "accuracy": 0.85,
-      "clean_stops": 0.0,
-      "median_tokens": 220,
-      "duration_s": 519.4,
-      "peak_gpu_memory_gb": 4.52
+      "accuracy": 0.833,
+      "clean_stop_share": 0.0,
+      "median_tokens": 220.0,
+      "duration_s": 251.8,
+      "peak_gpu_memory_gb": 4.49
     },
     {
-      "configuration": "projections + embeddings",
+      "configuration": "projections and embeddings",
       "modules": [
         "q_proj",
         "k_proj",
@@ -36,14 +40,14 @@
         "embed_tokens"
       ],
       "trainable_parameters": 328597504,
-      "accuracy": 0.85,
-      "clean_stops": 0.0,
-      "median_tokens": 220,
-      "duration_s": 348.2,
-      "peak_gpu_memory_gb": 9.26
+      "accuracy": 0.817,
+      "clean_stop_share": 0.0,
+      "median_tokens": 220.0,
+      "duration_s": 276.1,
+      "peak_gpu_memory_gb": 11.56
     },
     {
-      "configuration": "projections + tête de sortie",
+      "configuration": "projections and output head",
       "modules": [
         "q_proj",
         "k_proj",
@@ -55,11 +59,11 @@
         "lm_head"
       ],
       "trainable_parameters": 328597504,
-      "accuracy": 0.9,
-      "clean_stops": 1.0,
-      "median_tokens": 97,
-      "duration_s": 362.5,
-      "peak_gpu_memory_gb": 9.03
+      "accuracy": 0.817,
+      "clean_stop_share": 1.0,
+      "median_tokens": 96.0,
+      "duration_s": 735.3,
+      "peak_gpu_memory_gb": 11.75
     }
   ]
 }

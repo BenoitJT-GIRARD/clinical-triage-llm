@@ -4,62 +4,62 @@
   "model": "qwen3-1.7b-clinical-triage",
   "measures": {
     "concurrency_1": {
-      "mean_ms": 1494.8,
-      "p50_ms": 1473.5,
-      "p95_ms": 1682.6,
+      "mean_ms": 1595.4,
+      "p50_ms": 1548.8,
+      "p95_ms": 1886.3,
       "requests": 40,
-      "requests_per_s": 0.67,
+      "requests_per_s": 0.63,
       "level_extracted_share": 1.0,
-      "gateway_overhead_ms": 28.3
+      "gateway_overhead_ms": 16.9
     },
     "concurrency_4": {
-      "mean_ms": 1574.6,
-      "p50_ms": 1542.0,
-      "p95_ms": 1829.8,
+      "mean_ms": 1723.1,
+      "p50_ms": 1616.5,
+      "p95_ms": 2254.3,
       "requests": 40,
-      "requests_per_s": 2.42,
+      "requests_per_s": 2.25,
       "level_extracted_share": 1.0,
-      "gateway_overhead_ms": 27.0
+      "gateway_overhead_ms": 17.0
     },
     "concurrency_8": {
-      "mean_ms": 1646.4,
-      "p50_ms": 1592.0,
-      "p95_ms": 2244.9,
+      "mean_ms": 1725.7,
+      "p50_ms": 1666.4,
+      "p95_ms": 2103.6,
       "requests": 40,
-      "requests_per_s": 4.71,
+      "requests_per_s": 4.42,
       "level_extracted_share": 1.0,
-      "gateway_overhead_ms": 27.2
+      "gateway_overhead_ms": 19.8
     }
   },
-  "engine_endpoint": "http://localhost:8001",
+  "engine_endpoint": "http://localhost:8000",
   "engine_version": "0.11.0",
   "engine_measures": {
     "concurrency_1": {
-      "mean_ms": 1448.6,
-      "p50_ms": 1445.5,
-      "p95_ms": 1657.5,
+      "mean_ms": 1572.3,
+      "p50_ms": 1521.2,
+      "p95_ms": 1872.5,
       "requests": 40,
-      "requests_per_s": 0.69,
-      "tokens_per_s": 67.3,
+      "requests_per_s": 0.64,
+      "tokens_per_s": 66.3,
       "level_extracted_share": 1.0
     },
     "concurrency_4": {
-      "mean_ms": 1767.6,
-      "p50_ms": 1526.7,
-      "p95_ms": 3402.2,
+      "mean_ms": 1851.2,
+      "p50_ms": 1599.0,
+      "p95_ms": 3578.7,
       "requests": 40,
-      "requests_per_s": 2.18,
-      "tokens_per_s": 228.1,
-      "level_extracted_share": 0.95
+      "requests_per_s": 2.11,
+      "tokens_per_s": 228.6,
+      "level_extracted_share": 1.0
     },
     "concurrency_8": {
-      "mean_ms": 1864.2,
-      "p50_ms": 1573.0,
-      "p95_ms": 3586.8,
+      "mean_ms": 1941.3,
+      "p50_ms": 1639.9,
+      "p95_ms": 3685.8,
       "requests": 40,
-      "requests_per_s": 4.13,
-      "tokens_per_s": 429.4,
-      "level_extracted_share": 0.95
+      "requests_per_s": 3.83,
+      "tokens_per_s": 411.9,
+      "level_extracted_share": 1.0
     }
   }
 }

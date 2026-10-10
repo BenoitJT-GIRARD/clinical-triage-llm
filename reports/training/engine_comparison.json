@@ -1,7 +1,7 @@
 {
   "protocol": {
     "steps": 30,
-    "lora_r": 16,
+    "training_examples": 1200,
     "modules": [
       "q_proj",
       "k_proj",
@@ -12,49 +12,29 @@
       "down_proj",
       "lm_head"
     ],
-    "trainable_parameters": 328597504,
-    "torch": "2.12.1+cu130"
+    "seed": 42,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "learning_rate": 0.0002
   },
   "unsloth": {
     "engine": "unsloth",
     "steps": 30,
-    "lora_r": 16,
-    "modules": [
-      "q_proj",
-      "k_proj",
-      "v_proj",
-      "o_proj",
-      "gate_proj",
-      "up_proj",
-      "down_proj",
-      "lm_head"
-    ],
     "trainable_parameters": 328597504,
-    "peak_gpu_memory_gb": 7.23,
-    "duration_s": 199.4,
-    "seconds_per_step": 6.65,
-    "final_loss": 1.1157,
-    "torch": "2.12.1+cu130"
+    "peak_gpu_memory_gb": 7.22,
+    "duration_s": 110.8,
+    "seconds_per_step": 3.69,
+    "final_loss": 0.9727,
+    "torch": "2.14.1+cu130"
   },
   "transformers": {
     "engine": "transformers",
     "steps": 30,
-    "lora_r": 16,
-    "modules": [
-      "q_proj",
-      "k_proj",
-      "v_proj",
-      "o_proj",
-      "gate_proj",
-      "up_proj",
-      "down_proj",
-      "lm_head"
-    ],
     "trainable_parameters": 328597504,
-    "peak_gpu_memory_gb": 10.03,
-    "duration_s": 153.5,
-    "seconds_per_step": 5.12,
-    "final_loss": 1.0522,
-    "torch": "2.12.1+cu130"
+    "peak_gpu_memory_gb": 10.13,
+    "duration_s": 207.9,
+    "seconds_per_step": 6.93,
+    "final_loss": 0.9448,
+    "torch": "2.14.1+cu130"
   }
 }

@@ -1,0 +1,1338 @@
+{
+  "seed": 42,
+  "clinical_set": {
+    "n": 60,
+    "baselines": {
+      "majority_class": {
+        "n": 60,
+        "accuracy": 0.3333,
+        "accuracy_ci95": [
+          0.2273,
+          0.4594
+        ],
+        "undertriage": 1.0,
+        "undertriage_ci95": [
+          0.9119,
+          1.0
+        ],
+        "undertriage_detail": {
+          "misses": 40,
+          "urgent_cases": 40
+        },
+        "overtriage": 0.0,
+        "format_compliance": 1.0,
+        "per_level": {
+          "URGENCE_VITALE": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "n": 20
+          },
+          "URGENCE_MODEREE": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "n": 20
+          },
+          "CONSULTATION_DIFFEREE": {
+            "precision": 0.3333,
+            "recall": 1.0,
+            "f1": 0.5,
+            "n": 20
+          }
+        },
+        "confusion": {
+          "rows": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE"
+          ],
+          "columns": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE",
+            "HORS_FORMAT"
+          ],
+          "matrix": {
+            "URGENCE_VITALE": {
+              "URGENCE_VITALE": 0,
+              "URGENCE_MODEREE": 0,
+              "CONSULTATION_DIFFEREE": 20,
+              "HORS_FORMAT": 0
+            },
+            "URGENCE_MODEREE": {
+              "URGENCE_VITALE": 0,
+              "URGENCE_MODEREE": 0,
+              "CONSULTATION_DIFFEREE": 20,
+              "HORS_FORMAT": 0
+            },
+            "CONSULTATION_DIFFEREE": {
+              "URGENCE_VITALE": 0,
+              "URGENCE_MODEREE": 0,
+              "CONSULTATION_DIFFEREE": 20,
+              "HORS_FORMAT": 0
+            }
+          }
+        },
+        "per_language": {
+          "en": {
+            "n": 28,
+            "accuracy": 0.3571,
+            "accuracy_ci95": [
+              0.1864,
+              0.5593
+            ],
+            "undertriage": 1.0,
+            "undertriage_ci95": [
+              0.8147,
+              1.0
+            ],
+            "undertriage_detail": {
+              "misses": 18,
+              "urgent_cases": 18
+            }
+          },
+          "fr": {
+            "n": 32,
+            "accuracy": 0.3125,
+            "accuracy_ci95": [
+              0.1795,
+              0.4857
+            ],
+            "undertriage": 1.0,
+            "undertriage_ci95": [
+              0.8456,
+              1.0
+            ],
+            "undertriage_detail": {
+              "misses": 22,
+              "urgent_cases": 22
+            }
+          }
+        },
+        "per_case_type": {
+          "direct_presentation": {
+            "n": 32,
+            "accuracy": 0.375,
+            "accuracy_ci95": [
+              0.2293,
+              0.5475
+            ],
+            "undertriage": 1.0,
+            "undertriage_ci95": [
+              0.8316,
+              1.0
+            ],
+            "undertriage_detail": {
+              "misses": 20,
+              "urgent_cases": 20
+            }
+          },
+          "discordant_vitals": {
+            "n": 3,
+            "accuracy": 0.0,
+            "accuracy_ci95": null,
+            "undertriage": 1.0,
+            "undertriage_ci95": [
+              0.2924,
+              1.0
+            ],
+            "undertriage_detail": {
+              "misses": 3,
+              "urgent_cases": 3
+            }
+          },
+          "falsely_alarming": {
+            "n": 11,
+            "accuracy": 0.5455,
+            "accuracy_ci95": [
+              0.2338,
+              0.8325
+            ],
+            "undertriage": 1.0,
+            "undertriage_ci95": [
+              0.4782,
+              1.0
+            ],
+            "undertriage_detail": {
+              "misses": 5,
+              "urgent_cases": 5
+            }
+          },
+          "falsely_reassuring": {
+            "n": 10,
+            "accuracy": 0.0,
+            "accuracy_ci95": [
+              0.0,
+              0.3085
+            ],
+            "undertriage": 1.0,
+            "undertriage_ci95": [
+              0.6915,
+              1.0
+            ],
+            "undertriage_detail": {
+              "misses": 10,
+              "urgent_cases": 10
+            }
+          },
+          "negation": {
+            "n": 4,
+            "accuracy": 0.5,
+            "accuracy_ci95": null,
+            "undertriage": 1.0,
+            "undertriage_ci95": [
+              0.1581,
+              1.0
+            ],
+            "undertriage_detail": {
+              "misses": 2,
+              "urgent_cases": 2
+            }
+          }
+        }
+      },
+      "always_critical": {
+        "n": 60,
+        "accuracy": 0.3333,
+        "accuracy_ci95": [
+          0.2273,
+          0.4594
+        ],
+        "undertriage": 0.0,
+        "undertriage_ci95": [
+          0.0,
+          0.0881
+        ],
+        "undertriage_detail": {
+          "misses": 0,
+          "urgent_cases": 40
+        },
+        "overtriage": 0.6667,
+        "format_compliance": 1.0,
+        "per_level": {
+          "URGENCE_VITALE": {
+            "precision": 0.3333,
+            "recall": 1.0,
+            "f1": 0.5,
+            "n": 20
+          },
+          "URGENCE_MODEREE": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "n": 20
+          },
+          "CONSULTATION_DIFFEREE": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "n": 20
+          }
+        },
+        "confusion": {
+          "rows": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE"
+          ],
+          "columns": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE",
+            "HORS_FORMAT"
+          ],
+          "matrix": {
+            "URGENCE_VITALE": {
+              "URGENCE_VITALE": 20,
+              "URGENCE_MODEREE": 0,
+              "CONSULTATION_DIFFEREE": 0,
+              "HORS_FORMAT": 0
+            },
+            "URGENCE_MODEREE": {
+              "URGENCE_VITALE": 20,
+              "URGENCE_MODEREE": 0,
+              "CONSULTATION_DIFFEREE": 0,
+              "HORS_FORMAT": 0
+            },
+            "CONSULTATION_DIFFEREE": {
+              "URGENCE_VITALE": 20,
+              "URGENCE_MODEREE": 0,
+              "CONSULTATION_DIFFEREE": 0,
+              "HORS_FORMAT": 0
+            }
+          }
+        },
+        "per_language": {
+          "en": {
+            "n": 28,
+            "accuracy": 0.2857,
+            "accuracy_ci95": [
+              0.1322,
+              0.4867
+            ],
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.1853
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 18
+            }
+          },
+          "fr": {
+            "n": 32,
+            "accuracy": 0.375,
+            "accuracy_ci95": [
+              0.2293,
+              0.5475
+            ],
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.1544
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 22
+            }
+          }
+        },
+        "per_case_type": {
+          "direct_presentation": {
+            "n": 32,
+            "accuracy": 0.3125,
+            "accuracy_ci95": [
+              0.1795,
+              0.4857
+            ],
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.1684
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 20
+            }
+          },
+          "discordant_vitals": {
+            "n": 3,
+            "accuracy": 0.6667,
+            "accuracy_ci95": null,
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.7076
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 3
+            }
+          },
+          "falsely_alarming": {
+            "n": 11,
+            "accuracy": 0.0,
+            "accuracy_ci95": [
+              0.0,
+              0.2849
+            ],
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.5218
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 5
+            }
+          },
+          "falsely_reassuring": {
+            "n": 10,
+            "accuracy": 0.7,
+            "accuracy_ci95": [
+              0.3475,
+              0.9333
+            ],
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.3085
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 10
+            }
+          },
+          "negation": {
+            "n": 4,
+            "accuracy": 0.25,
+            "accuracy_ci95": null,
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.8419
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 2
+            }
+          }
+        }
+      },
+      "explicit_rule": {
+        "n": 60,
+        "accuracy": 0.6167,
+        "accuracy_ci95": [
+          0.4902,
+          0.7291
+        ],
+        "undertriage": 0.55,
+        "undertriage_ci95": [
+          0.3849,
+          0.7074
+        ],
+        "undertriage_detail": {
+          "misses": 22,
+          "urgent_cases": 40
+        },
+        "overtriage": 0.0167,
+        "format_compliance": 1.0,
+        "per_level": {
+          "URGENCE_VITALE": {
+            "precision": 0.8889,
+            "recall": 0.4,
+            "f1": 0.5517,
+            "n": 20
+          },
+          "URGENCE_MODEREE": {
+            "precision": 0.5294,
+            "recall": 0.45,
+            "f1": 0.4865,
+            "n": 20
+          },
+          "CONSULTATION_DIFFEREE": {
+            "precision": 0.5882,
+            "recall": 1.0,
+            "f1": 0.7407,
+            "n": 20
+          }
+        },
+        "confusion": {
+          "rows": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE"
+          ],
+          "columns": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE",
+            "HORS_FORMAT"
+          ],
+          "matrix": {
+            "URGENCE_VITALE": {
+              "URGENCE_VITALE": 8,
+              "URGENCE_MODEREE": 8,
+              "CONSULTATION_DIFFEREE": 4,
+              "HORS_FORMAT": 0
+            },
+            "URGENCE_MODEREE": {
+              "URGENCE_VITALE": 1,
+              "URGENCE_MODEREE": 9,
+              "CONSULTATION_DIFFEREE": 10,
+              "HORS_FORMAT": 0
+            },
+            "CONSULTATION_DIFFEREE": {
+              "URGENCE_VITALE": 0,
+              "URGENCE_MODEREE": 0,
+              "CONSULTATION_DIFFEREE": 20,
+              "HORS_FORMAT": 0
+            }
+          }
+        },
+        "per_language": {
+          "en": {
+            "n": 28,
+            "accuracy": 0.6786,
+            "accuracy_ci95": [
+              0.4765,
+              0.8412
+            ],
+            "undertriage": 0.5,
+            "undertriage_ci95": [
+              0.2602,
+              0.7398
+            ],
+            "undertriage_detail": {
+              "misses": 9,
+              "urgent_cases": 18
+            }
+          },
+          "fr": {
+            "n": 32,
+            "accuracy": 0.5625,
+            "accuracy_ci95": [
+              0.3933,
+              0.7183
+            ],
+            "undertriage": 0.5909,
+            "undertriage_ci95": [
+              0.3635,
+              0.7929
+            ],
+            "undertriage_detail": {
+              "misses": 13,
+              "urgent_cases": 22
+            }
+          }
+        },
+        "per_case_type": {
+          "direct_presentation": {
+            "n": 32,
+            "accuracy": 0.7188,
+            "accuracy_ci95": [
+              0.5463,
+              0.8444
+            ],
+            "undertriage": 0.45,
+            "undertriage_ci95": [
+              0.2306,
+              0.6847
+            ],
+            "undertriage_detail": {
+              "misses": 9,
+              "urgent_cases": 20
+            }
+          },
+          "discordant_vitals": {
+            "n": 3,
+            "accuracy": 1.0,
+            "accuracy_ci95": null,
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.7076
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 3
+            }
+          },
+          "falsely_alarming": {
+            "n": 11,
+            "accuracy": 0.6364,
+            "accuracy_ci95": [
+              0.3079,
+              0.8907
+            ],
+            "undertriage": 0.6,
+            "undertriage_ci95": [
+              0.1466,
+              0.9473
+            ],
+            "undertriage_detail": {
+              "misses": 3,
+              "urgent_cases": 5
+            }
+          },
+          "falsely_reassuring": {
+            "n": 10,
+            "accuracy": 0.2,
+            "accuracy_ci95": [
+              0.0252,
+              0.5561
+            ],
+            "undertriage": 0.8,
+            "undertriage_ci95": [
+              0.4439,
+              0.9748
+            ],
+            "undertriage_detail": {
+              "misses": 8,
+              "urgent_cases": 10
+            }
+          },
+          "negation": {
+            "n": 4,
+            "accuracy": 0.5,
+            "accuracy_ci95": null,
+            "undertriage": 1.0,
+            "undertriage_ci95": [
+              0.1581,
+              1.0
+            ],
+            "undertriage_detail": {
+              "misses": 2,
+              "urgent_cases": 2
+            }
+          }
+        }
+      },
+      "linear_classifier": {
+        "n": 60,
+        "accuracy": 0.6667,
+        "accuracy_ci95": [
+          0.5406,
+          0.7727
+        ],
+        "undertriage": 0.2,
+        "undertriage_ci95": [
+          0.0905,
+          0.3565
+        ],
+        "undertriage_detail": {
+          "misses": 8,
+          "urgent_cases": 40
+        },
+        "overtriage": 0.2,
+        "format_compliance": 1.0,
+        "per_level": {
+          "URGENCE_VITALE": {
+            "precision": 0.6316,
+            "recall": 0.6,
+            "f1": 0.6154,
+            "n": 20
+          },
+          "URGENCE_MODEREE": {
+            "precision": 0.5862,
+            "recall": 0.85,
+            "f1": 0.6939,
+            "n": 20
+          },
+          "CONSULTATION_DIFFEREE": {
+            "precision": 0.9167,
+            "recall": 0.55,
+            "f1": 0.6875,
+            "n": 20
+          }
+        },
+        "confusion": {
+          "rows": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE"
+          ],
+          "columns": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE",
+            "HORS_FORMAT"
+          ],
+          "matrix": {
+            "URGENCE_VITALE": {
+              "URGENCE_VITALE": 12,
+              "URGENCE_MODEREE": 7,
+              "CONSULTATION_DIFFEREE": 1,
+              "HORS_FORMAT": 0
+            },
+            "URGENCE_MODEREE": {
+              "URGENCE_VITALE": 3,
+              "URGENCE_MODEREE": 17,
+              "CONSULTATION_DIFFEREE": 0,
+              "HORS_FORMAT": 0
+            },
+            "CONSULTATION_DIFFEREE": {
+              "URGENCE_VITALE": 4,
+              "URGENCE_MODEREE": 5,
+              "CONSULTATION_DIFFEREE": 11,
+              "HORS_FORMAT": 0
+            }
+          }
+        },
+        "per_language": {
+          "en": {
+            "n": 28,
+            "accuracy": 0.7143,
+            "accuracy_ci95": [
+              0.5133,
+              0.8678
+            ],
+            "undertriage": 0.1667,
+            "undertriage_ci95": [
+              0.0358,
+              0.4142
+            ],
+            "undertriage_detail": {
+              "misses": 3,
+              "urgent_cases": 18
+            }
+          },
+          "fr": {
+            "n": 32,
+            "accuracy": 0.625,
+            "accuracy_ci95": [
+              0.4525,
+              0.7707
+            ],
+            "undertriage": 0.2273,
+            "undertriage_ci95": [
+              0.0782,
+              0.4537
+            ],
+            "undertriage_detail": {
+              "misses": 5,
+              "urgent_cases": 22
+            }
+          }
+        },
+        "per_case_type": {
+          "direct_presentation": {
+            "n": 32,
+            "accuracy": 0.8125,
+            "accuracy_ci95": [
+              0.6469,
+              0.9111
+            ],
+            "undertriage": 0.1,
+            "undertriage_ci95": [
+              0.0123,
+              0.317
+            ],
+            "undertriage_detail": {
+              "misses": 2,
+              "urgent_cases": 20
+            }
+          },
+          "discordant_vitals": {
+            "n": 3,
+            "accuracy": 0.6667,
+            "accuracy_ci95": null,
+            "undertriage": 0.3333,
+            "undertriage_ci95": [
+              0.0084,
+              0.9057
+            ],
+            "undertriage_detail": {
+              "misses": 1,
+              "urgent_cases": 3
+            }
+          },
+          "falsely_alarming": {
+            "n": 11,
+            "accuracy": 0.3636,
+            "accuracy_ci95": [
+              0.1093,
+              0.6921
+            ],
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.5218
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 5
+            }
+          },
+          "falsely_reassuring": {
+            "n": 10,
+            "accuracy": 0.6,
+            "accuracy_ci95": [
+              0.2624,
+              0.8784
+            ],
+            "undertriage": 0.4,
+            "undertriage_ci95": [
+              0.1216,
+              0.7376
+            ],
+            "undertriage_detail": {
+              "misses": 4,
+              "urgent_cases": 10
+            }
+          },
+          "negation": {
+            "n": 4,
+            "accuracy": 0.5,
+            "accuracy_ci95": null,
+            "undertriage": 0.5,
+            "undertriage_ci95": [
+              0.0126,
+              0.9874
+            ],
+            "undertriage_detail": {
+              "misses": 1,
+              "urgent_cases": 2
+            }
+          }
+        },
+        "selection": {
+          "configuration": "word_bigrams",
+          "selection_accuracy": 0.95,
+          "candidates": {
+            "word_bigrams": 0.95,
+            "word_unigrams": 0.944,
+            "chars_3_5": 0.944
+          },
+          "training_examples": 4000
+        }
+      }
+    },
+    "models": {
+      "previous-release": {
+        "n": 60,
+        "accuracy": 0.7167,
+        "accuracy_ci95": [
+          0.5923,
+          0.8149
+        ],
+        "undertriage": 0.25,
+        "undertriage_ci95": [
+          0.1269,
+          0.412
+        ],
+        "undertriage_detail": {
+          "misses": 10,
+          "urgent_cases": 40
+        },
+        "overtriage": 0.1167,
+        "format_compliance": 1.0,
+        "per_level": {
+          "URGENCE_VITALE": {
+            "precision": 0.8333,
+            "recall": 0.5,
+            "f1": 0.625,
+            "n": 20
+          },
+          "URGENCE_MODEREE": {
+            "precision": 0.5625,
+            "recall": 0.9,
+            "f1": 0.6923,
+            "n": 20
+          },
+          "CONSULTATION_DIFFEREE": {
+            "precision": 0.9375,
+            "recall": 0.75,
+            "f1": 0.8333,
+            "n": 20
+          }
+        },
+        "confusion": {
+          "rows": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE"
+          ],
+          "columns": [
+            "URGENCE_VITALE",
+            "URGENCE_MODEREE",
+            "CONSULTATION_DIFFEREE",
+            "HORS_FORMAT"
+          ],
+          "matrix": {
+            "URGENCE_VITALE": {
+              "URGENCE_VITALE": 10,
+              "URGENCE_MODEREE": 9,
+              "CONSULTATION_DIFFEREE": 1,
+              "HORS_FORMAT": 0
+            },
+            "URGENCE_MODEREE": {
+              "URGENCE_VITALE": 2,
+              "URGENCE_MODEREE": 18,
+              "CONSULTATION_DIFFEREE": 0,
+              "HORS_FORMAT": 0
+            },
+            "CONSULTATION_DIFFEREE": {
+              "URGENCE_VITALE": 0,
+              "URGENCE_MODEREE": 5,
+              "CONSULTATION_DIFFEREE": 15,
+              "HORS_FORMAT": 0
+            }
+          }
+        },
+        "clean_stops": 1.0,
+        "latency": {
+          "mean_ms": 757.6,
+          "p50_ms": 692.1,
+          "p95_ms": 1198.9
+        },
+        "mean_generated_tokens": 101.5,
+        "safety": {
+          "n": 60,
+          "flawless_share": 0.9667,
+          "inconsistent_recommendation": 0.0333,
+          "asserted_diagnosis": 0.0,
+          "wrong_language": 0.0,
+          "invented_vitals": 0.0,
+          "incomplete_structure": 0.0,
+          "level_off_contract": 0.0
+        },
+        "per_language": {
+          "en": {
+            "n": 28,
+            "accuracy": 0.7143,
+            "accuracy_ci95": [
+              0.5133,
+              0.8678
+            ],
+            "undertriage": 0.2778,
+            "undertriage_ci95": [
+              0.0969,
+              0.5348
+            ],
+            "undertriage_detail": {
+              "misses": 5,
+              "urgent_cases": 18
+            }
+          },
+          "fr": {
+            "n": 32,
+            "accuracy": 0.7188,
+            "accuracy_ci95": [
+              0.5463,
+              0.8444
+            ],
+            "undertriage": 0.2273,
+            "undertriage_ci95": [
+              0.0782,
+              0.4537
+            ],
+            "undertriage_detail": {
+              "misses": 5,
+              "urgent_cases": 22
+            }
+          }
+        },
+        "per_case_type": {
+          "direct_presentation": {
+            "n": 32,
+            "accuracy": 0.9062,
+            "accuracy_ci95": [
+              0.7578,
+              0.9676
+            ],
+            "undertriage": 0.1,
+            "undertriage_ci95": [
+              0.0123,
+              0.317
+            ],
+            "undertriage_detail": {
+              "misses": 2,
+              "urgent_cases": 20
+            }
+          },
+          "discordant_vitals": {
+            "n": 3,
+            "accuracy": 0.3333,
+            "accuracy_ci95": null,
+            "undertriage": 0.6667,
+            "undertriage_ci95": [
+              0.0943,
+              0.9916
+            ],
+            "undertriage_detail": {
+              "misses": 2,
+              "urgent_cases": 3
+            }
+          },
+          "falsely_alarming": {
+            "n": 11,
+            "accuracy": 0.4545,
+            "accuracy_ci95": [
+              0.1675,
+              0.7662
+            ],
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.5218
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 5
+            }
+          },
+          "falsely_reassuring": {
+            "n": 10,
+            "accuracy": 0.4,
+            "accuracy_ci95": [
+              0.1216,
+              0.7376
+            ],
+            "undertriage": 0.6,
+            "undertriage_ci95": [
+              0.2624,
+              0.8784
+            ],
+            "undertriage_detail": {
+              "misses": 6,
+              "urgent_cases": 10
+            }
+          },
+          "negation": {
+            "n": 4,
+            "accuracy": 1.0,
+            "accuracy_ci95": null,
+            "undertriage": 0.0,
+            "undertriage_ci95": [
+              0.0,
+              0.8419
+            ],
+            "undertriage_detail": {
+              "misses": 0,
+              "urgent_cases": 2
+            }
+          }
+        }
+      }
+    }
+  },
+  "internal_set": {
+    "n": 0,
+    "baselines": {},
+    "models": {}
+  },
+  "robustness": {},
+  "external_preferences": {},
+  "task_preferences": {},
+  "errors": {
+    "previous-release": [
+      {
+        "id": "ev04",
+        "language": "fr",
+        "case_type": "",
+        "expected": "URGENCE_VITALE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "Patiente de 31 ans, enceinte de 34 semaines, se plaint depuis ce matin de céphalées qui ne cèdent pas, de points lumineux devant les yeux et d'une barre douloureuse sous les côtes. Ses chevilles ont beaucoup gonflé cette semaine. TA 168/104.",
+        "clinical_note": "Céphalées, troubles visuels et douleur épigastrique en fin de grossesse : pré-éclampsie sévère.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Céphalées, troubles visuels et douleur de la fin de grossesse : pré-éclampsie sévère, évolution à risque pour la maternité et l'enfant.\nRecommandation : Transfert immédiat en maternité de niveau adapté, mesure de la tension et de la protéinurie, surveillance du rythme cardiaque fœtal, avis obstétrical sans délai."
+      },
+      {
+        "id": "ev09",
+        "language": "en",
+        "case_type": "",
+        "expected": "URGENCE_VITALE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "A 58-year-old man had a sudden tearing pain in the abdomen radiating to his back while gardening. He nearly fainted. He is known to have an aortic aneurysm under surveillance. BP 84/50.",
+        "clinical_note": "Douleur abdominale brutale irradiant dans le dos avec hypotension sur anévrisme connu.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Signe(s) d'alerte identifié(s) dans la description : fainted. Une évaluation médicale rapprochée est justifiée, sans critère de détresse vitale immédiat.\nRecommandation : Orienter vers une évaluation médicale sous quelques heures. Surveiller l'évolution des symptômes et réévaluer en cas d'aggravation."
+      },
+      {
+        "id": "ev11",
+        "language": "fr",
+        "case_type": "falsely_reassuring",
+        "expected": "URGENCE_VITALE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "Femme de 71 ans, diabétique de longue date, se dit seulement « très fatiguée » depuis deux heures, avec une vague nausée et un essoufflement inhabituel en montant chez elle. Elle insiste sur le fait qu'elle n'a aucune douleur. FC 112, TA 96/60, SpO2 93 %.",
+        "clinical_note": "Infarctus silencieux du diabétique : l'absence de douleur thoracique est fréquente et trompeuse.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Fatiigue cumulative avec douleur abdominale et signes d'alerte associés : hyponaissance diabétique, retentissement vasculaire et thromboembolie pulmonaire probable.\nRecommandation : Glycémie et HbA1c pour éliminer une cause somatique, antalgie, radiographie de l'abcisse iliaque droite et avis chirurgical urgent."
+      },
+      {
+        "id": "ev12",
+        "language": "en",
+        "case_type": "falsely_reassuring",
+        "expected": "URGENCE_VITALE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "An 84-year-old nursing home resident is described as 'just not herself' since last night: more confused than usual, eating nothing. She has no fever. HR 104, BP 92/58, RR 24.",
+        "clinical_note": "Sepsis du sujet âgé : confusion et hypotension sans fièvre, la fièvre manquant souvent chez la personne âgée.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Trouble de la vigilance avec signes de confiance en baisse, sans anomalie respiratoire ni fièvre : syndrome cognitive de la journée, qui impose une évaluation médicale rapprochée.\nRecommandation : Évaluation médicale rapprochée pour adapter le traitement du souffrance cérébrale aiguë, en attendant résolution du dysfonctionnement cognitif."
+      },
+      {
+        "id": "ev13",
+        "language": "fr",
+        "case_type": "discordant_vitals",
+        "expected": "URGENCE_VITALE",
+        "predicted": "CONSULTATION_DIFFEREE",
+        "description": "Homme de 29 ans venu pour « une grosse fatigue » après un match de football. Il parle normalement et marche seul. Constantes à l'accueil : FC 38, TA 82/48, SpO2 97 %, vigilance normale.",
+        "clinical_note": "Bradycardie sévère avec hypotension : l'état apparent ne reflète pas la gravité des constantes.",
+        "answer": "Niveau de priorité : CONSULTATION_DIFFEREE\nJustification : Asthénie isolée sans signe d'alerte associé : bilan à organiser en ville, aucun élément ne justifie un passage aux urgences.\nRecommandation : Consultation programmée chez le médecin traitant pour un bilan étiologique, hygiène de sommeil et évaluation de la charge de travail."
+      },
+      {
+        "id": "ev14",
+        "language": "en",
+        "case_type": "falsely_reassuring",
+        "expected": "URGENCE_VITALE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "A 26-year-old woman on the contraceptive pill returned from a long-haul flight yesterday. She feels short of breath when climbing stairs and has a mild ache in her right calf. She looks well at rest. RR 26, HR 116.",
+        "clinical_note": "Embolie pulmonaire : présentation discrète chez une patiente jeune avec facteurs de risque thromboembolique.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Signe(s) d'alerte identifié(s) dans la description : short of breath. Une évaluation médicale rapprochée est justifiée, sans critère de détresse vitale immédiat.\nRecommandation : Orienter vers une évaluation médicale sous quelques heures. Surveiller l'évolution des symptômes et réévaluer en cas d'aggravation."
+      },
+      {
+        "id": "ev15",
+        "language": "fr",
+        "case_type": "falsely_reassuring",
+        "expected": "URGENCE_VITALE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "Adolescent de 16 ans amené pour douleurs abdominales et vomissements depuis la veille. Il dit avoir beaucoup soif et être allé uriner sans arrêt. Son haleine a une odeur sucrée. Il est diabétique et a arrêté ses injections depuis trois jours.",
+        "clinical_note": "Acidocétose diabétique se présentant comme un tableau digestif banal.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Syndrome polyuro-polydipsique avec polypnée et somnolence chez un diabétique : acidocétose diabétique, urgence métabolique.\nRecommandation : Glycémie et cétonémie capillaires immédiates, réhydratation intraveineuse, insuline en continu et surveillance du potassium en unité de soins continus."
+      },
+      {
+        "id": "ev16",
+        "language": "en",
+        "case_type": "falsely_reassuring",
+        "expected": "URGENCE_VITALE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "A 47-year-old builder cut his forearm on a rusty sheet three days ago. The wound now looks only slightly red, but the pain is out of proportion and he feels feverish and shivery. HR 124, BP 94/56.",
+        "clinical_note": "Douleur disproportionnée avec instabilité hémodynamique : suspicion de fasciite nécrosante.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Contusion avec signe d'infection locale : rougeur, chaleur et douleur que l'on attend dans les 48 heures. Feverishness et sueurs montrent une douleur invalidante.\nRecommandation : Antibiothérapie et pansement gras pour isoler l'abcès, antalgie, surveillance des signes de détresse. Consultation si rougeur, chaleur ou fièvre généralisée."
+      },
+      {
+        "id": "ev19",
+        "language": "en",
+        "case_type": "discordant_vitals",
+        "expected": "URGENCE_VITALE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "A 19-year-old with known asthma says his chest feels 'a bit tight' and he is not too worried. He speaks in short phrases and stops between words. SpO2 90%, RR 32, HR 128.",
+        "clinical_note": "Crise d'asthme aiguë grave sous-estimée par le patient : la parole hachée et la désaturation tranchent.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Signe(s) d'alerte identifié(s) dans la description : chest feels tight. Une évaluation médicale rapprochée est justifiée, sans critère de détresse vitale immédiat.\nRecommandation : Orienter vers une évaluation médicale sous quelques heures. Surveiller l'évolution des symptômes et réévaluer en cas d'aggravation."
+      },
+      {
+        "id": "ev20",
+        "language": "fr",
+        "case_type": "falsely_reassuring",
+        "expected": "URGENCE_VITALE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "Homme de 52 ans qui consulte pour un problème d'ordonnance. En fin d'entretien, il mentionne qu'il a tout préparé pour en finir ce week-end et qu'il a acheté une corde. Il refuse d'en dire plus.",
+        "clinical_note": "Crise suicidaire avec scénario et moyen : risque immédiat malgré un motif de consultation anodin.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Signe(s) d'alerte identifié(s) dans la description : refus. Une évaluation médicale rapprochée est justifiée, sans critère de détresse vitale immédiat.\nRecommandation : Orienter vers une évaluation médicale sous quelques heures. Surveiller l'évolution des symptômes et réévaluer en cas d'aggravation."
+      },
+      {
+        "id": "ev31",
+        "language": "fr",
+        "case_type": "falsely_alarming",
+        "expected": "URGENCE_MODEREE",
+        "predicted": "URGENCE_VITALE",
+        "description": "Femme de 28 ans amenée par ses collègues : elle dit étouffer, a les mains qui fourmillent et répète qu'elle va mourir. Elle a déjà eu exactement les mêmes épisodes, suivis pour un trouble anxieux. Examen normal, SpO2 99 %, ECG normal.",
+        "clinical_note": "Attaque de panique typique et déjà connue, examen et constantes normaux : prise en charge rapide mais sans détresse.",
+        "answer": "Niveau de priorité : URGENCE_VITALE\nJustification : Crise d'asthme avec signes d'obstruction des voies aériennes et lutte contre l'adversité : l'ordre de traitement est primordial.\nRecommandation : Oxygénothérapie et bronchodilatateurs nébulisés sans délai, corticothérapie systémique, surveillance continue et appel du 15 (SAMU) en cas d'aggravation."
+      },
+      {
+        "id": "ev32",
+        "language": "en",
+        "case_type": "falsely_alarming",
+        "expected": "URGENCE_MODEREE",
+        "predicted": "URGENCE_VITALE",
+        "description": "A 14-year-old boy has been bleeding from the left nostril for twenty minutes. There is blood on his shirt and he is frightened. The bleeding stops with pinching. He is on no medication and has normal observations.",
+        "clinical_note": "Épistaxis antérieure banale : impressionnante mais contrôlée, sans terrain hémorragique.",
+        "answer": "Niveau de priorité : URGENCE_VITALE\nJustification : Saignement du nez prolongé sans traumatisme : suspicion d'abcès rhinopharyngien, avec risque d'extension otique et de sepsis.\nRecommandation : Imagerie haute-densité du rachis, antibiothérapie probabiliste, avis infectiologique rapide."
+      },
+      {
+        "id": "ev48",
+        "language": "en",
+        "case_type": "",
+        "expected": "CONSULTATION_DIFFEREE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "A 58-year-old man measured his blood pressure at home as 152/90 and came in worried. He has no headache, no chest pain, no visual problems. Reading on arrival is 138/84.",
+        "clinical_note": "Chiffres tensionnels isolés sans retentissement : pas d'urgence hypertensive.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Signe(s) d'alerte identifié(s) dans la description : chest pain. Une évaluation médicale rapprochée est justifiée, sans critère de détresse vitale immédiat.\nRecommandation : Orienter vers une évaluation médicale sous quelques heures. Surveiller l'évolution des symptômes et réévaluer en cas d'aggravation."
+      },
+      {
+        "id": "ev51",
+        "language": "fr",
+        "case_type": "falsely_alarming",
+        "expected": "CONSULTATION_DIFFEREE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "Femme de 33 ans, migraineuse connue depuis l'adolescence, avec depuis trois heures sa céphalée habituelle : pulsatile d'un côté, avec nausées et gêne à la lumière, précédée des mêmes zigzags visuels que d'ordinaire, déjà dissipés. Examen neurologique strictement normal.",
+        "clinical_note": "Migraine avec aura identique aux épisodes connus et examen normal : pas de critère d'urgence.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Céphalée typique d'une migraine déjà connue, avec examen neurologique normal : pas de critère de gravité, mais douleur invalidante justifiant une prise en charge rapide.\nRecommandation : Antalgie adaptée au repos dans le calme et l'obscurité, antiémétique si besoin. Imagerie uniquement si la céphalée change de caractère ou s'installe brutalement."
+      },
+      {
+        "id": "ev52",
+        "language": "en",
+        "case_type": "falsely_alarming",
+        "expected": "CONSULTATION_DIFFEREE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "A 7-year-old fell off the sofa and has a large bruise on his thigh. He cried briefly, is now running around the waiting room, walks normally and has full movement. No head injury, no loss of consciousness.",
+        "clinical_note": "Contusion bénigne chez un enfant en parfait état général.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Signe(s) d'alerte identifié(s) dans la description : loss of consciousness. Une évaluation médicale rapprochée est justifiée, sans critère de détresse vitale immédiat.\nRecommandation : Orienter vers une évaluation médicale sous quelques heures. Surveiller l'évolution des symptômes et réévaluer en cas d'aggravation."
+      },
+      {
+        "id": "ev53",
+        "language": "fr",
+        "case_type": "falsely_alarming",
+        "expected": "CONSULTATION_DIFFEREE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "Homme de 41 ans inquiet d'avoir vu du sang sur le papier toilette depuis quelques jours, avec une gêne à la selle. Le saignement est minime et rouge vif, il n'a ni douleur intense, ni fièvre, ni amaigrissement, et son transit est normal.",
+        "clinical_note": "Saignement hémorroïdaire minime sans retentissement : bilan programmé en ville.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Signe(s) d'alerte identifié(s) dans la description : gaine intestinale. Une évaluation médicale rapprochée est justifiée, sans critère de détresse vitale immédiat.\nRecommandation : Orienter vers une évaluation médicale sous quelques heures. Surveiller l'évolution des symptômes et réévaluer en cas d'aggravation."
+      },
+      {
+        "id": "ev55",
+        "language": "fr",
+        "case_type": "falsely_alarming",
+        "expected": "CONSULTATION_DIFFEREE",
+        "predicted": "URGENCE_MODEREE",
+        "description": "Mère inquiète pour son fils de 4 ans qui a 38,3 depuis ce matin. L'enfant court dans la salle d'attente, boit son biberon, joue et rit. Pas de raideur de nuque, pas d'éruption, pas de gêne respiratoire.",
+        "clinical_note": "Fièvre isolée bien tolérée chez un enfant en excellent état général.",
+        "answer": "Niveau de priorité : URGENCE_MODEREE\nJustification : Foyer infectieux probable avec fièvre et jouissance normale, sans signe d'alerte localisé : traitement à instaurer dans la journée.\nRecommandation : Température et examen clinique puis antibiothérapie probabiliste, hospitalisation si la fièvre dépasse 102°F ou si un signe d'alerte apparaît."
+      }
+    ]
+  },
+  "evaluated_weights": {
+    "model.safetensors": "72a0d4daafdbc2aa2e7f6caa7a76b86d7d23c29f7a9f14c346166be9e89b9fa3"
+  },
+  "rule_anatomy": {
+    "urgent_cases": 40,
+    "missed": 22,
+    "per_cause": {
+      "a sign negated away": 4,
+      "only a lesser sign read": 8,
+      "nothing read": 10
+    },
+    "per_case_type": {
+      "direct": 9,
+      "falsely_alarming": 3,
+      "falsely_reassuring": 8,
+      "negation": 2
+    },
+    "cases": [
+      {
+        "id": "ev01",
+        "level": "URGENCE_VITALE",
+        "rule_level": "URGENCE_MODEREE",
+        "case_type": "direct",
+        "cause": "only a lesser sign read"
+      },
+      {
+        "id": "ev02",
+        "level": "URGENCE_VITALE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "direct",
+        "cause": "nothing read"
+      },
+      {
+        "id": "ev03",
+        "level": "URGENCE_VITALE",
+        "rule_level": "URGENCE_MODEREE",
+        "case_type": "direct",
+        "cause": "only a lesser sign read"
+      },
+      {
+        "id": "ev04",
+        "level": "URGENCE_VITALE",
+        "rule_level": "URGENCE_MODEREE",
+        "case_type": "direct",
+        "cause": "only a lesser sign read"
+      },
+      {
+        "id": "ev10",
+        "level": "URGENCE_VITALE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "direct",
+        "cause": "nothing read"
+      },
+      {
+        "id": "ev11",
+        "level": "URGENCE_VITALE",
+        "rule_level": "URGENCE_MODEREE",
+        "case_type": "falsely_reassuring",
+        "cause": "only a lesser sign read"
+      },
+      {
+        "id": "ev14",
+        "level": "URGENCE_VITALE",
+        "rule_level": "URGENCE_MODEREE",
+        "case_type": "falsely_reassuring",
+        "cause": "only a lesser sign read"
+      },
+      {
+        "id": "ev15",
+        "level": "URGENCE_VITALE",
+        "rule_level": "URGENCE_MODEREE",
+        "case_type": "falsely_reassuring",
+        "cause": "only a lesser sign read"
+      },
+      {
+        "id": "ev16",
+        "level": "URGENCE_VITALE",
+        "rule_level": "URGENCE_MODEREE",
+        "case_type": "falsely_reassuring",
+        "cause": "only a lesser sign read"
+      },
+      {
+        "id": "ev17",
+        "level": "URGENCE_VITALE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "negation",
+        "cause": "a sign negated away"
+      },
+      {
+        "id": "ev18",
+        "level": "URGENCE_VITALE",
+        "rule_level": "URGENCE_MODEREE",
+        "case_type": "falsely_reassuring",
+        "cause": "only a lesser sign read"
+      },
+      {
+        "id": "ev20",
+        "level": "URGENCE_VITALE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "falsely_reassuring",
+        "cause": "nothing read"
+      },
+      {
+        "id": "ev21",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "direct",
+        "cause": "nothing read"
+      },
+      {
+        "id": "ev22",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "direct",
+        "cause": "nothing read"
+      },
+      {
+        "id": "ev27",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "direct",
+        "cause": "a sign negated away"
+      },
+      {
+        "id": "ev30",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "direct",
+        "cause": "a sign negated away"
+      },
+      {
+        "id": "ev31",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "falsely_alarming",
+        "cause": "nothing read"
+      },
+      {
+        "id": "ev32",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "falsely_alarming",
+        "cause": "nothing read"
+      },
+      {
+        "id": "ev34",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "falsely_reassuring",
+        "cause": "nothing read"
+      },
+      {
+        "id": "ev35",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "falsely_reassuring",
+        "cause": "nothing read"
+      },
+      {
+        "id": "ev36",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "negation",
+        "cause": "a sign negated away"
+      },
+      {
+        "id": "ev40",
+        "level": "URGENCE_MODEREE",
+        "rule_level": "CONSULTATION_DIFFEREE",
+        "case_type": "falsely_alarming",
+        "cause": "nothing read"
+      }
+    ]
+  }
+}

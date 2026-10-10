@@ -1,0 +1,155 @@
+{
+  "shipped_seed": 42,
+  "seeds": {
+    "42": {
+      "sft": {
+        "clinical_accuracy": 0.7,
+        "clinical_undertriage_misses": 12,
+        "urgent_cases": 40,
+        "format_compliance": 1.0,
+        "internal_accuracy": 0.95
+      },
+      "dpo-merged": {
+        "clinical_accuracy": 0.7167,
+        "clinical_undertriage_misses": 11,
+        "urgent_cases": 40,
+        "format_compliance": 1.0,
+        "internal_accuracy": 0.95
+      },
+      "task_preferences_share": 0.84,
+      "aligned_versus_supervised": {
+        "model": "dpo-merged",
+        "baseline": "sft",
+        "accuracy": {
+          "n": 60,
+          "model_only": 2,
+          "baseline_only": 1,
+          "agreements": 57,
+          "p_mcnemar": 1.0
+        },
+        "undertriage": {
+          "urgent_cases": 40,
+          "model_undertriages": 11,
+          "baseline_undertriages": 12,
+          "model_only": 1,
+          "baseline_only": 0,
+          "p_mcnemar": 1.0
+        }
+      }
+    },
+    "43": {
+      "sft": {
+        "clinical_accuracy": 0.75,
+        "clinical_undertriage_misses": 9,
+        "urgent_cases": 40,
+        "format_compliance": 1.0,
+        "internal_accuracy": 0.9417
+      },
+      "dpo-merged": {
+        "clinical_accuracy": 0.7833,
+        "clinical_undertriage_misses": 9,
+        "urgent_cases": 40,
+        "format_compliance": 1.0,
+        "internal_accuracy": 0.9417
+      },
+      "task_preferences_share": 0.83,
+      "aligned_versus_supervised": {
+        "model": "dpo-merged",
+        "baseline": "sft",
+        "accuracy": {
+          "n": 60,
+          "model_only": 2,
+          "baseline_only": 0,
+          "agreements": 58,
+          "p_mcnemar": 0.5
+        },
+        "undertriage": {
+          "urgent_cases": 40,
+          "model_undertriages": 9,
+          "baseline_undertriages": 9,
+          "model_only": 0,
+          "baseline_only": 0,
+          "p_mcnemar": 1.0
+        }
+      }
+    },
+    "44": {
+      "sft": {
+        "clinical_accuracy": 0.6833,
+        "clinical_undertriage_misses": 13,
+        "urgent_cases": 40,
+        "format_compliance": 1.0,
+        "internal_accuracy": 0.9667
+      },
+      "dpo-merged": {
+        "clinical_accuracy": 0.7,
+        "clinical_undertriage_misses": 13,
+        "urgent_cases": 40,
+        "format_compliance": 1.0,
+        "internal_accuracy": 0.9583
+      },
+      "task_preferences_share": 0.88,
+      "aligned_versus_supervised": {
+        "model": "dpo-merged",
+        "baseline": "sft",
+        "accuracy": {
+          "n": 60,
+          "model_only": 1,
+          "baseline_only": 0,
+          "agreements": 59,
+          "p_mcnemar": 1.0
+        },
+        "undertriage": {
+          "urgent_cases": 40,
+          "model_undertriages": 13,
+          "baseline_undertriages": 13,
+          "model_only": 0,
+          "baseline_only": 0,
+          "p_mcnemar": 1.0
+        }
+      }
+    }
+  },
+  "spread": {
+    "sft": {
+      "clinical_accuracy": {
+        "min": 0.6833,
+        "max": 0.75,
+        "mean": 0.7111,
+        "sd": 0.0347
+      },
+      "clinical_undertriage_misses": {
+        "min": 9,
+        "max": 13,
+        "mean": 11.3333,
+        "sd": 2.0817
+      },
+      "internal_accuracy": {
+        "min": 0.9417,
+        "max": 0.9667,
+        "mean": 0.9528,
+        "sd": 0.0127
+      }
+    },
+    "dpo-merged": {
+      "clinical_accuracy": {
+        "min": 0.7,
+        "max": 0.7833,
+        "mean": 0.7333,
+        "sd": 0.0441
+      },
+      "clinical_undertriage_misses": {
+        "min": 9,
+        "max": 13,
+        "mean": 11,
+        "sd": 2.0
+      },
+      "internal_accuracy": {
+        "min": 0.9417,
+        "max": 0.9583,
+        "mean": 0.95,
+        "sd": 0.0083
+      }
+    }
+  }
+}

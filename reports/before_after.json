@@ -1,0 +1,24 @@
+{
+  "before": {
+    "label": "previous-release",
+    "clinical_accuracy": 0.7167,
+    "clinical_undertriage_misses": 10,
+    "urgent_cases": 40,
+    "format_compliance": 1.0,
+    "internal_accuracy": null
+  },
+  "after": {
+    "label": "dpo-merged",
+    "clinical_accuracy": 0.7167,
+    "clinical_undertriage_misses": 11,
+    "urgent_cases": 40,
+    "format_compliance": 1.0,
+    "internal_accuracy": 0.95
+  },
+  "undertriage": {
+    "urgent_cases": 40,
+    "rescued_by_this_release": 1,
+    "lost_by_this_release": 2,
+    "p_mcnemar": 1.0
+  }
+}

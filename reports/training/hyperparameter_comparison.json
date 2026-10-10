@@ -3,7 +3,8 @@
     "training_examples": 1200,
     "steps": 75,
     "evaluated_cases": 60,
-    "seed": 42
+    "seed": 42,
+    "selection": "highest accuracy on the evaluated cases, then lowest validation loss"
   },
   "variants": [
     {
@@ -12,12 +13,12 @@
       "lora_alpha": 64,
       "learning_rate": 0.0002,
       "trainable_parameters": 346030080,
-      "train_loss": 0.42945626616477967,
-      "eval_loss": 0.07821135967969894,
+      "train_loss": 0.4242308330535889,
+      "eval_loss": 0.0744822695851326,
       "selection_accuracy": 0.833,
       "clean_stop_share": 1.0,
-      "duration_s": 426.6,
-      "peak_gpu_memory_gb": 13.09
+      "duration_s": 353.3,
+      "peak_gpu_memory_gb": 13.1
     },
     {
       "variant": "r16_lr2e-4",
@@ -25,12 +26,12 @@
       "lora_alpha": 32,
       "learning_rate": 0.0002,
       "trainable_parameters": 328597504,
-      "train_loss": 0.5085491720835368,
-      "eval_loss": 0.1491304636001587,
-      "selection_accuracy": 0.8,
+      "train_loss": 0.4983647171656291,
+      "eval_loss": 0.13280557096004486,
+      "selection_accuracy": 0.833,
       "clean_stop_share": 1.0,
-      "duration_s": 422.2,
-      "peak_gpu_memory_gb": 12.36
+      "duration_s": 347.5,
+      "peak_gpu_memory_gb": 12.41
     },
     {
       "variant": "r8_lr2e-4",
@@ -38,12 +39,12 @@
       "lora_alpha": 16,
       "learning_rate": 0.0002,
       "trainable_parameters": 319881216,
-      "train_loss": 0.6009943437576294,
-      "eval_loss": 0.253621906042099,
-      "selection_accuracy": 0.783,
+      "train_loss": 0.5918446445465088,
+      "eval_loss": 0.23118695616722107,
+      "selection_accuracy": 0.8,
       "clean_stop_share": 1.0,
-      "duration_s": 562.3,
-      "peak_gpu_memory_gb": 7.13
+      "duration_s": 308.8,
+      "peak_gpu_memory_gb": 7.12
     },
     {
       "variant": "r16_lr1e-4",
@@ -51,12 +52,12 @@
       "lora_alpha": 32,
       "learning_rate": 0.0001,
       "trainable_parameters": 328597504,
-      "train_loss": 0.7836870988210042,
-      "eval_loss": 0.4552520215511322,
-      "selection_accuracy": 0.733,
-      "clean_stop_share": 0.983,
-      "duration_s": 424.4,
-      "peak_gpu_memory_gb": 13.55
+      "train_loss": 0.7860821215311686,
+      "eval_loss": 0.4336400032043457,
+      "selection_accuracy": 0.8,
+      "clean_stop_share": 1.0,
+      "duration_s": 351.1,
+      "peak_gpu_memory_gb": 13.59
     }
   ],
   "kept": "r32_lr2e-4"

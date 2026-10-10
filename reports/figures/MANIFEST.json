@@ -10,11 +10,11 @@
       ],
       "dispersion": "95% interval on each proportion; below six cases no interval is publishable and the bar is hatched instead",
       "dpi": 200,
-      "n": "n(direct_presentation) = 32, n(falsely_reassuring) = 10, n(falsely_alarming) = 11, n(negation) = 4, n(discordant_vitals) = 3",
-      "sha256": "d31f496bce7e540265145bfc731ffa02d5a237e28ac8108baf03519ebcbf6632",
+      "n": "n(cases) = 60, split as on the axis",
+      "sha256": "a4905dfb371c7e1a2b8544d8ddb221c18576d3093a3c1fdbc352f0ac7a9c19b3",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     },
     "confusion_matrices.png": {
       "axes": [
@@ -37,10 +37,10 @@
       "dispersion": null,
       "dpi": 200,
       "n": "n(cases) = 60",
-      "sha256": "5004de2e19612089e6383345f19ec977097943d5ee12fa7e4512ffe83dc01960",
+      "sha256": "3fd5c4debbe88de544059dddfca16e87cc4dcee451734f4811b116f85b28ae00",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     },
     "dataset_composition.png": {
       "axes": [
@@ -68,10 +68,10 @@
       "dispersion": null,
       "dpi": 200,
       "n": "n(training examples) = 5000",
-      "sha256": "649092897ea5b10361d721332a2192a438854a5531a4f92d6837865bc9c8de4d",
+      "sha256": "1186b05764a1f307258f989e9343bc0f3fd866043f7cf75f4097aa57cce0224d",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     },
     "dpo_alignment.png": {
       "axes": [
@@ -89,10 +89,10 @@
       "dispersion": null,
       "dpi": 200,
       "n": "n(training pairs) = 2160",
-      "sha256": "26e649e6053b66e3d621283e050ca725fe7743253d46135c09f2bd29860b472d",
+      "sha256": "833924492b3c0566358b83dc7c8a06d79f7c3fb37fd76572daa338d516ba4a54",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     },
     "endpoint_latency.png": {
       "axes": [
@@ -110,15 +110,15 @@
       "dispersion": "order statistics: the bar spans the median to the 95th percentile",
       "dpi": 200,
       "n": "n(requests per concurrency level) = 40, n(requests) = 120",
-      "sha256": "a9849d49e5ad9dbc23a574d5b774ce139ea2e64f9a34fe24e62b4a63fec8cebb",
+      "sha256": "9700041ef83d192109018d75dbc7f53538836f76341eaa2e82886a8a80417f7f",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     },
     "hyperparameter_tuning.png": {
       "axes": [
         {
-          "title": "Triage accuracy on the validation split",
+          "title": "Selection accuracy on the validation split",
           "x": "LoRA setting",
           "y": "accuracy (share of cases)"
         },
@@ -131,10 +131,10 @@
       "dispersion": "95% Clopper-Pearson interval on the accuracy; the loss is a single value",
       "dpi": 200,
       "n": "n(validation cases) = 60",
-      "sha256": "c1e1e5f93e9180310b9eebb03cecb37f6271d2bc9491d08ad293cb0b694946e0",
+      "sha256": "8e0092c6cd906f5fe3abf1e8a3453ccbcfd3103a8f7bbace06cfa258c5f3fdd9",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     },
     "recall_versus_transfer.png": {
       "axes": [
@@ -152,10 +152,10 @@
       "dispersion": "95% Wilson interval on each accuracy; 95% Newcombe interval on the difference, the two sets being independent",
       "dpi": 200,
       "n": "n(internal cases) = 120, n(clinical cases) = 60",
-      "sha256": "67de5e7797296cef12a86c77efd07f46723d7d9651ef1e767625dbcfdc958591",
+      "sha256": "fec93ba930c2e512256cc098a5de16538f33dfb9e40fc5e73a31b8107edee7fe",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     },
     "sft_training.png": {
       "axes": [
@@ -168,10 +168,10 @@
       "dispersion": null,
       "dpi": 200,
       "n": "n(training examples) = 4000, n(validation examples) = 500",
-      "sha256": "53a91615c41f5fc0e49b16118039f575dfaa37f323b44ea8820f98152ffb7391",
+      "sha256": "666298c6f8f6f0a7b9c24fc6f13243bc085760de008df054ae64294c1be4f1c3",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     },
     "systems_comparison.png": {
       "axes": [
@@ -194,10 +194,10 @@
       "dispersion": "95% interval on each proportion — exact (Clopper-Pearson) on undertriage, Wilson on accuracy; overtriage is drawn without one, it is not the safety metric",
       "dpi": 200,
       "n": "n(cases) = 60, n(urgent cases) = 40",
-      "sha256": "b33f3a9495a1d73f7763353ee0ebf966207b9afd35a99566e5e4adf989050932",
+      "sha256": "89ae3fb68b103c0d3b9e0f800140da3719513608bfea551cf4701bc59dfd5a3a",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     },
     "undertriage_by_case_type.png": {
       "axes": [
@@ -207,13 +207,13 @@
           "y": "share of urgent cases missed"
         }
       ],
-      "dispersion": "95% exact (Clopper-Pearson) interval, drawn at every effective",
+      "dispersion": "95% exact (Clopper-Pearson) interval, drawn even on the smallest groups",
       "dpi": 200,
-      "n": "n(urgent, direct) = 20, n(urgent, falsely reassuring) = 10, n(urgent, falsely alarming) = 5, n(urgent, negation) = 2, n(urgent, discordant vitals) = 3",
-      "sha256": "48624d902eb2e79e9ac02534913a4af04ed9fbcc17580e1dd349c12e802beb25",
+      "n": "n(urgent cases) = 40, split as on the axis",
+      "sha256": "4b53b77c3dec0ad9c6f47a75c19382bc534d0910f9238deed1b4ce0049c6643f",
       "source": "scripts/build_figures.py",
       "style_version": 1,
-      "written": "2026-09-17"
+      "written": "2026-10-09"
     }
   },
   "schema": "image-manifest/1"
