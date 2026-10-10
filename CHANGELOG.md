@@ -21,10 +21,10 @@ repositories change, and the service's probes change: three breaks of the public
   build, corpus by corpus.
 - Phone numbers are masked in any country's international form, not only the French one.
 - What Presidio's default setting would have masked is measured at every build on a declared
-  sample, instead of being quoted from a count made once.
+  sample; it used to be quoted from a count made once.
 - The FrenchMedMCQA answer is read as an index counted from zero. No delivered case changes: the
   corpus delivers none.
-- The dataset is published under **CC BY 4.0**, the licence of the two corpora whose text it
+- The dataset is published under CC BY 4.0, the licence of the two corpora whose text it
   redistributes, with the attribution and the transformations source by source. It was MIT.
 - The data card is organised under the sections its Hub card declares; its links work from the
   Hub.
@@ -39,7 +39,7 @@ repositories change, and the service's probes change: three breaks of the public
 - Trained on three seeds. Seed 42 is shipped, chosen before any result; 43 and 44 measure the
   spread of the method.
 - The modules and engines studies replay from one command each, and were replayed.
-- A merged export that fails its check is deleted instead of being left beside the delivered
+- A merged export that fails its check is deleted, where it used to stay beside the published
   models, and the publication refuses weights other than the ones the evaluation measured.
 - The training stack moves to Unsloth 2026.10, torch 2.14, transformers 5.17 and TRL 1.13.
 
@@ -47,7 +47,7 @@ repositories change, and the service's probes change: three breaks of the public
 
 - The alignment is measured by DPO's implicit reward, the adapter on and off, on the
   expert-reviewed test split of UltraMedical-Preference, with the share of pairs decided by length
-  outside the length group computed instead of counted by hand.
+  outside the length group now computed; it was counted by hand.
 - A task-format preference set, built on the hand-written clinical narratives, measures whether
   the preference learnt travels outside the generator's narratives.
 - Robustness is probed on forty-one inputs in nine named families.
