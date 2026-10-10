@@ -326,7 +326,8 @@ machine and on Modal, and what it costs, is in [`docs/operations.md`](docs/opera
 ```
 
 Where each decision lives, and what was rejected on the way, is in
-[`docs/architecture.md`](docs/architecture.md). What changed between versions is in
+[`docs/architecture.md`](docs/architecture.md). What version 2.0.0 changed from 1.0.0, a
+corrected dataset, a model retrained on three seeds and a release gate, is in
 [`CHANGELOG.md`](CHANGELOG.md).
 
 ## What this does not prove
