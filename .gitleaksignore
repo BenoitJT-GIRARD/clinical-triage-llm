@@ -1,0 +1,3 @@
+# The CI's throwaway gateway key, set two lines above for a container that lives one job:
+# no third party issued it, so there is nothing to revoke.
+a29c4b4f81c81d81c402aceed648154341063267:.github/workflows/ci.yml:curl-auth-header:181
