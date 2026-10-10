@@ -33,7 +33,7 @@ Three more sets probe what a triage decision cannot show:
 - a **task-format preference set** of 100 pairs, built on the sixty hand-written narratives:
   each pair holds the reference answer and the same case answered with one defect. It says
   whether what the alignment learnt on generated narratives holds on written ones;
-- **41 degraded inputs** in nine families, from an empty description to a prompt injection. They
+- 41 **degraded inputs** in nine families, from an empty description to a prompt injection. They
   say whether the service keeps its contract on what is not a clinical narrative.
 
 <!-- source: data/processed/metadata.json -->
@@ -106,17 +106,16 @@ buys an answer that ends, not a better decision.
 <!-- source: reports/training/sft.json -->
 The run trains **346,030,080** parameters of 2,377,769,984, that is **14.553%**, which is what
 the output head adds to the adapters. Over n = 4,000 training examples and two epochs it takes
-**1,821** seconds on one RTX 4060 Ti, never exceeds **7.43** gigabytes of GPU memory, and ends
+**1,821.4** seconds on one RTX 4060 Ti, never exceeds **7.43** gigabytes of GPU memory, and ends
 at a validation loss of **0.0034**.
 
 ### The training engine
 
 <!-- source: reports/training/engine_comparison.json -->
-Unsloth and plain Transformers ran the same thirty steps, on the same examples and the same
-modules. Unsloth takes **3.69** seconds a step and peaks at **7.22** gigabytes; Transformers
-takes **6.93** seconds and **10.13** gigabytes. The losses end close, **0.9727** against
-**0.9448**. The engine changes what a run costs, not what it learns, and on one card the cost
-decides.
+Unsloth and plain Transformers ran the same n = 30 steps, on the same examples and the same modules.
+Unsloth takes **3.69** seconds a step and peaks at **7.22** gigabytes; Transformers takes **6.93**
+seconds and **10.13** gigabytes. The losses end close, **0.9727** against **0.9448**. The engine
+changes what a run costs, not what it learns, and on one card the cost decides.
 
 ### The preference run
 
@@ -157,19 +156,19 @@ danger, and a triage tool is judged on the second.
 These choices were written down and committed before any model of this version was evaluated,
 and the results are published whatever they show.
 
-- **The shipped model is the one trained on seed 42**, whatever its score. Seeds 43 and 44
-  measure the spread of the method and nothing else: keeping the best of three on the clinical
-  set would turn that set into a selection set.
+- **The shipped model is fixed in advance**: the one trained on seed 42, whatever its score. Seeds
+  43 and 44 measure the spread of the method and nothing else: keeping the best of three on the
+  clinical set would turn that set into a selection set.
 - **The primary analysis** is undertriage on the forty urgent cases, the shipped model against
   the explicit rule, by an exact McNemar test.
 - **The secondary analyses**: the shipped model against the linear classifier; the supervised model
-  against the aligned one, for each seed; the *more urgent of the two opinions* — for each case, the
-  more urgent of the model's level and the rule's — against the model alone, on undertriage and on
+  against the aligned one, for each seed; the *more urgent of the two opinions* (for each case, the
+  more urgent of the model's level and the rule's) against the model alone, on undertriage and on
   overtriage; the model of version 1.0.0, as this repository served it, against this version's, on
   the same cases; and the spread of the three seeds, as the range and the standard deviation of
   accuracy and of undertriage.
-- **The release gate**: every answer of the clinical set in the expected format, and no more
-  urgent cases missed than the explicit rule. A version that fails it is neither published nor
+- **The release gate**: every answer of the clinical set in the expected format, and at most as many
+  urgent cases missed as the explicit rule misses. A version that fails it is neither published nor
   served. `scripts/check_release.py` decides, and the deployment workflow runs it.
 
 ## What those analyses found
@@ -185,25 +184,26 @@ urgent patients than the rule, and a gap that size is unlikely to be chance.
 ### The model against the classifier
 
 <!-- source: reports/evaluation_results.json -->
-Against the linear classifier, the model misses **11** and the classifier **8**: **3** urgent
-patients caught by the model alone, **6** by the classifier alone, **p = 0.5078**. Accuracy gives
-the same reading, **0.7167** against **0.6667**, **p = 0.6291**. Nothing separates them. Sixty
-cases support "the model does not beat n-grams here"; they do not support "the model is worse".
+On the same n = 40 urgent cases, against the linear classifier, the model misses **11** and the
+classifier **8**: **3** urgent patients caught by the model alone, **6** by the classifier alone,
+**p = 0.5078**. Accuracy on all n = 60 cases gives the same reading, **0.7167** against **0.6667**,
+**p = 0.6291**. Nothing separates them. Sixty cases support "the model does not beat n-grams here";
+they do not support "the model is worse".
 
 ### The aligned model against the supervised one
 
 <!-- source: reports/evaluation_results.json -->
-On seed 42, the aligned model misses **11** urgent cases and the supervised model **12**. One case
-separates them, in one direction, and the test gives **p = 1.0**.
+On seed 42, of the n = 40 urgent cases, the aligned model misses **11** and the supervised model
+**12**. One case separates them, in one direction, and the test gives **p = 1.0**.
 
 <!-- source: reports/seed_study.json -->
-On seeds 43 and 44, the two models miss exactly the same urgent cases: **9** each on seed 43, **13**
-each on seed 44. Over the three seeds, the alignment turns one urgent miss into a catch, out of a
-hundred and twenty urgent decisions, and loses none. On accuracy, the aligned model is right on one
-or two more cases than the supervised one on every seed: **0.7833** against **0.75** on seed 43,
-**0.7** against **0.6833** on seed 44. No seed's test comes near significance; the largest gap, seed
-43's, gives **p = 0.5**. The alignment does not move the triage decision. What it does move is
-measured where it acts, in [What the alignment
+On seeds 43 and 44, the two models miss exactly the same of the n = 40 urgent cases: **9** each on
+seed 43, **13** each on seed 44. Over the three seeds, the alignment turns one urgent miss into a
+catch, out of a hundred and twenty urgent decisions, and loses none. On accuracy, over the n = 60
+cases, the aligned model is right on one or two more cases than the supervised one on every seed:
+**0.7833** against **0.75** on seed 43, **0.7** against **0.6833** on seed 44. No seed's test comes
+near significance; the largest gap, seed 43's, gives **p = 0.5**. The alignment does not move the
+triage decision. What it does move is measured where it acts, in [What the alignment
 bought](#what-the-alignment-bought-and-what-it-did-not).
 
 ### The more urgent of the two opinions
@@ -234,15 +234,16 @@ one the service sends, and an evaluation fixed in advance and repeated on three 
 ### The spread of the three seeds
 
 <!-- source: reports/seed_study.json -->
-Over seeds 42, 43 and 44, the aligned model's accuracy on the clinical set runs from **0.7** to
-**0.7833**, with a mean of **0.7333** and a standard deviation of **0.0441**. The urgent cases
-missed run from **9** to **13**, with a mean of **11** and a standard deviation of **2.0**. Same
-data, same setting: training alone moves the model by up to five cases in sixty, and by four
-urgent misses in forty.
+Over seeds 42, 43 and 44, the aligned model's accuracy on the n = 60 cases of the clinical set runs
+from **0.7** to **0.7833**, with a mean of **0.7333** and a standard deviation of **0.0441**. The
+urgent cases missed, out of n = 40, run from **9** to **13**, with a mean of **11** and a standard
+deviation of **2.0**. Same data, same setting: training alone moves the model by up to five cases in
+sixty, and by four urgent misses in forty.
 
-Two systems trained once each can therefore differ by that much on the seed alone. The shipped
-seed is not the best of the three: seed 43 misses **9** urgent cases and scores **0.7833**, and
-shipping it would have reported a better model than the method produces on average. The worst
+<!-- source: reports/seed_study.json -->
+Two systems trained once each can therefore differ by that much on the seed alone. The shipped seed
+is not the best of the three: seed 43 misses **9** of the n = 40 urgent cases and scores **0.7833**,
+and shipping it would have reported a better model than the method produces on average. The worst
 seed still misses far fewer urgent patients than the rule, 13 against 22.
 
 ### What zero misses would still not prove
@@ -310,7 +311,7 @@ a measurement.
 The confusion matrices carry a column the triage scale does not have: **off-format**. An answer
 nothing can parse predicts nothing, and putting it in a level would attribute to that level an
 error it did not make. For the shipped model the column is empty; for the base model it holds
-**32** of the sixty answers.
+**32** of the n = 60 answers.
 
 <!-- source: reports/evaluation_results.json -->
 Read by level, n = 20 cases each, the shape of the failure is plain: recall on the
@@ -320,10 +321,10 @@ filed below its level. The model is reluctant to send a patient to the top level
 it does.
 
 <!-- source: reports/evaluation_results.json -->
-The rule fails differently. Of the **22** urgent cases it misses, it reads nothing at all in **10**,
-reads only a lesser sign in **8**, and in **4** finds the life-threatening sign and discards it
-because a negation stands in front of it. A rule reads words, and a description that names no sign
-it knows is invisible to it.
+The rule fails differently. Of the n = 40 urgent cases, it misses **22**; of those, it reads nothing
+at all in **10**, reads only a lesser sign in **8**, and in **4** finds the life-threatening sign
+and discards it because a negation stands in front of it. A rule reads words, and a description that
+names no sign it knows is invisible to it.
 
 ## What the alignment bought, and what it did not
 
