@@ -20,8 +20,8 @@ metrics:
     direction: higher_is_better
     anchor: "0.717 — reports/evaluation_results.json#clinical_set.models.dpo-merged.accuracy"
     business_reading: >-
-      Out of sixty patients described to the assistant, forty-three are filed at the level a
-      nurse would have chosen. It says nothing about which way the other seventeen went, which
+      Out of sixty patients described to the assistant, forty-three are filed at the reference
+      level written for them. It says nothing about which way the other seventeen went, which
       is why it is never read alone.
     source: >-
       scripts/run_evaluation.py, on the sixty hand-written cases of
