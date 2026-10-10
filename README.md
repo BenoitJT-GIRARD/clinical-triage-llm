@@ -9,14 +9,21 @@
   <img src="docs/badges/coverage.svg" alt="coverage 80%">
 </p>
 
-**Project status** — finished, and stopped on purpose. The fine-tuning of the language model,
-its preference alignment and the triage evaluation all ran on one RTX 4060 Ti in August 2026;
-their artefacts are committed, and every number below names the file it comes from. No service is running behind this repository: the demonstration endpoint is a
-command anyone can run, not an address kept alive. What the figures and the documents rest on is
-`reports/run-evidence.json`, written by a run of `scripts/smoke.py` that redraws every published
-figure from the committed results and refuses to write anything if one of them comes out
-different. The workflows ran green on the commit published here and are started by hand from
-now on; nothing sets them off on its own.
+**Project status** — version 2.0.0, finished. The model was fine-tuned, aligned and evaluated
+on one RTX 4060 Ti in October 2026, on three training seeds. The results are committed, and every
+number below names the file it comes from.
+
+- **Model and dataset**: on the Hugging Face Hub, as
+  [`qwen3-1.7b-clinical-triage`](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage)
+  and [`clinical-triage-bilingual`](https://huggingface.co/datasets/BenoitJT-GIRARD/clinical-triage-bilingual),
+  with cards rendered from this repository at the same tag.
+- **Service**: deployed on Modal, and stopped. Stopped, it costs nothing and answers nothing; only
+  the owner of this repository starts it, for a demonstration
+  ([how](infra/README.md#4-cloud-deployment-on-modal)).
+- **Evidence**: `reports/run-evidence.json`, written by `scripts/smoke.py`, which redraws every
+  published figure from the committed results and writes nothing if one of them comes out
+  different.
+- **Workflows**: started by hand; nothing sets them off on its own.
 
 **This is not a medical device, and nothing it returns is clinical advice.** It is a
 demonstration built to study how a small language model can be fine-tuned and aligned for a
@@ -35,12 +42,12 @@ words, and a chest pain described without the word "pain" is invisible to it. Th
 is whether a **large language model** small enough to serve on one card, **fine-tuned** on the
 department's own vocabulary and then **preference-aligned**, does better than that rule; and
 whether "better" survives the harder comparison, against an ordinary classifier trained on the
-same pairs.
+same examples.
 
 Asking the question honestly cost more than answering it. No public medical corpus is labelled
 in triage levels, so the ground truth had to be built: a clinical catalogue written for the
-project, a generator that draws vignettes from it, and four public corpora filtered down to the
-cases that describe a patient. How, and what each source really yielded, is in
+project, a generator that draws vignettes from it, and four public corpora read in full, three of
+which yielded cases that describe a patient. How, and what each source really yielded, is in
 [`data/README.md`](data/README.md) and [`docs/data-source.md`](docs/data-source.md).
 
 ## What it does
@@ -55,7 +62,7 @@ Four routes, and the second is the point.
 | `GET /ready` | whether the inference engine answers; it asks for the key, since on a managed host it can wake a GPU |
 
 <!-- source: docs/images/MANIFEST.json -->
-![The published contract of the running service: three routes, the two that need a key marked with a padlock, and the schemas generated from the Pydantic models](docs/images/api-contract.png)
+![The published contract of the running service: four routes, the three that need a key marked with a padlock, and the schemas generated from the Pydantic models](docs/images/api-contract.png)
 
 Hide that disagreement and the nurse reads a level without knowing that the rule, which never
 hallucinates, would have sent the patient elsewhere. So `rule_level`, `rule_reasons` and
@@ -79,94 +86,135 @@ pass over preference pairs that each carry one deliberate defect, and **Unsloth*
 kernels that make it fit on one consumer card. **PyTorch** is underneath all four. Every run
 writes to a local **MLflow** store, which is what makes the four LoRA settings comparable
 after the fact rather than from memory. The ordinary baseline is a **scikit-learn** linear
-classifier over n-grams, trained on the same pairs, and it is the demanding comparison.
+classifier over n-grams, trained on the same examples, and it is the demanding comparison.
 
-Serving splits in two. A **FastAPI** gateway behind **Uvicorn** validates, runs the
-questionnaire, applies the explicit rule, anonymises and logs; generation is delegated to
-**vLLM** over its OpenAI-compatible route. Request and reply shapes are **Pydantic** models, which is why
-the contract page above is generated rather than written. The gateway's **Docker** image carries
-neither weights nor torch, so a new model version ships without rebuilding it. **Modal**
-deploys that same pair in one command when the demonstration has to leave this machine: a GPU
-engine that sleeps between requests, and the gateway unchanged. Nothing is kept running.
+Serving splits in two. A **FastAPI** gateway behind **Uvicorn** validates, runs the questionnaire,
+applies the explicit rule, anonymises and logs; generation is delegated to **vLLM** over its
+OpenAI-compatible route. Request and reply shapes are **Pydantic** models, which is why the contract
+page above is generated rather than written. The gateway's **Docker** image carries neither weights
+nor torch, so a new model version ships without rebuilding it. **Modal** runs that same pair in the
+cloud: a GPU engine that shuts down after fifteen idle minutes, and the gateway unchanged. It stays
+stopped between demonstrations.
 
-Around all that: the environment is held to its lock file by **uv**, every run is read by
-**Ruff** and by **Bandit**, and **pytest** works in three tiers — the last of which starts the
-gateway in a process of its own and talks to it over the network. `datasets` keeps its cache in Arrow, and the **Parquet** reader is imported before
-torch in the suite: on Windows the other order ends the process with an access violation.
+Around all that: the environment is held to its lock file by **uv**, every run is read by **Ruff**
+and by **Bandit**, and **pytest** works in three tiers — the last of which starts the gateway in a
+process of its own and talks to it over the network. `datasets` keeps its cache in Arrow, and the
+**Parquet** reader is imported before torch in the suite: on Windows the other order ends the
+process with an access violation.
 
 ## The result
 
 Sixty cases written by hand, forty of them urgent, none of them seen during training and none
-labelled by the rule that is compared against here.
+labelled by the rule that is compared against here. The models in the table are those of seed
+42, the seed fixed in advance as the one shipped.
 
 <!-- source: reports/evaluation_results.json -->
 | system | accuracy | undertriage | overtriage | format compliance |
 |---|---|---|---|---|
-| majority class | 0.333 | 0.500 | 0.333 | 1.000 |
-| always critical | 0.333 | 0.000 | 0.667 | 1.000 |
-| explicit rule | 0.617 | 0.550 | 0.017 | 1.000 |
-| linear classifier | 0.617 | 0.275 | 0.200 | 1.000 |
-| `Qwen3-1.7B-Base` | 0.083 | 0.700 | 0.267 | 0.367 |
-| SFT + LoRA | 0.683 | 0.300 | 0.117 | 1.000 |
-| SFT + DPO, merged | 0.700 | 0.275 | 0.117 | 1.000 |
+| majority class | 0.333 | 1.000 | 0.000 | — |
+| always critical | 0.333 | 0.000 | 0.667 | — |
+| explicit rule | 0.617 | 0.550 | 0.017 | — |
+| linear classifier | 0.667 | 0.200 | 0.200 | — |
+| `Qwen3-1.7B-Base` | 0.167 | 0.525 | 0.283 | 0.467 |
+| SFT + LoRA | 0.700 | 0.300 | 0.100 | 1.000 |
+| SFT + DPO, merged | 0.717 | 0.275 | 0.100 | 1.000 |
+
 n = 60 cases, of which n = 40 are urgent: undertriage is counted on those forty alone,
 everything else on all sixty. What each column measures, and with which estimator, is in
 [`metrics.yaml`](metrics.yaml).
 
 > **How to read it.** One row per system, all answering the same sixty cases. `accuracy` is the
-> share filed at the level a nurse would have chosen. `undertriage` is the share of the urgent
-> cases sent somewhere gentler, which is the failure that reaches a patient, so it is counted on
-> the forty urgent ones alone. `overtriage` is the share pushed above their level, which costs a
-> place in the queue. `format compliance` is the share an information system can parse at all.
+> share filed at the reference level written for each case. `undertriage` is the share of the urgent
+> cases sent somewhere gentler, which is the failure that reaches a patient, so it is counted on the
+> forty urgent ones alone. `overtriage` is the share pushed above their level, which costs a place
+> in the queue. `format compliance` is the share an information system can parse at all; the four
+> baselines return a level rather than a text, so it does not apply to them.
 
 <!-- source: reports/figures/MANIFEST.json -->
-![Accuracy, undertriage and overtriage for every system on the same hand-written cases, each proportion with its 95% interval, n = 60 cases of which 40 are urgent](reports/figures/systems_comparison.png)
+![Accuracy, undertriage and overtriage for every system on the same hand-written cases, accuracy and undertriage with their 95% intervals, n = 60 cases of which 40 are urgent](reports/figures/systems_comparison.png)
 
 > **How to read it.** Three panels, one per measure, with one bar per system. The middle panel
 > is the one to read first: shorter is better there, and it counts urgent patients sent somewhere
 > gentler. The right-hand panel runs the other way round, since caution costs a queue place and
-> nothing worse. Each bar carries a 95 % interval, and two bars whose intervals overlap are not
-> told apart by sixty cases.
+> nothing worse. The accuracy and undertriage bars carry a 95% interval; overtriage, which is
+> not the safety measure, carries none. Overlapping intervals do not make two systems alike: on
+> the same cases, the paired tests below decide.
 
 <!-- source: reports/evaluation_results.json -->
 Against the rule it would replace, the shipped model halves the failure that matters, on the
 n = 40 urgent cases of that set: **11** missed, against **22**. Read as a paired test on the
-same cases, which is the only honest way to read two systems that saw the same patients, that
-gap is **p = 0.019**.
+same cases, which is the only honest way to read two systems that saw the same patients, the
+paired test gives **p = 0.035**. This comparison was fixed as the primary analysis before the
+model was evaluated. The release gate asks less of it: a model that misses more urgent cases
+than the rule is not published.
 
 <!-- source: reports/evaluation_results.json -->
 Against the ordinary classifier it is a different story, and this is the finding the project
-publishes rather than buries: on the same n = 40 urgent cases both miss **11**, and the
-paired test gives **p = 1.0**. Four months of fine-tuning buy an answer a nurse can read and a format
-the information system can parse — not a better triage decision than n-grams and a logistic
-regression.
+publishes rather than buries: on the same n = 40 urgent cases the model misses **11** and the
+classifier **8**, and the paired test gives **p = 0.508**. Fine-tuning buys a justification and
+a course of action a nurse can read; it shows no sign of a better triage decision than n-grams
+and a linear SVM.
+
+### Both opinions, read together
+
+<!-- source: reports/evaluation_results.json -->
+The reply carries the model's level and the rule's. Keep the more urgent of the two, case by
+case, and on the same n = 40 urgent cases the misses fall from **11** to **5**: six urgent
+patients caught, none lost, **p = 0.031**. Overtriage does not move, at **0.100**, because the
+rule almost never overshoots. That reading was fixed in advance as well, and it needs no new
+model: it is what the service already returns. The five patients it still misses are the ones
+both systems miss.
 
 ### What the model restates, and what it transfers
 
 <!-- source: reports/figures/MANIFEST.json -->
 ![Accuracy on the internal test split against the hand-written clinical set, for each system, with the difference and its interval on the right, n = 120 internal cases and 60 clinical cases](reports/figures/recall_versus_transfer.png)
 
-> **How to read it.** The upper panel puts two accuracies side by side for each system: one on
+> **How to read it.** The left panel puts two accuracies side by side for each system: one on
 > the internal split, whose cases resemble the training material, and one on the hand-written
-> clinical set, which nothing in training resembles. The lower panel is the gap between them with
+> clinical set, which nothing in training resembles. The right panel is the gap between them with
 > its interval. A large positive gap means a system restating what it memorised; a gap whose
-> interval contains zero means the skill travelled.
+> interval contains zero shows no loss this sample can detect.
 
 <!-- source: reports/evaluation_results.json -->
-On the internal test split, n = 120 cases, the model scores **1.000**. That number measures
-restatement, not triage: every presentation in that split was seen during training under
-another wording. The clinical set, n = 60, is the one that measures transfer, and the distance
-between the two, **0.300**, is the size of the illusion a single-set evaluation would have
+On the internal test split, n = 120 cases, the model scores **0.950**. That number measures
+restatement, not triage: most cases in that split were generated from presentations seen during
+training under another wording, and the rest are corpus cases labelled by the same rule as the
+corpus cases it trained on. The clinical set, n = 60, is the one that measures transfer, and the
+distance between the two, **0.233**, is the size of the illusion a single-set evaluation would have
 produced.
 
-### The alignment did not transfer
+### What the alignment learnt
 
 <!-- source: reports/evaluation_results.json -->
-On an external preference set of n = 150 pairs, the aligned model orders **0.353** of them
-correctly, below chance, and the supervised model does the same. On the project's own pairs the
-alignment works; asked to prefer the better of two answers it never saw in training, it has
-learnt nothing transferable. Its benefit here is narrow and real, the format holds and the
-undertriage moves, and the repository says where it stops.
+On n = 100 preference pairs built on the hand-written cases, the alignment favours the right
+answer over the defective one in **0.84** of them: what it learnt on generated narratives holds
+on written ones. On the n = 777 pairs of an external medical preference set it does so in
+**0.3655**, below chance — and on the n = 180 of those pairs whose two answers are of similar
+length, in **0.500** exactly. It learnt the defects it was shown and nothing about medicine at
+large, and its score below chance is a matter of answer length. On the clinical set the aligned
+model misses one urgent case fewer than the supervised one.
+
+### Three trainings, one shipped
+
+<!-- source: reports/seed_study.json -->
+The method was trained three times, on seeds 42, 43 and 44, and seed 42 was chosen for
+publication before any of them was evaluated. Across the three, accuracy on the clinical set runs
+from **0.700** to **0.783**, and the urgent cases missed from **9** to **13**: training alone
+moves the result by up to five cases in sixty. The shipped seed is not the best of the three,
+and the worst still misses far fewer urgent patients than the rule. Over the three seeds, the
+alignment turns one urgent miss into a catch, out of a hundred and twenty urgent decisions, and
+loses none.
+
+### Against version 1.0.0
+
+<!-- source: reports/before_after.json -->
+The model this repository served before, run through the same evaluation on the same cases,
+also scores **0.717**. It misses **10** urgent cases where this version misses **11**: two
+patients caught by the old model alone, one by the new, **p = 1.0**. The retraining did not make
+a better triage decision. It changed what stands behind the decision: a corrected dataset, a
+model trained with the prompt the service actually sends, and an evaluation fixed in advance and
+repeated on three seeds.
 
 ## Why these numbers can be believed
 
@@ -175,39 +223,26 @@ recorded beside it. It never passed through the triage rule, which is what makes
 against that rule meaningful: on the corpus part of the training data the rule recovers its own
 labels by construction, and measuring it there would measure the filter.
 
-Every proportion carries an interval: Wilson for accuracy, exact for undertriage, where the
-effectives are smallest. Every comparison between two systems is a paired test on the same cases,
-never an overlap of two intervals, because overlap proves nothing and on paired data it is
-systematically too cautious. The protocol, the estimators and what each of them can and cannot
-support are in [`docs/protocol.md`](docs/protocol.md).
+The analyses were fixed before the results. Which seed is shipped, which comparison is primary,
+which ones are secondary, and what a version must pass to be published were committed before any
+model of this version was evaluated, and every one of them is reported, favourable or not. The
+list is in [`docs/protocol.md`](docs/protocol.md#what-was-fixed-before-the-results).
+
+Accuracy and undertriage carry an interval: Wilson for accuracy, exact for undertriage, where the
+samples are smallest. Overtriage, which is not the safety measure, carries none. Every comparison
+between two systems is a paired test on the same cases, never an overlap of two intervals, because
+overlap proves nothing and on paired data it is systematically too cautious.
+
+The weights evaluated are the weights published. The evaluation records the SHA-256 digest of
+every weight file it read; the publication script refuses weights whose digests differ, and
+checks the Hub's copy against them once uploaded.
 
 The figures are drawn from the committed result files by `scripts/build_figures.py`, and
 [`reports/figures/MANIFEST.json`](reports/figures/MANIFEST.json) records for each one its
-effective, its estimator and the digest of the image. Nothing in this README is typed by hand
-from a number read elsewhere.
-
-The last check that closed this work found five defects, and the useful half of that result is
-what it failed to find: no published figure moved. Four of the five were about how a measurement
-gets written down. A count that was missing came out as `0`, so a report regenerated from a fresh
-clone could read that the "0 distinct presentations it holds have all been seen in training". The
-share of preference pairs clipped by the context window was typed into the report by hand while
-the function that measures it only logged the value. The endpoint bench published
-`"tokens_per_s": 0.0` for a gateway that counts no token at all. And the global accuracy built its
-interval with Wilson directly, going around the single gate that picks the estimator from the
-effective: on 60 and 120 cases the two paths agree, on a three-case subgroup they would not.
-
-The fifth defect was the serious one. Four tests of the tracking module failed in the environment
-continuous integration installs, because `describe_environment()` imported torch with no guard.
-Those four tests are precisely the ones that exercise what the module promises, that tracking
-never brings down a run.
-
-Each correction was made where the defect lived. The count moved into `metadata.json`, which is
-versioned, and reads `None` when it is absent, so the sentence loses its number. The clipped share
-is written into the results file and read back from there. The throughput appears only when at
-least one measurement carries a token count, the condition the gateway overhead already had. The
-accuracy interval goes through `interval_for_proportion`. The environment description degrades to
-`unavailable` when a library is missing. After that, the suite passes whole without the training
-group, 0 failures, and the four tests exercise the path they describe.
+sample size, its estimator and the digest of the image. Every number in this README names the
+file it comes from, in a comment above it. The Hub cards are rendered from the same files by
+`scripts/build_hub_cards.py`, and continuous integration fails when a committed card no longer
+matches them.
 
 ## Running it
 
@@ -220,18 +255,25 @@ uv run clinical-triage          # what is configured, and what is present
 uv run pytest                   # the three tiers
 ```
 
-The pipeline, in order. The first two steps need the Hub, the next four a GPU:
+The pipeline, in order. Building the dataset needs the Hub; every step from the tuning to the
+evaluation needs a GPU:
 
 ```bash
 uv run python scripts/build_dataset.py
-uv run python scripts/tune_hyperparameters.py
+uv run python scripts/tune_hyperparameters.py                    # the four LoRA settings
+uv run python scripts/tune_hyperparameters.py --study modules    # what the output head buys
+uv run python scripts/tune_hyperparameters.py --study engines    # Unsloth against Transformers
 uv run python scripts/train_sft.py
 uv run python scripts/merge_adapter.py --adapter sft
 uv run python scripts/train_dpo.py
 uv run python scripts/merge_adapter.py --adapter dpo
 uv run python scripts/run_evaluation.py
+uv run python scripts/check_release.py
 uv run python scripts/build_figures.py
 ```
+
+`--seed 43` on the four training steps and on the evaluation trains and measures another seed,
+apart from the shipped one; `scripts/aggregate_runs.py` then puts the seeds side by side.
 
 The service, locally, with the engine beside it:
 
@@ -240,8 +282,9 @@ export TRIAGE_API_KEY="a-key-of-your-choosing"
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-Everything the gateway reads is in [`.env.example`](.env.example); how it is deployed, and what
-it costs, is in [`docs/operations.md`](docs/operations.md) and [`infra/README.md`](infra/README.md).
+Everything the gateway reads is in [`.env.example`](.env.example); how it is deployed, on this
+machine and on Modal, and what it costs, is in [`docs/operations.md`](docs/operations.md) and
+[`infra/README.md`](infra/README.md).
 
 <!-- source: docs/images/MANIFEST.json -->
 ![A real call to POST /questionnaire/next on the running service: the chest theme is detected from the complaint and the next question asked is the one about radiating pain](docs/images/questionnaire-answer.png)
@@ -257,7 +300,7 @@ it costs, is in [`docs/operations.md`](docs/operations.md) and [`infra/README.md
 ├── docs/                  # what is written for a reader, and the screenshots
 ├── reports/               # the results, the figures and their manifest
 ├── data/                  # what the programme consumes, and the data card
-├── infra/                 # image, compose, deployment, model cards
+├── infra/                 # image, compose, deployment, Hub cards
 └── var/                   # what a run produces, and nothing tracks
 ```
 
@@ -270,22 +313,27 @@ Where each decision lives, and what was rejected on the way, is in
 The clinical catalogue behind the training data was written for this project and **has not been
 validated by an emergency physician**. Nothing here should meet a patient.
 
-Sixty cases is a small evaluation, and it shows: the interval on the shipped model's accuracy
-spans a quarter of the scale. The comparison against the ordinary classifier is not close to
-significant either way, so "the model is not better" is what the data supports, not "the model is
-worse". One seed, one run: nothing here estimates what another seed would have given.
+Sixty cases is a small evaluation, and it shows: the interval on the shipped model's accuracy runs
+from 0.59 to 0.81. Even a model that missed none of the forty urgent cases could still miss nearly
+nine urgent patients in a hundred, as far as forty cases can tell; certifying fewer than five in a
+hundred takes seventy-two urgent cases without a miss. The comparison against the ordinary
+classifier is not close to significant either way, so "the model is not shown to be better" is what
+the data supports, not "the model is worse". Three seeds measure how much the training alone moves
+the numbers; they say nothing about cases written by someone else.
 
-The alignment does not transfer beyond the pairs it was trained on, and the endpoint latency was
-measured on one machine, one run, against one engine. The triage levels are those of the French
-scale, and the questionnaire speaks French: the model is bilingual, the clinical vocabulary is
-not.
+The alignment does not transfer beyond the defects it was trained on, and the service's latency
+([`docs/operations.md`](docs/operations.md#what-one-decision-costs)) was measured on one machine,
+one run, against an older engine than the deployment's. The three triage levels simplify the
+five of the French emergency triage scale, and the model reads French and English but always
+answers in French; the questionnaire is in French only.
 
 ## Licence and data
 
-MIT — see [LICENSE](LICENSE).
+The code is under the MIT licence — see [LICENSE](LICENSE). The published model weights are
+under Apache-2.0, the licence of the base model they derive from, and the published dataset
+under CC BY 4.0.
 
-The training set is built from four public medical corpora, each used under its own licence and
-none redistributed here in its original form; the clinical vignettes and the evaluation cases
-were written for this project. No real patient data is used. The masking, and the residue a
-separate check still finds after it, are measured and published in the
-[data card](data/README.md#personal-data).
+The training set draws on three public medical corpora, each used under its own licence and
+credited in the data card; the clinical vignettes and the evaluation cases were written for this
+project. No real patient data is used. The masking, and the residue a separate check still finds
+after it, are measured and published in the [data card](data/README.md#personal-data).
