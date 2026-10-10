@@ -18,18 +18,18 @@ metrics:
       level at all.
     unit: "proportion, 0 to 1"
     direction: higher_is_better
-    anchor: "0.700 — reports/evaluation_results.json#clinical_set.models.dpo-merged.accuracy"
+    anchor: "0.717 — reports/evaluation_results.json#clinical_set.models.dpo-merged.accuracy"
     business_reading: >-
-      Out of a hundred patients described to the assistant, seventy are filed at the level a
-      nurse would have chosen. It says nothing about which way the other thirty went, which is
-      why it is never read alone.
+      Out of sixty patients described to the assistant, forty-three are filed at the level a
+      nurse would have chosen. It says nothing about which way the other seventeen went, which
+      is why it is never read alone.
     source: >-
       scripts/run_evaluation.py, on the sixty hand-written cases of
       data/processed/clinical_eval.jsonl
     uncertainty: >-
       95% Wilson interval on the proportion, published beside it as `accuracy_ci95`. It covers
-      the sampling of the sixty cases and nothing else: one training run, one seed, and no
-      estimate of what another seed would have given.
+      the sampling of the sixty cases and nothing else. What the training alone moves is
+      measured apart, on three seeds, in `reports/seed_study.json`.
 
   undertriage:
     definition: >-
@@ -47,7 +47,7 @@ metrics:
       count of missed cases is published beside it as `undertriage_detail`
     uncertainty: >-
       95% exact (Clopper-Pearson) interval, published as `undertriage_ci95`. Exact rather than
-      Wilson because the effective is forty, and smaller still by subgroup. Comparisons against
+      Wilson because the sample is forty cases, and smaller still by subgroup. Comparisons against
       another system are paired on the same cases (McNemar), never read from two intervals.
 
   overtriage:
@@ -55,11 +55,11 @@ metrics:
       Over all cases, the share sent to a level above the reference one.
     unit: "proportion of all cases, 0 to 1"
     direction: lower_is_better
-    anchor: "0.117 — reports/evaluation_results.json#clinical_set.models.dpo-merged.overtriage"
+    anchor: "0.100 — reports/evaluation_results.json#clinical_set.models.dpo-merged.overtriage"
     business_reading: >-
-      Out of a hundred patients, twelve are placed ahead of where they belong. Each one costs a
+      Out of sixty patients, six are placed ahead of where they belong. Each one costs a
       place in the queue, which is a real cost and a recoverable one — it is the price of
-      caution, and the baseline that always answers "critical" pays it sixty-seven times.
+      caution, and the baseline that always answers "critical" pays it forty times.
     source: "scripts/run_evaluation.py, on the same sixty cases"
     uncertainty: >-
       Published without an interval, deliberately: it is not the safety metric, and a figure
@@ -76,8 +76,8 @@ metrics:
       1.0 — reports/evaluation_results.json#clinical_set.models.dpo-merged.format_compliance
     business_reading: >-
       Every answer reaches the reception screen as a level, a justification and a course of
-      action. The base model reaches it for a third of them, which is the difference between a
-      demonstration and something an integrator can call.
+      action. The base model reaches it for under half of them, which is the difference
+      between a demonstration and something an integrator can call.
     source: "scripts/run_evaluation.py, parsing each answer with the service's own parser"
     uncertainty: >-
       A proportion on the same sixty cases. No interval is published: at 1.0 on sixty cases the
@@ -97,8 +97,8 @@ metrics:
     anchor: "3,075 — data/processed/metadata.json#statistics.corpus_yield.mediqal.entries_read"
     business_reading: >-
       The raw material a corpus offers. It is the denominator of everything below, and the
-      reason MedMCQA is read at all: a hundred and eighty thousand rows for twelve hundred
-      usable cases is still the second contribution of the set.
+      reason MedMCQA is read at all: a hundred and eighty thousand rows for some thirteen
+      hundred usable cases is still the second contribution of the set.
     source: "scripts/build_dataset.py, counted while loading each corpus from the Hub"
     uncertainty: "An exhaustive count of a frozen corpus release. Nothing is estimated."
 
@@ -109,7 +109,7 @@ metrics:
     unit: "entries"
     direction: lower_is_better
     anchor: >-
-      1,407 —
+      1,408 —
       data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.no_patient_presentation
     business_reading: >-
       The first and largest loss, and the one that answers "why not just use a public corpus":
@@ -124,7 +124,7 @@ metrics:
     unit: "entries"
     direction: lower_is_better
     anchor: >-
-      514 —
+      513 —
       data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.outside_length_bounds
     business_reading: >-
       A case the service would truncate is a case the model would be trained to answer on a
@@ -139,7 +139,7 @@ metrics:
     unit: "entries"
     direction: lower_is_better
     anchor: >-
-      792 —
+      795 —
       data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.no_identified_sign
     business_reading: >-
       The stage that keeps the corpus contribution honest: a case nobody can label is dropped
@@ -163,7 +163,7 @@ metrics:
     definition: "Cases that survived every filter, before the per-cell and global caps."
     unit: "cases"
     direction: higher_is_better
-    anchor: "362 — data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.kept"
+    anchor: "359 — data/processed/metadata.json#statistics.corpus_yield.mediqal.funnel.kept"
     business_reading: >-
       What the corpus could have contributed. The gap with the line below is what the balance
       of the set costs.
@@ -176,7 +176,7 @@ metrics:
       and languages balanced and the global cap that keeps corpus cases a minority.
     unit: "cases"
     direction: higher_is_better
-    anchor: "313 — data/processed/metadata.json#statistics.corpus_yield.mediqal.cases_kept"
+    anchor: "314 — data/processed/metadata.json#statistics.corpus_yield.mediqal.cases_kept"
     business_reading: >-
       What the corpus really weighs in what the model was trained on. Read against the entries
       read, it is the measurement that decided the project's data strategy.
