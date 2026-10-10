@@ -301,6 +301,8 @@ export TRIAGE_API_KEY="a-key-of-your-choosing"
 docker compose -f infra/docker-compose.yml up --build
 ```
 
+On a Windows workstation the pinned engine stops before loading the weights; the override that
+starts an earlier one is in [`infra/README.md`](infra/README.md#2-the-full-container-stack).
 Everything the gateway reads is in [`.env.example`](.env.example); how it is deployed, on this
 machine and on Modal, and what it costs, is in [`docs/operations.md`](docs/operations.md) and
 [`infra/README.md`](infra/README.md).
