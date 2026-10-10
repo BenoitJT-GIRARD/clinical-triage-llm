@@ -120,9 +120,10 @@ Four findings, checked on the corpora themselves:
   dataset;
 - **MedQuAD asks about conditions, not about patients.** Its symptom sheets are turned into
   patient complaints, which yields a few cases, but it does not describe clinical situations;
-- **UltraMedical-Preference orders a large share of its pairs by answer length alone**:
-  38.6% of a sample of 5,000 rows, counted once by hand and not rebuilt at every build —
-  a signal which, used for an alignment, teaches the model that "longer is better".
+- **UltraMedical-Preference rewards length.** On its expert-reviewed test split, outside the
+  pairs built to compare answers of similar length, the preferred answer is the longer one in
+  470 pairs out of 597 — a signal which, used for an alignment, teaches the model that "longer
+  is better". The evaluation recounts it at every run, in `reports/evaluation_results.json`.
 
 The corpus therefore rests on three contributions, and the evaluation on a fourth.
 

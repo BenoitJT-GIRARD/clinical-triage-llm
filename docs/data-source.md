@@ -10,8 +10,8 @@ what conditions.
 
 ## The corpora, as they were read
 
-Every corpus was read from the Hugging Face Hub on 2026-08-25, the date the delivered set was
-built; the build records that date, with the repository revision, in `metadata.json`. None of them is
+Every corpus was read from the Hugging Face Hub on 2026-10-09, the date the published set was built;
+the build records that date, with the repository revision, in `metadata.json`. None of them is
 redistributed here in its original form: what the dataset carries is derived cases, and the
 derivation is in the code.
 
@@ -53,10 +53,11 @@ of its entries, six are recognised as describing a patient and none of those car
 triage rule can read. The corpus is kept in the funnel table rather than dropped from the
 document, because "we tried this source and it yields zero" is a result.
 
-**UltraMedical-Preference is never trained on.** A sample of its pairs is ordered by answer
-length alone in more than a third of cases; an alignment trained on that signal learns that
-longer is better. It is used as an external evaluation set, where the aligned model does badly —
-which is reported in [`protocol.md`](protocol.md#what-the-alignment-did-not-buy).
+**UltraMedical-Preference is never trained on.** Outside the pairs built to compare answers of
+similar length, its preferred answer is the longer one in 470 pairs out of 597; an alignment
+trained on that signal learns that longer is better. Its test split is used as an external
+evaluation set, where the aligned model does badly — which is reported in
+[`protocol.md`](protocol.md#what-the-alignment-bought-and-what-it-did-not).
 
 ## What the corpus cases are allowed to decide
 
