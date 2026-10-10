@@ -104,6 +104,7 @@ def benchmark(
     concurrencies: tuple[int, ...] = (1, 4, 8),
     repetitions: int = 2,
     target: str = "gateway",
+    extra_headers: dict[str, str] | None = None,
 ) -> dict:
     """Measure latency and throughput of an endpoint at several concurrency levels.
 
@@ -126,6 +127,9 @@ def benchmark(
         headers = {"X-API-Key": api_key}
     else:
         headers = {"Authorization": f"Bearer {api_key}"}
+    # An engine behind an on-demand host's proxy authentication turns away a request that does
+    # not carry the workspace's token pair, before it reaches vLLM.
+    headers.update(extra_headers or {})
     requests = [cases[i % len(cases)] for i in range(len(cases) * repetitions)]
     results: dict[str, dict] = {}
 

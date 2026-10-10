@@ -11,6 +11,14 @@ decomposes it, giving the cost of generation alone. Both are published under the
 Run it against the local stack (``docker compose -f infra/docker-compose.yml up``) or against a
 deployed endpoint: the command is the same, only the URL changes.
 
+``--runs`` repeats the gateway series. On forty requests, the 95th percentile is the third-slowest
+request: one run cannot say how much of it is the endpoint and how much is chance, three can show
+the spread. The first run is the one the figure draws; all of them are written under ``runs``.
+
+An engine behind Modal's proxy authentication answers only a request carrying the workspace's
+token pair. ``TRIAGE_ENGINE_PROXY_KEY`` and ``TRIAGE_ENGINE_PROXY_SECRET``, read from the
+environment as the gateway reads them, are presented to the engine when they are set.
+
 Usage::
 
     uv run python scripts/benchmark_endpoint.py --api-key "$TRIAGE_API_KEY"
@@ -47,6 +55,7 @@ def main() -> None:
     )
     parser.add_argument("--cases", type=int, default=20, help="distinct cases used")
     parser.add_argument("--repetitions", type=int, default=2)
+    parser.add_argument("--runs", type=int, default=1, help="times the gateway series is repeated")
     parser.add_argument(
         "--concurrency", type=int, nargs="+", default=[1, 4, 8], help="load levels tested"
     )
@@ -65,20 +74,28 @@ def main() -> None:
         len(cases),
         args.repetitions,
     )
-    results = benchmark(
-        url=args.url,
-        model=args.model,
-        cases=cases,
-        api_key=args.api_key,
-        concurrencies=tuple(args.concurrency),
-        repetitions=args.repetitions,
-        target="gateway",
-    )
+    runs = []
+    for run in range(1, args.runs + 1):
+        if args.runs > 1:
+            logger.info("Gateway series, run %d of %d", run, args.runs)
+        runs.append(
+            benchmark(
+                url=args.url,
+                model=args.model,
+                cases=cases,
+                api_key=args.api_key,
+                concurrencies=tuple(args.concurrency),
+                repetitions=args.repetitions,
+                target="gateway",
+            )
+        )
+    results = runs[0]
+    proxy = _proxy_headers()
 
     engine_measures = None
     engine_version = None
     if args.engine_url:
-        engine_version = _engine_version(args.engine_url, args.vllm_key)
+        engine_version = _engine_version(args.engine_url, args.vllm_key, proxy)
         logger.info("vLLM engine %s", engine_version or "of unknown version")
         logger.info("Decomposition: cost of the engine alone on %s", args.engine_url)
         engine_measures = benchmark(
@@ -89,6 +106,7 @@ def main() -> None:
             concurrencies=tuple(args.concurrency),
             repetitions=args.repetitions,
             target="engine",
+            extra_headers=proxy,
         )
 
     destination = PATHS.reports / "benchmark_endpoint.json"
@@ -100,6 +118,7 @@ def main() -> None:
                 "target": "gateway (POST /triage)",
                 "model": args.model,
                 "measures": results,
+                "runs": runs,
                 "engine_endpoint": args.engine_url,
                 "engine_version": engine_version,
                 "engine_measures": engine_measures,
@@ -117,7 +136,18 @@ def main() -> None:
         _show("Decomposition: cost of the engine alone (vLLM)", engine_measures)
 
 
-def _engine_version(url: str, api_key: str | None) -> str | None:
+def _proxy_headers() -> dict[str, str]:
+    """The token pair an on-demand host's proxy asks for, when the environment holds one."""
+    import os
+
+    key = os.getenv("TRIAGE_ENGINE_PROXY_KEY")
+    secret = os.getenv("TRIAGE_ENGINE_PROXY_SECRET")
+    return {"Modal-Key": key, "Modal-Secret": secret} if key and secret else {}
+
+
+def _engine_version(
+    url: str, api_key: str | None, proxy: dict[str, str] | None = None
+) -> str | None:
     """Ask the engine which version it is running.
 
     A latency only holds for a given engine. The stack pins its image by digest, but that image
@@ -127,6 +157,7 @@ def _engine_version(url: str, api_key: str | None) -> str | None:
     import httpx
 
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    headers.update(proxy or {})
     response = httpx.get(f"{url}/version", headers=headers, timeout=10)
     response.raise_for_status()
     return response.json().get("version")
