@@ -6,7 +6,7 @@
   <img src="docs/badges/python.svg" alt="Python 3.12">
   <img src="docs/badges/stack.svg" alt="Built with Unsloth · vLLM · TRL">
   <img src="docs/badges/licence.svg" alt="License: MIT">
-  <img src="docs/badges/coverage.svg" alt="coverage 79%">
+  <img src="docs/badges/coverage.svg" alt="coverage 80%">
 </p>
 
 **Project status** — finished, and stopped on purpose. The fine-tuning of the language model,
