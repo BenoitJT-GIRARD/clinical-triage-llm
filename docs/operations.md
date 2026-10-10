@@ -69,13 +69,13 @@ median is **2,227.8** milliseconds and the throughput **3.23** requests per seco
 absorbs concurrency well; what moves is the tail.
 
 <!-- source: reports/benchmark_endpoint.json -->
-The bench ran three times in a row, and the figure draws the first run. From one run to the next
-the medians stay within a tenth of a second: **2,087.9** to **2,095.2** milliseconds with one
-caller, **2,222.7** to **2,309.0** with eight. The 95th percentile moves more: **2,604.9** to
-**2,774.9** with four callers, **2,731.9** to **3,083.6** with eight. On forty requests that
-percentile is the third-slowest request, and three runs show how far it wanders. These are order
-statistics on one deployment, from one workstation, on one evening. They are not a capacity plan,
-and the repository does not claim one.
+The bench ran three times in a row, n = 40 requests per level in each run, and the figure draws the
+first. From one run to the next the medians stay within a tenth of a second: **2,087.9** to
+**2,095.2** milliseconds with one caller, **2,222.7** to **2,309.0** with eight. The 95th
+percentile moves more: **2,604.9** to **2,774.9** with four callers, **2,731.9** to **3,083.6**
+with eight. On forty requests that percentile is the third-slowest request, and three runs show how
+far it wanders. These are order statistics on one deployment, from one workstation, on one evening.
+They are not a capacity plan, and the repository does not claim one.
 
 ## The quota
 
