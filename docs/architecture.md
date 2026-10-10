@@ -10,8 +10,8 @@ to know which pieces are load-bearing before touching any of them.
 ## 1. The ground truth is written, not found
 
 The obvious plan was to label a public medical corpus in triage levels and train on that. It
-does not survive contact with the corpora: none of the four is annotated in levels, and only one
-of them describes patients at all. The funnel in [`../data/README.md`](../data/README.md)
+does not survive contact with the corpora: none of the five is annotated in levels, and only one
+of them is made of patient cases. The funnel in [`../data/README.md`](../data/README.md)
 counts what each one really yields.
 
 So the truth comes from a **clinical catalogue** written for the project: seventy presentations,

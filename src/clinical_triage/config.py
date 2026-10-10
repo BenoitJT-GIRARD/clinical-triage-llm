@@ -174,8 +174,8 @@ class TriageTaxonomy:
     """Priority levels expected out of the model.
 
     The taxonomy follows the operational need (immediate / urgent / deferred) and maps onto the
-    French hospital triage scales: ``URGENCE_VITALE`` covers sorts 1 and 2 of the FRENCH scale,
-    ``URGENCE_MODEREE`` sorts 3 and 4, ``CONSULTATION_DIFFEREE`` sort 5.
+    French hospital triage scales: ``URGENCE_VITALE`` covers levels 1 and 2 of the FRENCH scale,
+    ``URGENCE_MODEREE`` levels 3 and 4, ``CONSULTATION_DIFFEREE`` level 5.
 
     The level names stay in French: they are the strings the model emits, the strings written
     into the dataset and into every published artefact. Renaming them would retrain the model.

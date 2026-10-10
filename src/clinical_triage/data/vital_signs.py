@@ -5,7 +5,7 @@ reception (heart rate, blood pressure, respiratory rate, saturation, temperature
 consciousness) weigh as much as the symptoms. This module represents them explicitly, renders
 them as text for the model, and says what they trigger.
 
-The adult thresholds follow the logic of the NEWS2 early-warning score and of the sort 1-2
+The adult thresholds follow the logic of the NEWS2 early-warning score and of the level 1-2
 criteria of the FRENCH scale. The paediatric thresholds vary with age: a table of age bands,
 deliberately short and readable.
 

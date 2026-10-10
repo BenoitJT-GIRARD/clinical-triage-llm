@@ -1,22 +1,22 @@
 """Loading the public medical corpora.
 
-Four corpora are the starting point: MediQAl, FrenchMedMCQA, MedQuAD and
-UltraMedical-Preference. This module only downloads them and brings them to a common shape;
-sorting what is genuinely usable for triage happens in ``corpus_cases``.
+Five corpora are read: MediQAl, MedMCQA, FrenchMedMCQA and MedQuAD as sources of cases, and
+UltraMedical-Preference as a source of preferences. This module only downloads them and brings
+them to a common shape; deciding what is genuinely usable for triage happens in
+``corpus_cases``.
 
-Three findings, checked on the corpora themselves, explain what follows:
+Four findings, checked on the case corpora themselves, explain what follows:
 
-- **MediQAl is the only one containing real clinical vignettes.** Its ``clinical_case`` column
+- **MediQAl is the only one made of clinical vignettes.** Its ``clinical_case`` column
   describes a patient, their complaint, their history and often their vital signs on arrival.
   3,075 distinct vignettes, in French, 569 of which carry at least one readable vital sign. It
   is the only authentic French-language source.
+- **MedMCQA is the English source of vignettes.** Few of its exam questions describe a
+  patient, but its size makes it the only source of English clinical vignettes.
 - **FrenchMedMCQA is a set of pharmacy exam questions.** The mirror used keeps only its 1,080
   single-answer questions, out of the corpus's 3,105, and only six of them describe a patient.
 - **MedQuAD asks general questions about conditions**, not about patients. It serves to vary the
   English clinical vocabulary, not to supply cases.
-
-MedMCQA completes the English vignette volume, since the three other usable corpora are either
-French-language or patient-free.
 
 **The corpora are read in full.** A partial read would give a yield that describes not the
 source but the ceiling we set ourselves, and the published protocol would draw false conclusions

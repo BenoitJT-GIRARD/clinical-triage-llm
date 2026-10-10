@@ -107,7 +107,7 @@ def _write_yield_into_the_card(corpus_yield: dict) -> None:
     end = text.index(closing) + len(closing)
 
     header = (
-        "| Corpus | Entries read | No patient described | Outside length bounds "
+        "| Corpus | Entries read | No patient presentation recognised | Outside length bounds "
         "| No sign identified | Duplicates | Cases extracted | Cases delivered | Yield |"
     )
     rows = [

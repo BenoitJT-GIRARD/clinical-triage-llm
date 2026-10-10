@@ -9,8 +9,8 @@ emergency reception desk, with its reference triage level. The vignette generato
 (``case_generator``) then dresses that presentation with an age, a history, vital signs and a
 wording; the label comes from the presentation, never from re-reading the produced text.
 
-The mapping to levels follows the FRENCH scale used in French emergency departments: sorts 1-2
-(immediate care) → ``URGENCE_VITALE``, sorts 3-4 (a few hours) → ``URGENCE_MODEREE``, sort 5 →
+The mapping to levels follows the FRENCH scale used in French emergency departments: levels 1-2
+(immediate care) → ``URGENCE_VITALE``, levels 3-4 (a few hours) → ``URGENCE_MODEREE``, level 5 →
 ``CONSULTATION_DIFFEREE``.
 
 The catalogue is deliberately written by hand and reviewed case by case: annotation quality

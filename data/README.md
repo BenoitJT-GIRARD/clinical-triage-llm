@@ -25,7 +25,7 @@ catalogue that no emergency physician has reviewed (see [Limitations](#limitatio
 ### Files and subsets
 
 <!-- source: data/processed/metadata.json -->
-| File | Hub subset and split | Content | Rows | In the repository |
+| File | Hub subset and split | Content | Rows | In the code repository |
 |---|---|---|---|---|
 | `sft_train.jsonl` | `sft` / `train` | prompt and answer pairs, supervised training | 4,000 | no |
 | `sft_validation.jsonl` | `sft` / `validation` | the same, convergence tracking | 500 | no |
@@ -34,10 +34,11 @@ catalogue that no emergency physician has reviewed (see [Limitations](#limitatio
 | `clinical_eval.jsonl` | `clinical_eval` / `test` | hand-written cases, **evaluation, never training** | 60 | yes |
 | `metadata.json` | — | schema, statistics, provenance, personal-data checks | — | yes |
 
-The four training files are not versioned: they are derivatives of the code and of the public
-corpora, which `scripts/build_dataset.py` rebuilds identically at a fixed seed, and they are
-published on the Hub. The other two are versioned: the annotated evaluation cases and the
-anonymisation check must be readable by cloning the repository, with nothing to download.
+The four training files are not versioned in the [code repository](https://github.com/BenoitJT-GIRARD/clinical-triage-llm): they are
+derivatives of the code and of the public corpora, which `scripts/build_dataset.py` rebuilds
+identically at a fixed seed, and they are published on the Hub. The other two are versioned
+there as well: the annotated evaluation cases and the anonymisation check must be readable by
+cloning the code repository, with nothing to download.
 
 ### Fields
 
@@ -54,7 +55,7 @@ The supervised files carry:
 | `confidence` | `high` (clinical catalogue) or `medium` (rule applied to a corpus) |
 | `symptoms` | clinical signs present in the description |
 | `medical_history` | history mentioned |
-| `vitals` | vital-sign reading, empty when sorting happens without measurements |
+| `vitals` | vital-sign reading, empty when triage happens without measurements |
 | `presentation_id` | source presentation, to trace back to the reference decision |
 
 The preference file carries:
@@ -89,18 +90,20 @@ describe exactly the columns written into the files.
 
 ### Triage levels
 
-Three levels, mapped onto the FRENCH scale used in French emergency departments:
+Three levels, mapped onto the five of FRENCH (French Emergency Nurses Classification
+in-Hospital), the triage scale used in French emergency departments:
 
 | Level | Delay | FRENCH scale |
 |---|---|---|
-| `URGENCE_VITALE` | immediate care | sorts 1 and 2 |
-| `URGENCE_MODEREE` | a few hours | sorts 3 and 4 |
-| `CONSULTATION_DIFFEREE` | scheduled consultation | sort 5 |
+| `URGENCE_VITALE` | immediate care | levels 1 and 2 |
+| `URGENCE_MODEREE` | a few hours | levels 3 and 4 |
+| `CONSULTATION_DIFFEREE` | scheduled consultation | level 5 |
 
 ## Construction
 
-Four public corpora were available: MediQAl, FrenchMedMCQA, MedQuAD and UltraMedical-Preference.
-The first task was to check what they actually allow.
+Five public corpora were read: MediQAl, MedMCQA, FrenchMedMCQA and MedQuAD as sources of cases,
+and UltraMedical-Preference as a source of preferences. The first task was to check what they
+actually allow.
 
 **None is annotated with triage levels.** They are sets of medical questions and answers and of
 exam questions. Using them as they are — wrapping an exam question in a triage template and
@@ -108,12 +111,15 @@ labelling it by keyword presence — produces absurd examples of the kind "A pat
 with: *Levamisole is used as all except -*", and a circular evaluation where the model merely
 relearns the rule that produced the labels.
 
-Four findings, checked on the corpora themselves:
+Five findings, checked on the corpora themselves:
 
 <!-- source: data/processed/metadata.json -->
-- **MediQAl is the only one that describes patients.** Its `clinical_case` column carries 3,075
+- **MediQAl is the only one made of patient cases.** Its `clinical_case` column carries 3,075
   distinct French vignettes — complaint, history, and for some of them the vital signs on
   arrival. It is the only authentic French-language source;
+- **MedMCQA is the English source of vignettes.** Few of its exam questions describe a patient,
+  but its size makes it the largest authentic source, and without it the English half of the
+  authentic corpus would have no clinical vignette: MedQuAD describes conditions, not patients;
 - **FrenchMedMCQA holds 1,080 questions** across its three splits — n = 1,080 entries read, of
   which only six are recognised as a patient presentation, and none carries an identifiable
   triage sign. It is a set of pharmacy questions; it cannot carry the French half of a triage
@@ -123,7 +129,8 @@ Four findings, checked on the corpora themselves:
 - **UltraMedical-Preference rewards length.** On its expert-reviewed test split, outside the
   pairs built to compare answers of similar length, the preferred answer is the longer one in
   470 pairs out of 597 — a signal which, used for an alignment, teaches the model that "longer
-  is better". The evaluation recounts it at every run, in `reports/evaluation_results.json`.
+  is better". The evaluation recounts it at every run, in
+  [`reports/evaluation_results.json`](../reports/evaluation_results.json).
 
 The corpus therefore rests on three contributions, and the evaluation on a fourth.
 
@@ -161,7 +168,7 @@ Measured yield of each corpus, after filtering for the cases genuinely usable fo
 
 <!-- source: data/processed/metadata.json -->
 <!-- yield:start — table written by scripts/build_dataset.py, do not edit by hand -->
-| Corpus | Entries read | No patient described | Outside length bounds | No sign identified | Duplicates | Cases extracted | Cases delivered | Yield |
+| Corpus | Entries read | No patient presentation recognised | Outside length bounds | No sign identified | Duplicates | Cases extracted | Cases delivered | Yield |
 |---|---|---|---|---|---|---|---|---|
 | MediQAl | 3,075 | 1,408 | 513 | 795 | 0 | 359 | **314** | **314 / 3,075** |
 | MedQuAD | 16,407 | 15,909 | 0 | 315 | 0 | 183 | 130 | 130 / 16,407 |
@@ -171,10 +178,10 @@ n = 203,384 entries read across the four corpora, 1,725 cases delivered.
 <!-- yield:end -->
 
 > **How to read it.** One row per corpus, read left to right as a funnel. `Entries read` is
-> everything the source holds; the four columns after it are the reasons an entry was dropped,
-> the largest by far being that the entry describes no patient at all. `Cases extracted` is what
-> survived, `Cases delivered` is what the balancing caps then let through, and `Yield` sets the
-> second against the first.
+> everything the source holds; the four columns after it are the reasons an entry was dropped, the
+> largest by far being that no patient presentation was recognised in the entry. `Cases extracted`
+> is what survived, `Cases delivered` is what the balancing caps then let through, and `Yield` sets
+> the second against the first.
 
 The four corpora are read **in full**, with no read cap: a cap would give a yield describing the
 limit we set ourselves and not the source. The loss columns add up with "cases extracted" to give
@@ -196,10 +203,6 @@ FrenchMedMCQA's zero is not an oversight: these are pharmacy exam questions, wit
 described. Forcing them in would reintroduce exactly the absurd examples this dataset was rebuilt
 to eliminate.
 
-MedMCQA was added because the three usable corpora available are either French-language —
-MediQAl, FrenchMedMCQA — or patient-free — MedQuAD. Without it, the English half of the authentic
-corpus would have no clinical vignette at all. The addition is documented rather than passed over.
-
 ### 3. The clinical evaluation set, written by hand
 
 The cases in `clinical_eval.jsonl` are written one by one, with a different syntax and a
@@ -208,8 +211,9 @@ presentations**: an emergency that looks benign, a spectacular but harmless symp
 sign explicitly denied, vital signs that contradict the narrative. Each case carries the clinical
 reason for its label.
 
-That set **never enters training**: the preparation script removes from the supervised set and
-from the preference set any user turn identical to one of them, and fails if one is found there.
+That set **never enters training**: the preparation script removes from the supervised set and from
+the preference set any user turn identical to one of them, then checks again and fails if one
+remains.
 
 ### 4. Preference pairs for the alignment
 
@@ -218,17 +222,17 @@ the output contract fits in three French lines, and a large share of its pairs i
 answer length alone. It is reserved for evaluation, as an independent measure of alignment.
 
 The pairs in `dpo_train.jsonl` are built from the **training split alone** of the supervised set.
-For each prompt, the reference answer is opposed to a degraded variant following one of four
+For each prompt, the reference answer is paired with a degraded variant following one of four
 strategies: an underestimated level, a course of action that delays care, a diagnosis presented
 as certain, an answer outside the expected language.
 
 Three rules frame the construction:
 
-1. **same format, same length.** Each defect exists in several lengths and the one closest to the
+1. **same format, closest length.** Each defect exists in several lengths and the one closest to the
    preferred answer is kept. Without that, the only systematic difference between the two answers
    would be length, and length is what the alignment would learn;
 2. **never an escalation as the rejected answer.** The system prompt requires escalating at the
-   slightest doubt; opposing an over-cautious answer as a bad example would teach the opposite;
+   slightest doubt; presenting an over-cautious answer as the bad example would teach the opposite;
 3. **serious cases weigh more**, undertriaging a life-threatening case being the costliest
    failure.
 
@@ -247,7 +251,7 @@ run: on 400 narratives of the corpora, each analysed in its own language, the `D
 vital signs are precisely what decides a triage level. Three decisions follow:
 
 1. only genuinely identifying entities are masked: name, phone, email address, banking
-   identifiers, IP address, URL, social security number, date of birth. Four recognisers absent
+   identifiers, IP address, URL, social security number, date of birth. Five recognisers absent
    from Presidio were added and registered in both languages: the social security number, the
    phone number in national and international form, and the date of birth in DD/MM/YYYY as well
    as YYYY-MM-DD;
@@ -295,9 +299,9 @@ that licence, and the attribution below is part of every reuse.
 | Source | Language | Licence | What the set takes from it, and what was done to it |
 |---|---|---|---|
 | The project's presentation catalogue | fr + en | MIT, as the project's code | the generated vignettes and their reference level |
-| [`ANR-MALADES/MediQAl`](https://huggingface.co/datasets/ANR-MALADES/MediQAl) | fr | CC BY 4.0 | **French clinical vignettes**, the only source corpus that describes patients: exam question removed, identifying entities masked, labelled by the rule |
+| [`ANR-MALADES/MediQAl`](https://huggingface.co/datasets/ANR-MALADES/MediQAl) | fr | CC BY 4.0 | **French clinical vignettes**, the only source corpus made of patient cases: exam question removed, identifying entities masked, labelled by the rule |
 | [`keivalya/MedQuad-MedicalQnADataset`](https://huggingface.co/datasets/keivalya/MedQuad-MedicalQnADataset) | en | CC BY 4.0 | symptom sheets turned into patient complaints, masked, labelled by the rule |
-| [`openlifescienceai/medmcqa`](https://huggingface.co/datasets/openlifescienceai/medmcqa) | en | Apache-2.0 | exam clinical vignettes *(added)*: exam question removed, masked, labelled by the rule |
+| [`openlifescienceai/medmcqa`](https://huggingface.co/datasets/openlifescienceai/medmcqa) | en | Apache-2.0 | exam clinical vignettes: exam question removed, masked, labelled by the rule |
 | [`nthngdy/frenchmedmcqa`](https://huggingface.co/datasets/nthngdy/frenchmedmcqa) | fr | Apache-2.0 | read in full; no case kept, nothing redistributed |
 | [`TsinghuaC3I/UltraMedical-Preference`](https://huggingface.co/datasets/TsinghuaC3I/UltraMedical-Preference) | en | MIT | evaluation only; nothing redistributed |
 

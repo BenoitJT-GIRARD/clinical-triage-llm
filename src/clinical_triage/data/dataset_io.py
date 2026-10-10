@@ -247,9 +247,9 @@ def metadata_schema() -> dict:
             "clinical_note": "Clinical reason for the label, for auditability and error analysis.",
         },
         "triage_taxonomy": {
-            "URGENCE_VITALE": "Immediate care (sorts 1 and 2 of the FRENCH scale).",
-            "URGENCE_MODEREE": "Care within a few hours (sorts 3 and 4).",
-            "CONSULTATION_DIFFEREE": "No immediate severity criterion (sort 5).",
+            "URGENCE_VITALE": "Immediate care (levels 1 and 2 of the FRENCH scale).",
+            "URGENCE_MODEREE": "Care within a few hours (levels 3 and 4).",
+            "CONSULTATION_DIFFEREE": "No immediate severity criterion (level 5).",
         },
         "system_prompt": SYSTEM_PROMPT,
         "sources": DOCUMENTED_SOURCES,

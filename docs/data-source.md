@@ -38,14 +38,14 @@ measured vitals and the language, and the level travels with the presentation: i
 back out of the text. That is what makes it ground truth: no rule, no model and no keyword
 decides it.
 
-**MediQAl is the only source corpus that describes patients.** Its clinical-case column carries
+**MediQAl is the only source corpus made of patient cases.** Its clinical-case column carries
 French vignettes with a complaint and, for some of them, the vital signs on arrival. It is the
 authentic French material of the set.
 
-**MedMCQA was added, and the addition is a decision.** The other source corpora hold no
+**MedMCQA gives the English half its vignettes.** The other source corpora hold no
 English clinical vignette at all. Without a second language the dataset would have been French
 only, and the service reads both. MedMCQA's yield is poor, a hundred and eighty
-thousand rows for twelve hundred cases, but those cases are real presentations written by
+thousand rows for nearly thirteen hundred cases, but those cases are real presentations written by
 someone else, which is exactly what a catalogue cannot provide.
 
 **FrenchMedMCQA gave nothing, and that is the finding.** Its questions are pharmacy questions:
