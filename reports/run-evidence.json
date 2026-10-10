@@ -1,7 +1,7 @@
 {
   "command": "uv run python scripts/smoke.py",
-  "ran_at": "2026-09-18",
-  "git_revision": "ab613da6023416b6e77bee5d34179bacbe55cc3c",
+  "ran_at": "2026-10-09",
+  "git_revision": "a8d7238fef81b35d8e0678a2f3869edcd4b96e3d",
   "tool_versions": {
     "python": "3.12.12",
     "matplotlib": "3.11.0",
@@ -12,7 +12,7 @@
     "uv": "uv 0.11.6 (65950801c 2026-04-09 x86_64-pc-windows-msvc)",
     "docker": "Docker version 29.2.0, build 0b9d198"
   },
-  "duration_seconds": 2.7,
+  "duration_seconds": 2.2,
   "key_output": [
     "reports/figures/accuracy_by_case_type.png",
     "reports/figures/confusion_matrices.png",
@@ -26,5 +26,48 @@
     "reports/figures/undertriage_by_case_type.png",
     "reports/figures/MANIFEST.json"
   ],
-  "workflow_run_url": null
+  "workflow_run_url": null,
+  "training_chain_check": {
+    "sft": {
+      "ran_on": "2026-10-09",
+      "steps": 20,
+      "metrics": {
+        "train_loss": 1.0879347324371338,
+        "eval_loss": 0.7666611671447754,
+        "trainable_parameters": 346030080,
+        "total_parameters": 2377769984,
+        "trainable_share_pct": 14.553,
+        "duration_s": 108.1,
+        "peak_gpu_memory_gb": 7.42,
+        "examples_per_second": 3.02
+      },
+      "environment": {
+        "torch": "2.14.1+cu130",
+        "transformers": "5.17.0",
+        "trl": "1.13.0",
+        "gpu": "NVIDIA GeForce RTX 4060 Ti",
+        "gpu_memory_gb": 16.0
+      }
+    },
+    "dpo": {
+      "ran_on": "2026-10-09",
+      "steps": 20,
+      "metrics": {
+        "train_loss": 0.6454984426498414,
+        "training_pairs": 2160,
+        "validation_pairs": 240,
+        "eval_reward_accuracy": 0.975,
+        "eval_reward_margin": 0.16527747674845158,
+        "duration_s": 300.1,
+        "peak_gpu_memory_gb": 8.75
+      },
+      "environment": {
+        "torch": "2.14.1+cu130",
+        "transformers": "5.17.0",
+        "trl": "1.13.0",
+        "gpu": "NVIDIA GeForce RTX 4060 Ti",
+        "gpu_memory_gb": 16.0
+      }
+    }
+  }
 }
