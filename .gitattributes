@@ -13,6 +13,7 @@
 # folded by default in reviews, without excluding it from searches.
 data/processed/*.jsonl text eol=lf linguist-generated=true
 
-# Notebooks are read as JSON: fixed line endings, and no automatic type detection that would
-# make them unreadable in a diff.
-*.ipynb text eol=lf linguist-language=Python
+# Notebooks are read as JSON, with fixed line endings. They are the laboratory notebook, not
+# the code the project runs: GitHub's language statistics count them as documentation, so
+# the bar measures the code.
+*.ipynb text eol=lf linguist-documentation
