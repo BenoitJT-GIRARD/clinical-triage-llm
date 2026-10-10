@@ -263,6 +263,29 @@ from, in a comment above it. The Hub cards are rendered from the same files by
 and [`dataset-card.in.md`](infra/hub/dataset-card.in.md), and continuous integration fails when a
 committed card no longer matches them.
 
+### Five defects found before the first version shipped
+
+Checking the method one last time before version 1.0.0 turned up five defects, and fixing them
+moved no published figure. Four were about how a measurement gets written down:
+
+- a count that was missing came out as `0`, so a summary rebuilt from a fresh clone could say
+  that "0 distinct presentations" had all been seen in training. The build now computes the
+  count and writes it into `data/processed/metadata.json`, which is versioned: 70 presentations
+  in this version;
+- the number of preference answers cut by the context window was typed by hand, while the
+  function that counts it only logged the value. The evaluation now writes it into
+  `reports/evaluation_results.json`: 178 answers in this version;
+- the endpoint bench published `"tokens_per_s": 0.0` for a gateway that counts no token at all.
+  The throughput is now written only when a measurement carries a token count;
+- the overall accuracy built its Wilson interval directly, around the one function that picks
+  the estimator from the sample size. It now goes through `interval_for_proportion`: nothing
+  changes on 60 or 120 cases, and a subgroup of three would no longer get the wrong interval.
+
+The fifth mattered most. Four tests of the experiment-tracking module failed in the environment
+continuous integration installs, because `describe_environment()` imported torch without a
+guard; those four tests are the ones that check that tracking never stops a run. A missing
+library is now reported as `unavailable`, and the suite passes whole without the training group.
+
 ## Running it
 
 Requirements: [uv](https://docs.astral.sh/uv/) and Python 3.12. Training needs an NVIDIA GPU,
