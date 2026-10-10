@@ -13,8 +13,12 @@ tags:
   - medical
   - triage
   - emergency-department
+  - qwen3
+  - sft
   - lora
   - dpo
+  - trl
+  - unsloth
 model-index:
   - name: qwen3-1.7b-clinical-triage
     results:

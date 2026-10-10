@@ -3,13 +3,28 @@ license: cc-by-4.0
 language:
   - fr
   - en
+multilinguality:
+  - multilingual
 task_categories:
   - text-generation
+annotations_creators:
+  - machine-generated
+  - other
+language_creators:
+  - machine-generated
+  - found
+  - other
+source_datasets:
+  - ANR-MALADES/MediQAl
+  - openlifescienceai/medmcqa
+  - keivalya/MedQuad-MedicalQnADataset
 tags:
   - medical
   - triage
   - emergency-department
   - synthetic
+  - sft
+  - dpo
 size_categories:
   - 1K<n<10K
 pretty_name: Bilingual emergency triage
