@@ -14,11 +14,11 @@ does not survive contact with the corpora: none of the four is annotated in leve
 of them describes patients at all. The funnel in [`../data/README.md`](../data/README.md)
 counts what each one really yields.
 
-So the truth comes from a **clinical catalogue** written for the project: seventy
-presentations, each carrying what a patient arrives with, what can be measured on them, and why
-that puts them at that level. A generator draws vignettes from it. The public corpora contribute authentic
-cases, filtered and labelled by an explicit rule, and carry an explicitly lower confidence that
-travels with every example.
+So the truth comes from a **clinical catalogue** written for the project: seventy presentations,
+each carrying what a patient arrives with, what can be measured on them, and why that puts them at
+that level. A generator draws vignettes from it. The public corpora contribute authentic cases,
+filtered and labelled by an explicit rule, and carry an explicitly lower confidence that travels
+with every example.
 
 **What was rejected.** Labelling the corpora by prompting a larger model was considered and
 dropped: the labels would have come from a system nobody can audit, and the project's whole
@@ -57,8 +57,8 @@ model and answers one OpenAI-compatible route.
 
 That split is what lets a new model version ship without rebuilding the gateway, and the gateway
 ship without touching three gigabytes of weights. It is also what makes the on-demand deployment
-possible: the engine scales to zero between demonstrations, the gateway stays up and answers the
-health probe.
+possible: on Modal the engine shuts down after fifteen idle minutes while the gateway answers its
+liveness probe, and the readiness probe is the one that wakes the GPU.
 
 **What was rejected.** Serving with `transformers` inside the gateway, which was the shortest
 path and the one the project used first. It was dropped when the image reached three gigabytes
@@ -77,8 +77,13 @@ this base model the twenty-five ChatML control tokens are a single untrained vec
 and `im_end` being identical to the third decimal by cosine similarity, and the output head is
 tied to the embedding matrix, which LoRA freezes. The model therefore **cannot emit the
 end-of-sequence token**: it runs to the generation cap on every answer. Training the output head
-alongside the projections fixes it; clean stops go from none to all, and the answers shrink by
-more than half. The measurement is in [`protocol.md`](protocol.md#the-end-of-sequence-token).
+alongside the projections fixes it; clean stops go from none to all, and the median answer falls
+from the cap of 220 tokens to 96. The measurement is in
+[`protocol.md`](protocol.md#the-end-of-sequence-token).
+
+The kernels are Unsloth's rather than plain Transformers', for the same card: on the same thirty
+steps they run nearly twice as fast and need three gigabytes less, for a loss that ends in the
+same place ([`protocol.md`](protocol.md#the-training-engine)).
 
 **What was rejected.** A larger base model would have removed the problem by having trained
 control tokens, and was rejected on hardware: the project targets one card, and a model that
@@ -93,10 +98,10 @@ action, a diagnosis asserted where it should be suggested, or an answer in the w
 defect is named in the example, so what the alignment teaches can be read.
 
 **What was rejected.** Using an external preference dataset as the training signal was rejected
-after measuring it: on a sample of that set, more than a third of the pairs are ordered by answer
-length alone. An alignment trained on it would have taught the model that longer is better. It is
-used as an **evaluation** set instead, and the model does badly on it — which is reported rather
-than hidden.
+after measuring it: on its expert-reviewed test split, outside the pairs built to compare answers
+of similar length, the preferred answer is the longer one in 470 pairs out of 597. An alignment
+trained on it would have taught the model that longer is better. It is used as an **evaluation**
+set instead, and the model does badly on it — which is reported rather than hidden.
 
 ## 6. Everything a run produces lives under `var/`
 
