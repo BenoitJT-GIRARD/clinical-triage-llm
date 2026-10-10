@@ -9,17 +9,17 @@
   <img src="docs/badges/coverage.svg" alt="coverage 80%">
 </p>
 
-**Project status** — version 2.0.0, finished. The model was fine-tuned, aligned and evaluated
-on one RTX 4060 Ti in October 2026, on three training seeds. The results are committed, and every
-number below names the file it comes from.
+**Project status** — version 2.0.0, finished. The language model was fine-tuned for emergency
+triage, preference-aligned with DPO and evaluated on one RTX 4060 Ti in October 2026, on three
+training seeds. The results are committed, and every number below names the file it comes from.
 
 - **Model and dataset**: on the Hugging Face Hub, as
   [`qwen3-1.7b-clinical-triage`](https://huggingface.co/BenoitJT-GIRARD/qwen3-1.7b-clinical-triage)
   and [`clinical-triage-bilingual`](https://huggingface.co/datasets/BenoitJT-GIRARD/clinical-triage-bilingual),
   with cards rendered from this repository at the same tag.
-- **Service**: deployed on Modal, and stopped. Stopped, it costs nothing and answers nothing; only
-  the owner of this repository starts it, for a demonstration
-  ([how](infra/README.md#4-cloud-deployment-on-modal)).
+- **Service**: deployed on Modal and left stopped, at no cost. Only the owner of this repository
+  can start it, for a demonstration
+  ([how it is started](infra/README.md#4-cloud-deployment-on-modal)).
 - **Evidence**: `reports/run-evidence.json`, written by `scripts/smoke.py`, which redraws every
   published figure from the committed results and writes nothing if one of them comes out
   different.
@@ -57,8 +57,8 @@ Four routes, and the second is the point.
 | Route | What it answers |
 |---|---|
 | `POST /questionnaire/next` | the next question to ask, chosen from the complaint; collection stops as soon as a vital sign appears |
-| `POST /triage` | the triage level, why, what to do — **and what the explicit rule would have decided** |
-| `GET /health` | whether the gateway is alive — it touches nothing else, and needs no key |
+| `POST /triage` | the triage level, why, what to do, **and what the explicit rule would have decided** |
+| `GET /health` | whether the gateway is alive; it touches nothing else, and needs no key |
 | `GET /ready` | whether the inference engine answers; it asks for the key, since on a managed host it can wake a GPU |
 
 <!-- source: docs/images/MANIFEST.json -->
@@ -111,27 +111,26 @@ labelled by the rule that is compared against here. The models in the table are 
 <!-- source: reports/evaluation_results.json -->
 | system | accuracy | undertriage | overtriage | format compliance |
 |---|---|---|---|---|
-| majority class | 0.333 | 1.000 | 0.000 | — |
-| always critical | 0.333 | 0.000 | 0.667 | — |
-| explicit rule | 0.617 | 0.550 | 0.017 | — |
-| linear classifier | 0.667 | 0.200 | 0.200 | — |
+| majority class | 0.333 | 1.000 | 0.000 | n/a |
+| always critical | 0.333 | 0.000 | 0.667 | n/a |
+| explicit rule | 0.617 | 0.550 | 0.017 | n/a |
+| linear classifier | 0.667 | 0.200 | 0.200 | n/a |
 | `Qwen3-1.7B-Base` | 0.167 | 0.525 | 0.283 | 0.467 |
 | SFT + LoRA | 0.700 | 0.300 | 0.100 | 1.000 |
 | SFT + DPO, merged | 0.717 | 0.275 | 0.100 | 1.000 |
-
-n = 60 cases, of which n = 40 are urgent: undertriage is counted on those forty alone,
-everything else on all sixty. What each column measures, and with which estimator, is in
-[`metrics.yaml`](metrics.yaml).
+> n = 60 cases, of which n = 40 are urgent: undertriage is counted on those forty alone,
+> everything else on all sixty. What each column measures, and with which estimator, is in
+> [`metrics.yaml`](metrics.yaml).
 
 > **How to read it.** One row per system, all answering the same sixty cases. `accuracy` is the
 > share filed at the reference level written for each case. `undertriage` is the share of the urgent
 > cases sent somewhere gentler, which is the failure that reaches a patient, so it is counted on the
 > forty urgent ones alone. `overtriage` is the share pushed above their level, which costs a place
 > in the queue. `format compliance` is the share an information system can parse at all; the four
-> baselines return a level rather than a text, so it does not apply to them.
+> baselines return a level, not a text, so it does not apply to them (n/a).
 
 <!-- source: reports/figures/MANIFEST.json -->
-![Accuracy, undertriage and overtriage for every system on the same hand-written cases, accuracy and undertriage with their 95% intervals, n = 60 cases of which 40 are urgent](reports/figures/systems_comparison.png)
+![Accuracy, undertriage and overtriage for every system on the same hand-written cases, accuracy and undertriage each with its 95% interval, n = 60 cases of which 40 are urgent](reports/figures/systems_comparison.png)
 
 > **How to read it.** Three panels, one per measure, with one bar per system. The middle panel
 > is the one to read first: shorter is better there, and it counts urgent patients sent somewhere
@@ -158,12 +157,11 @@ and a linear SVM.
 ### Both opinions, read together
 
 <!-- source: reports/evaluation_results.json -->
-The reply carries the model's level and the rule's. Keep the more urgent of the two, case by
-case, and on the same n = 40 urgent cases the misses fall from **11** to **5**: six urgent
-patients caught, none lost, **p = 0.031**. Overtriage does not move, at **0.100**, because the
-rule almost never overshoots. That reading was fixed in advance as well, and it needs no new
-model: it is what the service already returns. The five patients it still misses are the ones
-both systems miss.
+The reply carries the model's level and the rule's. Keep the more urgent of the two, case by case,
+and on the same n = 40 urgent cases the misses fall from **11** to **5**: six urgent patients
+caught, none lost, **p = 0.031**. Overtriage does not move, at **0.100**, because the rule almost
+never overshoots. That reading was fixed in advance as well, and it needs no new model: it is what
+the service already returns. The five it still misses are missed by the model and the rule alike.
 
 ### What the model restates, and what it transfers
 
@@ -181,40 +179,39 @@ On the internal test split, n = 120 cases, the model scores **0.950**. That numb
 restatement, not triage: most cases in that split were generated from presentations seen during
 training under another wording, and the rest are corpus cases labelled by the same rule as the
 corpus cases it trained on. The clinical set, n = 60, is the one that measures transfer, and the
-distance between the two, **0.233**, is the size of the illusion a single-set evaluation would have
-produced.
+model scores **0.717** there: the distance from **0.950** is the size of the illusion a single-set
+evaluation would have produced.
 
 ### What the alignment learnt
 
 <!-- source: reports/evaluation_results.json -->
-On n = 100 preference pairs built on the hand-written cases, the alignment favours the right
-answer over the defective one in **0.84** of them: what it learnt on generated narratives holds
-on written ones. On the n = 777 pairs of an external medical preference set it does so in
-**0.3655**, below chance — and on the n = 180 of those pairs whose two answers are of similar
-length, in **0.500** exactly. It learnt the defects it was shown and nothing about medicine at
-large, and its score below chance is a matter of answer length. On the clinical set the aligned
-model misses one urgent case fewer than the supervised one.
+On n = 100 preference pairs built on the hand-written cases, the alignment favours the right answer
+over the defective one in **0.84** of them: what it learnt on generated narratives holds on written
+ones. On the n = 777 pairs of an external medical preference set it does so in **0.3655**, below
+chance — and on the n = 180 of those pairs whose two answers are of similar length, in **0.500**
+exactly. It learnt the defects it was shown, not medicine at large; below chance, its score reflects
+answer length. On the clinical set the aligned model misses one urgent case fewer than the
+supervised one.
 
 ### Three trainings, one shipped
 
 <!-- source: reports/seed_study.json -->
-The method was trained three times, on seeds 42, 43 and 44, and seed 42 was chosen for
-publication before any of them was evaluated. Across the three, accuracy on the clinical set runs
-from **0.700** to **0.783**, and the urgent cases missed from **9** to **13**: training alone
-moves the result by up to five cases in sixty. The shipped seed is not the best of the three,
-and the worst still misses far fewer urgent patients than the rule. Over the three seeds, the
-alignment turns one urgent miss into a catch, out of a hundred and twenty urgent decisions, and
-loses none.
+The method was trained three times, on seeds 42, 43 and 44, and seed 42 was chosen for publication
+before any of them was evaluated. Across the three, accuracy on the n = 60 cases of the clinical set
+runs from **0.700** to **0.783**, and the urgent cases missed, out of n = 40, from **9** to **13**:
+training alone moves the result by up to five cases in sixty. Seed 42 sits in the middle of the
+three, and even the worst seed misses far fewer urgent patients than the rule. Across the 120 urgent
+decisions of the three seeds, the alignment rescues one patient and loses none.
 
-### Against version 1.0.0
+### Against the previous version
 
 <!-- source: reports/before_after.json -->
-The model this repository served before, run through the same evaluation on the same cases,
-also scores **0.717**. It misses **10** urgent cases where this version misses **11**: two
-patients caught by the old model alone, one by the new, **p = 1.0**. The retraining did not make
-a better triage decision. It changed what stands behind the decision: a corrected dataset, a
-model trained with the prompt the service actually sends, and an evaluation fixed in advance and
-repeated on three seeds.
+The model this repository served before, version 1.0.0, run through the same evaluation on the same
+n = 60 cases, also scores **0.717**. Of the n = 40 urgent cases, it misses **10** where this version
+misses **11**: two patients caught by the old model alone, one by the new, **p = 1.0**. The
+retraining left the triage decision where it was; what changed is what stands behind it: a corrected
+dataset, a model trained on the prompt the service actually sends, and analyses fixed before the
+results and run on three seeds.
 
 ## Why these numbers can be believed
 
@@ -224,8 +221,8 @@ against that rule meaningful: on the corpus part of the training data the rule r
 labels by construction, and measuring it there would measure the filter.
 
 The analyses were fixed before the results. Which seed is shipped, which comparison is primary,
-which ones are secondary, and what a version must pass to be published were committed before any
-model of this version was evaluated, and every one of them is reported, favourable or not. The
+which ones are secondary, and what a version must pass to be published were committed before the
+first model of this version was evaluated; every one of them is reported, favourable or not. The
 list is in [`docs/protocol.md`](docs/protocol.md#what-was-fixed-before-the-results).
 
 Accuracy and undertriage carry an interval: Wilson for accuracy, exact for undertriage, where the
@@ -238,11 +235,12 @@ every weight file it read; the publication script refuses weights whose digests 
 checks the Hub's copy against them once uploaded.
 
 The figures are drawn from the committed result files by `scripts/build_figures.py`, and
-[`reports/figures/MANIFEST.json`](reports/figures/MANIFEST.json) records for each one its
-sample size, its estimator and the digest of the image. Every number in this README names the
-file it comes from, in a comment above it. The Hub cards are rendered from the same files by
-`scripts/build_hub_cards.py`, and continuous integration fails when a committed card no longer
-matches them.
+[`reports/figures/MANIFEST.json`](reports/figures/MANIFEST.json) records for each one its sample
+size, its estimator and the digest of the image. Every number in this README names the file it comes
+from, in a comment above it. The Hub cards are rendered from the same files by
+`scripts/build_hub_cards.py`, out of two templates, [`model-card.in.md`](infra/hub/model-card.in.md)
+and [`dataset-card.in.md`](infra/hub/dataset-card.in.md), and continuous integration fails when a
+committed card no longer matches them.
 
 ## Running it
 
@@ -318,8 +316,8 @@ from 0.59 to 0.81. Even a model that missed none of the forty urgent cases could
 nine urgent patients in a hundred, as far as forty cases can tell; certifying fewer than five in a
 hundred takes seventy-two urgent cases without a miss. The comparison against the ordinary
 classifier is not close to significant either way, so "the model is not shown to be better" is what
-the data supports, not "the model is worse". Three seeds measure how much the training alone moves
-the numbers; they say nothing about cases written by someone else.
+the data supports, not "the model is worse". Three seeds give the size of what training alone moves;
+they say nothing about cases written by someone else.
 
 The alignment does not transfer beyond the defects it was trained on, and the service's latency
 ([`docs/operations.md`](docs/operations.md#what-one-decision-costs)) was measured on one machine,
