@@ -98,10 +98,10 @@ action, a diagnosis asserted where it should be suggested, or an answer in the w
 defect is named in the example, so what the alignment teaches can be read.
 
 **What was rejected.** Using an external preference dataset as the training signal was rejected
-after measuring it: on its expert-reviewed test split, outside the pairs built to compare answers
-of similar length, the preferred answer is the longer one in 470 pairs out of 597. An alignment
-trained on it would have taught the model that longer is better. It is used as an **evaluation**
-set instead, and the model does badly on it — which is reported rather than hidden.
+after measuring it: on its expert-reviewed test split, 470 of the 597 pairs not built to compare
+answers of similar length favour the longer answer, and an alignment trained on them would have
+taught the model that longer is better. It is used as an **evaluation** set instead, and the model
+does badly on it — which is reported rather than hidden.
 
 ## 6. Everything a run produces lives under `var/`
 
