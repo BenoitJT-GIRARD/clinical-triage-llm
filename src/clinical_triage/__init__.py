@@ -11,7 +11,7 @@ import linecache
 import os
 import warnings
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"
 
 # On its first import MLflow prints a greeting that quotes its installation paths. It has no
 # business in a notebook output, which is versioned and published. The variable is set at

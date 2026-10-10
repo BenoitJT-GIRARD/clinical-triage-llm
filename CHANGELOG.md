@@ -3,6 +3,91 @@
 Versions follow [SemVer](https://semver.org/). The dataset format and the API contract are part
 of this project's public interface: a breaking change to either raises the major version.
 
+## 2.0.0
+
+The model is retrained on a corrected dataset, three times, and measured against what version 1.0.0
+served. On the hand-written cases it decides no better: the same accuracy, and one more urgent case
+missed, a gap sixty cases cannot tell from chance. The dataset licence changes, the published
+repositories change, and the service's probes change: three breaks of the public interface.
+
+### Data
+
+- The onset of a complaint is stated once, by the generator, and never inside the complaint
+  text: thirteen presentations of the catalogue carried a second, sometimes contradictory, delay.
+- The vital-sign reader reads the blood pressure written behind `HTA`, `PA` and "hypertension"
+  as well as `TA`: a pressure of 220/120 written "HTA à 220/120" used to go unread.
+- Exam stems are removed even when they carry no interrogative word, exam sentences that point at
+  an image the description does not carry are dropped, and what is left is measured at every
+  build, corpus by corpus.
+- Phone numbers are masked in any country's international form, not only the French one.
+- What Presidio's default setting would have masked is measured at every build on a declared
+  sample, instead of being quoted from a count made once.
+- The FrenchMedMCQA answer is read as an index counted from zero. No delivered case changes: the
+  corpus delivers none.
+- The dataset is published under **CC BY 4.0**, the licence of the two corpora whose text it
+  redistributes, with the attribution and the transformations source by source. It was MIT.
+- The data card is organised under the sections its Hub card declares; its links work from the
+  Hub.
+- The data files are written with LF line endings on every platform.
+
+### Model
+
+- Retrained from the corrected dataset with the LoRA setting the tuning keeps, which is now the
+  only source of the rank: the configuration file no longer names one.
+- Retrained with the system prompt the service sends. The 1.0.0 weights had learnt an earlier
+  wording of it, which the service no longer sent.
+- Trained on three seeds. Seed 42 is shipped, chosen before any result; 43 and 44 measure the
+  spread of the method.
+- The modules and engines studies replay from one command each, and were replayed.
+- A merged export that fails its check is deleted instead of being left beside the delivered
+  models, and the publication refuses weights other than the ones the evaluation measured.
+- The training stack moves to Unsloth 2026.10, torch 2.14, transformers 5.17 and TRL 1.13.
+
+### Evaluation
+
+- The alignment is measured by DPO's implicit reward, the adapter on and off, on the
+  expert-reviewed test split of UltraMedical-Preference, with the share of pairs decided by length
+  outside the length group computed instead of counted by hand.
+- A task-format preference set, built on the hand-written clinical narratives, measures whether
+  the preference learnt travels outside the generator's narratives.
+- Robustness is probed on forty-one inputs in nine named families.
+- The analyses were fixed before the results and run on every evaluation: undertriage against
+  the rule, against the classifier, supervised against aligned, the more urgent of the two opinions,
+  and the cause of each urgent case the rule misses.
+- The before and after of the served system: the 1.0.0 model, as this repository served it,
+  against this version's, on the same cases.
+- The results carry what the clinical set can show about undertriage whatever the model, and
+  the digest of every weight file they measured.
+- A release gate refuses a version that misses more urgent cases than the rule, or answers one
+  case outside the format.
+
+### Service and deployment
+
+- `/health` answers whether the gateway is alive and touches nothing else; `/ready` questions
+  the engine and asks for the key.
+- A narrative longer than the training bound is refused with a 422, and an engine that refuses a
+  narrative is reported as such, not as an engine that is down.
+- The audit log is one file a day, purged past its retention, each line chained to the one
+  before; `scripts/verify_audit_log.py` names where a chain breaks. Each text is masked by the
+  engine of its own language.
+- One HTTP client to the engine for the whole life of the gateway.
+- The interactive documentation describes a demonstration, not a medical device, and shows an
+  example for each step of the questionnaire.
+- On Modal, the engine sits behind the host's proxy authentication, on one GPU, from an image
+  that compiles its kernels, with its caches and the audit log on volumes.
+- The service is deployed and stopped. The CD workflow, dispatched by hand, verifies, starts or
+  stops it; only the owner can run it, through an environment that holds the tokens and waits
+  for their approval. It checks the served model against the evaluated one.
+- The gateway image installs a list that pins every package by its digest, and its audit
+  carries no exception; the training stack's audit carries two, motivated.
+
+### What is published
+
+- Two Hugging Face repositories instead of five: the final model, under Apache-2.0 like its base
+  model, and the dataset. The adapters and the intermediate merged model are rebuilt by the
+  pipeline.
+- Both cards are rendered from the committed results and sent byte for byte.
+
 ## 1.0.0
 
 The first complete version of the prototype.
@@ -88,12 +173,12 @@ The first complete version of the prototype.
 - No estimate is published bare, and the estimator follows the nature of the quantity. Wilson
   above thirty cases, exact Clopper-Pearson below and on undertriage (the one measure whose
   under-coverage is paid in patients), and nothing at all below six cases, where the raw fraction
-  replaces a rate the effective cannot support. Exhaustive corpus counts carry no error bar: they
+  replaces a rate the sample cannot support. Exhaustive corpus counts carry no error bar: they
   are counted, not estimated.
 - Comparisons are read from the right test. The overlap of two intervals proves nothing; what
   is used is exact McNemar where the systems see the same cases, which is the model against the
   explicit rule, and a Newcombe interval on the gap where the two sets are independent.
-- Figures brought up to publication standard: axes and units on every panel, effective and
+- Figures brought up to publication standard: axes and units on every panel, sample size and
   estimator at the foot of every figure, a shared colour scale and a scale bar on the confusion
   matrices, and a missing measurement that is no longer drawn as a zero.
 - Safety checks on the generated content: an inconsistent recommendation, an asserted diagnosis,
@@ -120,7 +205,7 @@ The first complete version of the prototype.
   deferred triage is counted non-compliant there even when well formed. The check used to verify
   the shape alone.
 - A fourth baseline: an ordinary classifier, weighted n-grams and a linear separator, trained on
-  the same pairs as the model, on the training split alone, and whose setting is chosen on the
+  the same examples as the model, on the training split alone, and whose setting is chosen on the
   validation split without consulting the clinical set. Beating a keyword rule does not establish
   what fine-tuning adds over ordinary learning.
 - The paired McNemar comparison covers both baselines that learn, not the explicit rule alone.
@@ -200,7 +285,7 @@ The first complete version of the prototype.
 - The latency bench records the version of the inference engine it questioned, and the results
   publish it: a latency holds for one engine.
 - The estimator table is freed of a contradiction: the line "fewer than six cases, no interval"
-  also applied to undertriage, which the line above covers at every effective.
+  also applied to undertriage, which the line above covers at every sample size.
 - Three claims the measurements contradicted are corrected: the corpus is no longer called
   "balanced to within one" when the gap is two, MedQuAD is no longer said to supply no case when
   it supplies some, and the count of corpora read no longer confuses the five read with the four

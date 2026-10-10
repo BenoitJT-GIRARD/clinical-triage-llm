@@ -1,6 +1,6 @@
 [project]
 name = "clinical-triage"
-version = "1.0.0"
+version = "2.0.0"
 description = "Emergency-department triage assistant: a Qwen3-1.7B supervised fine-tuned with LoRA then preference-aligned with DPO, served by a FastAPI gateway in front of vLLM"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

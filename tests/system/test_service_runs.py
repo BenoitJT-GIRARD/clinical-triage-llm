@@ -165,5 +165,5 @@ def test_the_contract_is_published_at_the_port(service):
     started = time.monotonic()
     schema = httpx.get(f"{service.url}/openapi.json", timeout=15).json()
     assert time.monotonic() - started < 15
-    assert set(schema["paths"]) >= {"/triage", "/questionnaire/next", "/health"}
-    assert schema["info"]["version"] == "1.0.0"
+    assert set(schema["paths"]) >= {"/triage", "/questionnaire/next", "/health", "/ready"}
+    assert schema["info"]["version"] == "2.0.0"
