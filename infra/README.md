@@ -262,6 +262,24 @@ The container's Hugging Face token and the engine's proxy token do not go throug
 live in the Modal secret `clinical-triage`, created above. GitHub needs to know how to deploy,
 not what the service handles.
 
+### Restoring the credentials
+
+Nothing below survives a long pause on purpose: every token is deleted once the deployment
+it served is stopped, and recreated in a few minutes when the service has to run again.
+
+| Credential | Who issues it | How to get one | Where it goes |
+|---|---|---|---|
+| Modal account token | Modal | `uv run modal setup` on a workstation; `uv run modal token new` for continuous deployment | `~/.modal.toml`, or `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` in `production` |
+| Engine proxy token, `wk-…` and `ws-…` | Modal | `uv run modal workspace proxy-tokens create` | the Modal secret `clinical-triage` |
+| `TRIAGE_API_KEY` | whoever runs the service | a random value of your own: `openssl rand -hex 32` prints one | the Modal secret, `.env` for the latency bench, and `production` |
+| `HF_TOKEN` | Hugging Face | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens), fine-grained: *Write access to contents/settings of all repos under your personal namespace* to publish, read access alone for the engine | `.env` to publish from the workstation, the Modal secret for the engine's download, and `production` for the `model` job |
+
+A secret of the `production` environment is set with `gh secret set <NAME> --env production`,
+which asks for the value without echoing it. Once the service is stopped again:
+`uv run modal workspace proxy-tokens delete <id>` for the proxy token, and the token pages of
+[Modal](https://modal.com/settings/tokens) and [Hugging Face](https://huggingface.co/settings/tokens)
+for the other two.
+
 ## Configuration
 
 Variables the gateway itself reads, from `.env` at the root or from the container's environment:
