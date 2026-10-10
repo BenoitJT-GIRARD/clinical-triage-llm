@@ -7,10 +7,10 @@ says whether the model learns the distribution, and the **triage accuracy** on c
 validation split, which says whether that learning turns into the right decision. The setting
 with the best accuracy is kept, and ``train_sft.py`` reads it back. Its accuracy is a
 **selection score**: measured on the cases it was chosen on, it is optimistic by construction,
-and the model's performance is read on the clinical set alone.
+and the model is judged on the clinical set and nowhere else.
 
-``--study modules`` compares the adapted modules — the projections alone, with the embeddings,
-with the output head — on the same protocol, adding the share of answers that stop cleanly. It
+``--study modules`` compares three sets of adapted modules (projections only; projections and
+embeddings; projections, embeddings and output head) on the same protocol, adding the share of answers that stop cleanly. It
 is the study that showed the output head must be trained.
 
 ``--study engines`` trains the same configuration for a few steps with Unsloth and with

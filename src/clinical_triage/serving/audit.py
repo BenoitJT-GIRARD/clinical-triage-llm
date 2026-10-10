@@ -13,14 +13,14 @@ Five properties, none of which goes without saying:
   one door a name masked at the other;
 - **the model version is the one actually loaded**, passed by the service at call time. A
   configuration constant could describe a model that is not the one that answered;
-- **the retention is applied, not only announced.** One file per day; the files older than
-  the retention period are deleted at startup and on the first write of each day;
-- **a modification shows.** Each line carries the SHA-256 digest of the line before it, across
-  files: editing, inserting or deleting a line breaks the chain from that point on, and
-  :func:`verify` says where. It detects, it does not prevent — a log a user can delete is still
+- **the retention is applied, not only announced.** One file per day; a file past the retention period goes when the service
+  starts, or when a new day's first line is written;
+- **a modification shows.** Every line holds the SHA-256 digest of its predecessor, even across a
+  day's boundary, so a line edited, inserted or deleted breaks the chain from there on, and
+  :func:`verify` names the place. It detects, it does not prevent — a log a user can delete is still
   a file — and that is the property an audit needs;
-- **one writer.** Appending to a file is atomic for one process; the deployment runs a single
-  gateway container for that reason.
+- **one writer.** Only within one process is an append atomic, which is why the deployment
+  runs a single gateway container.
 """
 
 from __future__ import annotations

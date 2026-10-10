@@ -118,9 +118,9 @@ jobs:
       - name: Sync the dependencies
         run: uv sync --locked --no-group train
 
-      # The criteria were fixed before the model they judge existed: every answer usable, and no
-      # more urgent cases missed than the explicit rule. A version that fails them is not
-      # published, and not served.
+      # The criteria were fixed before the model they judge existed: every answer usable, and never
+      # more urgent patients missed than the explicit rule misses. A version that fails them is
+      # neither published nor served.
       - name: Release gate
         run: uv run --no-sync python scripts/check_release.py
 

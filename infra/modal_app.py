@@ -13,14 +13,14 @@ only rewired.
 
 ## Stopped by default
 
-The application is deployed, verified, then stopped: stopped, it costs nothing and answers
-nothing. A demonstration starts it and stops it. Only the owner of the account can do either —
+Its resting state is stopped: deployed, verified, then stopped, it runs no container and bills
+nothing. A demonstration starts it, then stops it. Only the owner of the account can do either —
 from their machine with their Modal token, or from the CD workflow, whose deployment job waits
 for their approval (see ``.github/workflows/cd.yml``).
 
-While it runs, two doors stay shut. The engine sits behind Modal's proxy authentication: a
-request without the workspace's proxy token is refused before any container starts, so the
-engine's address alone buys nothing. The gateway's public probe, ``/health``, touches nothing
+While it runs, two doors stay shut. The engine sits behind Modal's proxy authentication: a request
+lacking the workspace's proxy token is turned away before a container starts, so knowing the
+engine's address is worth nothing. The gateway's public probe, ``/health``, touches nothing
 but the gateway; ``/ready``, which questions the engine, asks for the service key.
 
 ## Why the weights come from the Hub, and are not baked in

@@ -1,8 +1,8 @@
 """Publish the final model and the dataset to the Hugging Face Hub, then check what arrived.
 
 Two repositories, and nothing else: the model served, the supervised and the preference steps
-merged into it, and the dataset it was trained and evaluated on. The adapters and the intermediate
-merged model are not published; the pipeline rebuilds them, and the model card says how.
+merged into it, and the dataset it was trained and evaluated on. Neither adapter nor
+the merged supervised model goes to the Hub: the pipeline rebuilds them, and the model card says how.
 
 Requires a write token in ``HF_TOKEN``; the target account is set through ``HF_NAMESPACE``::
 

@@ -66,7 +66,7 @@ def train_dpo(
 ) -> DPOResult:
     """Run the DPO alignment above the merged SFT model.
 
-    ``seed`` drives the adapter's initialisation and the order of the pairs. The split between
+    ``seed`` sets how the adapter starts and in what order the pairs come. The split between
     training and validation pairs stays the project's: every seed is judged on the same pairs.
     """
     # Same constraint as in SFT: Unsloth must come before `trl`. `PatchDPOTrainer` must also be

@@ -1,7 +1,6 @@
 """The settings the supervised pass is tuned over, and the one the tuning kept.
 
-The rank, the scaling and the learning rate of the supervised LoRA pass are decided by a
-comparison, not by a default: ``scripts/tune_hyperparameters.py`` trains each setting below
+Rank, scaling and learning rate of the supervised LoRA pass are settled by a comparison, not by a default: ``scripts/tune_hyperparameters.py`` trains each setting below
 under the same conditions and writes which one it kept. ``scripts/train_sft.py`` and the
 project summary read that choice here, and nowhere else.
 """

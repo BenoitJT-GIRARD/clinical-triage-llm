@@ -207,7 +207,7 @@ replace them, from the `production` environment.
 
 **A managed vLLM container.** Publish the merged model on the Hub, create an inference endpoint at
 the host on the model repository with an L4-class GPU and the vLLM container, then deploy the
-gateway — the image the pipeline publishes to GHCR — on a container service without a GPU, with
+gateway (the image the pipeline publishes to GHCR) on a container service without a GPU, with
 `TRIAGE_VLLM_URL` pointing at the endpoint and `TRIAGE_API_KEY` as a secret.
 
 **A virtual machine with a GPU.** Docker and `nvidia-container-toolkit`, the merged model copied

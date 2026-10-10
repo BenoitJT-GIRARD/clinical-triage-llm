@@ -17,8 +17,8 @@ measured is the transfer from generated narratives to written ones, nothing more
 their notes were written by the author of the rest of the project; the result is read with that
 in mind.
 
-The prompt already ends on the opening of the assistant turn: the answers are read straight
-after it, with no separator.
+Its prompt stops where the assistant's turn opens, so each answer is read right after it, with no
+separator.
 """
 
 from __future__ import annotations

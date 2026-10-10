@@ -4,20 +4,20 @@ The clinical set says whether the model triages correctly. It says little about 
 alignment changed: on three classes, two close models often produce the same decisions, and the
 gap drowns in the uncertainty.
 
-So the alignment is measured where it acts: **on the likelihood it gives to two answers of the
-same question**. Each answer is read twice by the same model — with the DPO adapter, and without
+So this module reads the alignment at the point it changes: **the likelihood given to two
+answers of one question**. Each answer is read twice by the same model — with the DPO adapter, and without
 it, that is by the supervised model the alignment started from. The difference between the two
 log-likelihoods is what the alignment changed for that answer: the implicit reward DPO
-optimises. A pair counts as correctly ordered when the alignment raised the preferred answer more
-than the rejected one.
+optimises. The pair is well ordered if the preferred answer
+gained more from the alignment than the rejected one.
 
 Both readings cover the same text, so what belongs to the text itself — rare vocabulary, an
 author's style — cancels out in the difference. A change the alignment applies to every token,
 on the other hand, accumulates with length: the summary therefore also says what share of the
 pairs it settles in favour of the longer answer, and what share of the answers it lowered.
 
-Two sets are read this way. The test split of **UltraMedical-Preference**, 777 pairs of medical
-answers whose better one GPT-4 picked and biomedical experts reviewed, measures whether anything
+Two sets are read this way. The test split of **UltraMedical-Preference** (777 pairs; GPT-4 chose the better
+answer of each, and biomedical experts reviewed the choice) measures whether anything
 transferred to medicine at large; it is kept out of training, its long English essays would
 teach the model to break the triage output contract. The **task-format set** of
 :mod:`clinical_triage.evaluation.task_preferences` measures whether the preference learnt on

@@ -98,7 +98,7 @@ def test_the_release_values_come_from_the_project(cards, root):
 
 
 def test_an_included_document_loses_its_header_and_gets_absolute_links(cards, root):
-    """On the Hub, a link relative to a GitHub folder opens nothing."""
+    """A relative link written for GitHub becomes an absolute address on the Hub."""
     (root / "data").mkdir()
     (root / "data" / "README.md").write_text(
         "---\nlicense: x\n---\n\n# Data\n\n"
