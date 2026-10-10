@@ -45,7 +45,7 @@ ready, because the engine takes minutes to load three gigabytes of weights. A de
 ## What one decision costs
 
 <!-- source: reports/benchmark_endpoint.json -->
-![Perceived latency of POST /triage at three concurrency levels, median to 95th percentile, and the throughput of the gateway beside it, n = 40 requests per level](../reports/figures/endpoint_latency.png)
+![Perceived latency of POST /triage at three concurrency levels, median to ninety-fifth percentile, and the throughput of the gateway beside it, n = 40 requests per level](../reports/figures/endpoint_latency.png)
 
 > **How to read it.** Both panels share a horizontal axis counting callers hitting the service
 > at once. The upper one is what a caller waits, the bar running from the median to the
@@ -150,12 +150,11 @@ same.
 
 <!-- source: data/processed/metadata.json -->
 The two 422 deserve their sentence. Cutting a patient's story without saying so is the one thing a
-system of this kind must never do, so the gateway refuses a description longer than 800
-characters — the same bound the build places on every training narrative — rather than serving a
-text unlike anything the model learnt on. The bound is in characters because the gateway carries
-no tokenizer, which is the point of a thin gateway. When the engine still refuses a text, the
-caller is told that the text is the cause, not that the engine is down: retrying would change
-nothing.
+system of this kind must never do, so the gateway refuses a description longer than 800 characters,
+the same bound the build places on every training narrative, rather than serving a text unlike
+anything the model learnt on. The bound is in characters because the gateway carries no tokenizer,
+which is the point of a thin gateway. When the engine still refuses a text, the caller is told that
+the text is the cause, not that the engine is down: retrying would change nothing.
 
 ## What is deployed, and what is not
 
@@ -165,10 +164,10 @@ The engine shuts itself down after fifteen minutes of silence and wakes on the n
 gets through to it.
 
 Two doors keep a stranger from getting through. The engine sits behind the host's proxy
-authentication: a request without the workspace's proxy token is refused before any container
+authentication: without the workspace's proxy token, a request is turned away before any container
 starts, so finding the engine's address buys nothing — no generation on someone else's card,
-untraced, unmasked, uncounted and billed to them. And the gateway's only open route is its
-liveness probe, which touches nothing else.
+untraced, unmasked, uncounted and billed to them. And the gateway's only open route is its liveness
+probe, which touches nothing else.
 
 **The service is deployed, and stopped.** Stopped, it costs nothing and answers nothing; only the
 owner of the repository starts it, for a demonstration, and stops it afterwards. How, and who
@@ -180,19 +179,25 @@ Ten criteria would have to hold before this service met a patient. They were set
 version and are kept, so that each version says how far it stands from them. Four of them, the
 first two and the last two, are not engineering, and they condition everything else.
 
-<!-- source: reports/evaluation_results.json -->
-| # | criterion | threshold | this version |
-|---|---|---|---|
-| 1 | the clinical catalogue validated by two emergency physicians | every presentation | not done |
-| 2 | the evaluation set labelled by two clinicians, independently | agreement ≥ 0.8 | not done |
-| 3 | undertriage | upper bound of its 95% interval ≤ 0.05 | not met: 0.275, bound at 0.439 |
-| 4 | format compliance | lower bound of its 95% interval ≥ 0.99 | undecided: 1.000, bound at 0.940 |
-| 5 | latency at the 95th percentile, four callers at once | ≤ 2,000 ms | not met on a workstation: 2,254 ms, vLLM 0.11.0 |
-| 6 | an audit log that persists and is anonymised | verified | met: one file a day, a chain of digests, a retention applied |
-| 7 | an endpoint authenticated, rate-limited and served over HTTPS | verified | met on Modal, whose HTTPS it is; plain HTTP on a workstation |
-| 8 | a rollback, rehearsed | tested in a pilot | not done |
-| 9 | a data protection impact assessment | approved by the data protection officer | not done |
-| 10 | the regulatory status of the software | decided | not done |
+The values of this version come from `reports/evaluation_results.json` and, for the latency,
+from `reports/benchmark_endpoint.json`.
+
+1. **The clinical catalogue validated by two emergency physicians**, every presentation: not done.
+2. **The evaluation set labelled by two clinicians independently**, with an agreement of at least
+   0.8: not done.
+3. **Undertriage**, the upper bound of its 95% interval at most 0.05: not met; 0.275, bound at
+   0.439.
+4. **Format compliance**, the lower bound of its 95% interval at least 0.99: undecided; 1.000,
+   bound at 0.940.
+5. **Latency at the ninety-fifth percentile, four callers at once**, at most 2,000 ms: not met on a
+   workstation; 2,254 ms with vLLM 0.11.0.
+6. **An audit log that persists and is anonymised**, verified: met; one file a day, a chain of
+   digests, a retention applied.
+7. **An endpoint authenticated, rate-limited and served over HTTPS**, verified: met on Modal,
+   whose HTTPS it is; plain HTTP on a workstation.
+8. **A rollback**, rehearsed in a pilot: not done.
+9. **A data protection impact assessment**, approved by the data protection officer: not done.
+10. **The regulatory status of the software**, decided: not done.
 
 Criteria 3 and 4 are judged on the unfavourable bound of the interval, not on the central value,
 and the clinical set cannot meet them whatever the model does. Zero misses on its forty urgent
