@@ -22,8 +22,11 @@ import subprocess  # nosec B404 - runs uv, by name, with arguments fixed in this
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-CONSTRAINTS = Path("var") / "constraints-from-lock.txt"
+from clinical_triage.config import PATHS
+
+ROOT = PATHS.root
+# Relative to the root, as uv receives it and writes it into the generated file's annotations.
+CONSTRAINTS = PATHS.var.relative_to(ROOT) / "constraints-from-lock.txt"
 SOURCE = Path("infra") / "requirements-api.in"
 TARGET = Path("infra") / "requirements-api.txt"
 

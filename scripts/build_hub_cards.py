@@ -51,15 +51,17 @@ CARDS = {
     Path("infra/hub/dataset-card.in.md"): Path("infra/hub/dataset-card.md"),
 }
 
-# The files a placeholder may read, by the name it uses for them.
+# The files a placeholder may read, by the name it uses for them. Relative to the project root,
+# which `render` receives: the tests render against a root of their own.
+_REPORTS = PATHS.reports.relative_to(PATHS.root)
 SOURCES = {
-    "evaluation": Path("reports/evaluation_results.json"),
-    "seeds": Path("reports/seed_study.json"),
-    "before_after": Path("reports/before_after.json"),
-    "sft": Path("reports/training/sft.json"),
-    "dpo": Path("reports/training/dpo.json"),
-    "tuning": Path("reports/training/hyperparameter_comparison.json"),
-    "data": Path("data/processed/metadata.json"),
+    "evaluation": _REPORTS / "evaluation_results.json",
+    "seeds": _REPORTS / "seed_study.json",
+    "before_after": _REPORTS / "before_after.json",
+    "sft": _REPORTS / "training" / "sft.json",
+    "dpo": _REPORTS / "training" / "dpo.json",
+    "tuning": _REPORTS / "training" / "hyperparameter_comparison.json",
+    "data": PATHS.data_processed.relative_to(PATHS.root) / "metadata.json",
 }
 
 PLACEHOLDER = re.compile(r"\{\{(\w+):([^|}]+)(?:\|(\w+))?\}\}")

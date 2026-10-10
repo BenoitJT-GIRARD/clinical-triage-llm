@@ -39,8 +39,8 @@ import sys
 import time
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
-from pathlib import Path
 
+from clinical_triage.config import PATHS
 from clinical_triage.config import PROJECT_ROOT as ROOT_DIR
 
 EVIDENCE = "reports/run-evidence.json"
@@ -63,7 +63,7 @@ KEY_OUTPUT: tuple[str, ...] = (
 )
 
 #: Where a training chain capped to a few steps writes its summaries, one per stage.
-CHAIN_CHECK_DIR = Path("var") / "runs"
+CHAIN_CHECK_DIR = PATHS.training_summaries(capped=True).relative_to(ROOT_DIR)
 CHAIN_CHECK_STAGES = ("sft", "dpo")
 
 #: The distributions whose version changes the result. Not the whole lock file: the reader needs

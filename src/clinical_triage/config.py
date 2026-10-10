@@ -45,6 +45,7 @@ class Paths:
     root: Path = PROJECT_ROOT
     data: Path = PROJECT_ROOT / "data"
     data_processed: Path = PROJECT_ROOT / "data" / "processed"
+    var: Path = PROJECT_ROOT / "var"
     models: Path = PROJECT_ROOT / "var" / "models"
     reports: Path = PROJECT_ROOT / "reports"
     figures: Path = PROJECT_ROOT / "reports" / "figures"
