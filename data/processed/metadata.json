@@ -34,9 +34,9 @@
     "clinical_note": "Clinical reason for the label, for auditability and error analysis."
   },
   "triage_taxonomy": {
-    "URGENCE_VITALE": "Immediate care (sorts 1 and 2 of the FRENCH scale).",
-    "URGENCE_MODEREE": "Care within a few hours (sorts 3 and 4).",
-    "CONSULTATION_DIFFEREE": "No immediate severity criterion (sort 5)."
+    "URGENCE_VITALE": "Immediate care (levels 1 and 2 of the FRENCH scale).",
+    "URGENCE_MODEREE": "Care within a few hours (levels 3 and 4).",
+    "CONSULTATION_DIFFEREE": "No immediate severity criterion (level 5)."
   },
   "system_prompt": "Tu es l'assistant de triage médical du service des urgences. Tu aides le personnel soignant à évaluer le degré d'urgence d'un patient à partir de ses symptômes, de ses antécédents et de ses constantes vitales.\n\nTu réponds TOUJOURS en français et selon le format suivant :\nNiveau de priorité : <URGENCE_VITALE | URGENCE_MODEREE | CONSULTATION_DIFFEREE>\nJustification : <explication clinique courte et claire>\nRecommandation : <conduite à tenir pour le patient et le personnel>\n\nRègles de sécurité :\n- En cas de doute ou de signe de gravité, surclasse le niveau d'urgence.\n- Ne pose jamais de diagnostic définitif : tu fournis une aide à la décision.\n- Rappelle de contacter le 15 (SAMU) devant tout signe vital engagé.",
   "sources": {
@@ -81,7 +81,7 @@
   },
   "build": {
     "seed": 42,
-    "git_revision": "130354d",
+    "git_revision": "cb0a0d4",
     "date_utc": "2026-10-09",
     "command": "uv run python scripts/build_dataset.py"
   },
