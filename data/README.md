@@ -173,7 +173,7 @@ Measured yield of each corpus, after filtering for the cases genuinely usable fo
 | MedQuAD | 16,407 | 15,909 | 0 | 315 | 0 | 183 | 130 | 130 / 16,407 |
 | MedMCQA | 182,822 | 171,590 | 323 | 8,798 | 83 | 2,028 | 1,281 | 1,281 / 182,822 |
 | FrenchMedMCQA | 1,080 | 1,074 | 0 | 6 | 0 | 0 | **0** | **0 / 1,080** |
-n = 203,384 entries read across the four corpora, 1,725 cases delivered.
+> n = 203,384 entries read across the four corpora, 1,725 cases delivered.
 <!-- yield:end -->
 
 > **How to read it.** One row per corpus, read left to right as a funnel. `Entries read` is

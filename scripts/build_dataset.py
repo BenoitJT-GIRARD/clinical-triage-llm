@@ -136,13 +136,14 @@ def _write_yield_into_the_card(corpus_yield: dict) -> None:
             f"| {lost['kept']:,} "
             f"| {bold}{kept:,}{bold} | {bold}{share}{bold} |"
         )
-    # The caption is written here with the table: the effective a reader needs to read the rows
+    # The caption is written here with the table: the sample size a reader needs to read the rows
     # is the sum of the first column, and a caption typed by hand would describe the build
     # before this one.
     read = sum(corpus_yield[key]["entries_read"] for key, _name in CORPUS_NAMES)
     delivered = sum(corpus_yield[key]["cases_kept"] for key, _name in CORPUS_NAMES)
+    # A quote, not a plain line: on GitHub a plain line under a table becomes one more row.
     rows.append(
-        f"n = {read:,} entries read across the four corpora, {delivered:,} cases delivered."
+        f"> n = {read:,} entries read across the four corpora, {delivered:,} cases delivered."
     )
     rows.append(closing)
 
