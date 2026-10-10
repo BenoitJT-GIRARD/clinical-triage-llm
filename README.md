@@ -127,7 +127,7 @@ labelled by the rule that is compared against here. The models in the table are 
 > cases sent somewhere gentler, which is the failure that reaches a patient, so it is counted on the
 > forty urgent ones alone. `overtriage` is the share pushed above their level, which costs a place
 > in the queue. `format compliance` is the share an information system can parse at all; the four
-> baselines return a level, not a text, so it does not apply to them (n/a).
+> baselines output a bare level, which leaves nothing to parse (n/a).
 
 <!-- source: reports/figures/MANIFEST.json -->
 ![Accuracy, undertriage and overtriage for every system on the same hand-written cases, accuracy and undertriage each with its 95% interval, n = 60 cases of which 40 are urgent](reports/figures/systems_comparison.png)
@@ -197,11 +197,11 @@ supervised one.
 
 <!-- source: reports/seed_study.json -->
 The method was trained three times, on seeds 42, 43 and 44, and seed 42 was chosen for publication
-before any of them was evaluated. Across the three, accuracy on the n = 60 cases of the clinical set
-runs from **0.700** to **0.783**, and the urgent cases missed, out of n = 40, from **9** to **13**:
-training alone moves the result by up to five cases in sixty. Seed 42 sits in the middle of the
-three, and even the worst seed misses far fewer urgent patients than the rule. Across the 120 urgent
-decisions of the three seeds, the alignment rescues one patient and loses none.
+before any of them was evaluated. Across the three, clinical accuracy (n = 60 cases) spans **0.700**
+to **0.783**, and the urgent cases missed, out of n = 40, from **9** to **13**: training alone moves
+the result by up to five cases in sixty. Seed 42 sits in the middle of the three, and even the worst
+seed misses far fewer urgent patients than the rule. Across the 120 urgent decisions of the three
+seeds, the alignment rescues one patient and loses none.
 
 ### Against the previous version
 
@@ -228,8 +228,8 @@ with plain Transformers.
 
 The largest gain on the urgent cases needs no training at all: keeping the more urgent of the two
 opinions, as shown above. Left aside, each for a measured reason: UltraMedical-Preference as
-training data, because outside its pairs of similar length the preferred answer is the longer one
-470 times in 597; three of the four LoRA settings, one tied with the kept setting on the validation
+training data, because, beyond its pairs of comparable length, it prefers the longer answer 470
+times in 597; three of the four LoRA settings, one tied with the kept setting on the validation
 cases and behind it on validation loss; harder preference pairs, which only a preference set
 independent of their construction could judge fairly; and, for the triage decision, the retraining
 itself, which moved nothing measurable against version 1.0.0.
