@@ -228,7 +228,7 @@ Measured yield of each corpus, after filtering for the cases usable for triage:
 > everything the source holds; the four columns after it are the reasons an entry was dropped, the
 > largest by far being that no patient presentation was recognised in the entry. `Cases extracted`
 > is what survived, `Cases delivered` is what the balancing caps then let through, and `Yield` sets
-> the second against the first.
+> the cases delivered against the entries read.
 
 The four corpora are read in full, with no read cap: a cap would give a yield describing the
 limit we set ourselves and not the source. The loss columns add up with "cases extracted" to give
@@ -245,9 +245,9 @@ case is kept only when the triage rule explicitly identifies a sign there, becau
 label is not manufactured out of the silence of a keyword rule. This is why the corpora cannot
 supply the `CONSULTATION_DIFFEREE` class, which is drawn entirely from the catalogue.
 
-FrenchMedMCQA yields zero because its entries are pharmacy exam questions that describe no
-patient. Forcing them in would reintroduce exactly the absurd examples this dataset was rebuilt to
-eliminate.
+FrenchMedMCQA yields zero because its entries are pharmacy exam questions: almost none describes
+a patient, and the few that do carry no sign the rule can read. Forcing them in would
+reintroduce exactly the absurd examples this dataset was rebuilt to eliminate.
 
 ### 3. The clinical evaluation set, written by hand
 

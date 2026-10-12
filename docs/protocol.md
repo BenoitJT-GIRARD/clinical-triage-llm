@@ -20,10 +20,11 @@ explicit rule never touched their labels; otherwise comparing the model to that 
 nothing. Nearly half are written to mislead: a presentation that sounds reassuring and is not,
 one that sounds alarming and is not, a negation, a vital sign that contradicts the narrative.
 
-The **internal test split** is a hundred and twenty cases held out of the training data, drawn by
-the same generator from the same catalogue. Every presentation in it was seen during training
-under another wording. It measures restatement, and it is published so that the distance between
-the two sets can be read.
+The **internal test split** is five hundred cases held out of the training data, of which the
+evaluation draws a hundred and twenty at random. Most were generated from catalogue
+presentations the model saw in training under other wordings; the others come from the public
+corpora and carry the rule's label, like the corpus cases in training. It measures restatement,
+and it is published so that the distance between the two sets can be read.
 
 Three more sets probe what a triage decision cannot show:
 
@@ -39,11 +40,11 @@ Three more sets probe what a triage decision cannot show:
 <!-- source: data/processed/metadata.json -->
 ![What the training corpus is made of: by source, by triage level, by language and by label confidence, n = 5,000 training examples, exhaustive counts](../reports/figures/dataset_composition.png)
 
-> **How to read it.** Four counts of the same five thousand training examples, each cut a
-> different way. Bar height is a number of examples. The panels answer whether any one source,
-> level, language or confidence grade dominates the set, since a model trained on a lopsided
-> corpus learns the lopsidedness first. Read them together, since a set can be balanced in one
-> panel and unbalanced in another.
+> **How to read it.** Four counts of the same five thousand supervised examples (training,
+> validation and test splits together), each cut a different way. Bar height is a number of
+> examples. The panels answer whether any one source, level, language or confidence grade
+> dominates the set, since a model trained on a lopsided corpus learns the lopsidedness first.
+> Read them together, since a set can be balanced in one panel and unbalanced in another.
 
 The training corpus itself is balanced by construction across the three levels and the two
 languages; where its cases come from, and what the public corpora really yielded, is in
@@ -54,7 +55,7 @@ languages; where its cases come from, and what the public corpora really yielded
 ### The LoRA setting
 
 Four settings were trained on the same twelve hundred examples, for the same seventy-five steps,
-and judged on the sixty cases of the validation split. The rule was fixed before the runs: the
+and judged on the first sixty cases of the validation split. The rule was fixed before the runs: the
 highest accuracy, then the lowest validation loss.
 
 <!-- source: reports/training/hyperparameter_comparison.json -->

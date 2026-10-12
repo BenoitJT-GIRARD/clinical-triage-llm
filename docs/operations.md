@@ -100,8 +100,7 @@ the duration of a measurement without changing the service value.
 The log holds one JSON line per interaction, appended and readable without a tool. Each line
 carries the request id, the timestamp, the anonymised description, the level, the rule's level
 and reasons, the anonymised answer, whether the description was bounded, the latency, the model
-that actually answered, the engine, the retention period in days, and the digest of the line
-before it.
+version, the engine, the retention period in days, and the digest of the line before it.
 
 Five things about it are not obvious.
 
@@ -110,9 +109,10 @@ nurse wrote, so a name removed from the description would walk back in through t
 text goes through the engine of its own language, once: running the English pass over a French
 narrative used to mask clinical words as if they were names.
 
-**The model version is read from what is loaded**, and passed at call time rather than taken from
-a setting. A setting can name one model while another answers, and the log would then record the
-wrong one.
+**The model version is passed at call time**, not looked up by the audit module. With the
+`transformers` backend it is read from what is loaded; behind vLLM it is the
+`TRIAGE_MODEL_VERSION` setting, by default the name vLLM serves, so there a setting can still
+name one model while another answers.
 
 **The retention is enforced.** The log is one file per day, and the files
 older than the retention period are deleted at startup and on the first write of each day. The

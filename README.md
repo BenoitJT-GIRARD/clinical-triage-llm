@@ -82,10 +82,10 @@ flowchart LR
 `Qwen3-1.7B-Base` is fine-tuned with LoRA on the project's bilingual set. **Transformers**
 holds the model, **PEFT** holds the adapter, **TRL** runs the supervised pass and then the DPO
 pass over preference pairs that each carry one deliberate defect, and **Unsloth** supplies the
-kernels that make it fit on one consumer card. **PyTorch** is underneath all four. Every run
-writes to a local **MLflow** store, so the four LoRA settings can be compared after the fact from
-what was recorded. The ordinary baseline is a **scikit-learn** linear classifier over n-grams,
-trained on the same examples, and it is the demanding comparison.
+kernels that make it faster and lighter on one consumer card. **PyTorch** is underneath all
+four. Every run writes to a local **MLflow** store, so the four LoRA settings can be compared
+after the fact from what was recorded. The ordinary baseline is a **scikit-learn** linear
+classifier over n-grams, trained on the same examples, and it is the demanding comparison.
 
 Serving runs as two processes. A **FastAPI** gateway behind **Uvicorn** validates the request, runs
 the questionnaire, applies the explicit rule, anonymises and logs; **vLLM** does the generation
@@ -172,12 +172,12 @@ the service already returns. The five it still misses are missed by the model an
 > interval contains zero shows no loss this sample can detect.
 
 <!-- source: reports/evaluation_results.json -->
-On the internal test split, n = 120 cases, the model scores **0.950**. That number measures
-restatement, not triage: most cases in that split were generated from presentations seen during
-training under another wording, and the rest are corpus cases labelled by the same rule as the
-corpus cases it trained on. The clinical set, n = 60, is the one that measures transfer, and the
-model scores **0.717** there. The drop from **0.950** is how far a single-set evaluation would
-have overstated its accuracy.
+On a random sample of the internal test split, n = 120 cases, the model scores **0.950**. That
+number measures restatement, not triage: most cases in that split were generated from
+presentations seen during training under another wording, and the rest are corpus cases labelled
+by the same rule as the corpus cases it trained on. The clinical set, n = 60, is the one that
+measures transfer, and the model scores **0.717** there. The drop from **0.950** is how far a
+single-set evaluation would have overstated its accuracy.
 
 ### What the alignment learnt
 
@@ -219,7 +219,7 @@ n = 60 validation cases of that study, the share of answers that stop on their o
 accuracy that barely moved.
 
 <!-- source: reports/training/engine_comparison.json -->
-Unsloth's kernels made the training fit and run faster on one card: over the same n = 30 steps,
+Unsloth's kernels made the training lighter and faster on one card: over the same n = 30 steps,
 **3.69** seconds a step and **7.22** gigabytes, against **6.93** seconds and **10.13** gigabytes
 with plain Transformers.
 
