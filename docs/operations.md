@@ -1,30 +1,31 @@
 # Operations
 
-What it takes to run the service, what it costs, how it fails, and what it leaves behind. The
-deployment commands themselves are in [`../infra/README.md`](../infra/README.md); this page is
-about running the thing once it is up.
+This page covers running the service once it is up: what it takes, what it costs, how it fails,
+and what it leaves behind. The deployment commands themselves are in
+[`../infra/README.md`](../infra/README.md).
 
-The reader this page expects is whoever is on call for it.
+It is meant for whoever is on call for the service.
 
 ## The two processes
 
 The gateway answers HTTP and holds no model. The engine holds the model and answers one route.
-They are separate containers, and that separation is what most of this page is about: almost
-every failure is one of them being up while the other is not.
+They run in separate containers, and almost every failure is one of them being up while the other
+is not.
 
 | process | what it needs | what happens without it |
 |---|---|---|
 | gateway | a service key, a writable audit log | refuses to start, and says which of the two is missing |
 | engine | a GPU, the weights at a pinned revision | the gateway starts, `/ready` answers 503, and every triage is refused with 503 |
 
-The gateway **refuses to start** without `TRIAGE_API_KEY`, unless open mode is asked for
-explicitly. A check that disappears when its setting does is not a check at all, and refusing to
-start is the only way to show that at deployment, before the first request.
+The gateway refuses to start without `TRIAGE_API_KEY`, unless open mode is asked for
+explicitly. A key check that switches itself off when the key is not set protects nothing, and
+refusing to start is the only way to surface the missing key at deployment, before the first
+request.
 
 It also opens the audit log at startup, empty, and refuses to serve if it cannot. Tracing every
 interaction is one of this service's obligations, and answering without being able to write down
-the answer breaks it. The case is not theoretical: a volume mounted from the host arrives owned
-by root, and the service does not run as root.
+the answer breaks it. This happens in practice: a volume mounted from the host arrives owned by
+root, and the service does not run as root.
 
 ## Two probes, and what each one says
 
@@ -33,14 +34,13 @@ touches nothing else and needs no key: an anonymous caller can probe it as often
 never reaches the engine through it.
 
 `GET /ready` questions the engine. It answers `ok` when the engine replies, and `degraded` with a
-503 otherwise; in the degraded case it says that the engine is not answering — never where the
+503 otherwise; in the degraded case it says that the engine is not answering, but never where the
 engine is. The technical cause, which carries the engine's address, goes to the log. It asks for
 the service key, because on a managed host a request that reaches the engine can wake a GPU, and
 the engine's address is part of what protects it.
 
-A consequence worth knowing when a container restarts: the gateway is alive long before it is
-ready, because the engine takes minutes to load three gigabytes of weights. A deployment waits on
-`/ready`, never on `/health`.
+When a container restarts, the gateway is alive long before it is ready, because the engine takes
+minutes to load three gigabytes of weights. A deployment waits on `/ready`, never on `/health`.
 
 ## What one decision costs
 
@@ -79,17 +79,17 @@ They are not a capacity plan, and the repository does not claim one.
 
 ## The quota
 
-Every triage takes a GPU for a second and a half. An endpoint without a quota is an endpoint
-anyone can saturate, so the gateway counts requests per caller over a sliding minute and answers
-429 above the limit — announcing the limit in the message, so that an integrator does not have to
-discover it by trial and error.
+Every triage takes a GPU for a second and a half. Without a quota anyone could saturate the
+endpoint, so the gateway counts requests per caller over a sliding minute and answers 429 above
+the limit. The message states the limit, so that an integrator does not have to discover it by
+trial and error.
 
-Two details that were defects first. The key counts as an identity **only where it was checked
-against something**: open mode checks nothing, so a caller who changed the header at every
+Two details of the quota started out as defects. The key counts as an identity only where it was
+checked against something: open mode checks nothing, so a caller who changed the header at every
 request used to be handed a fresh bucket each time. There, the address is the identity instead.
-And callers that have gone quiet for a minute are dropped from the table, without which it grows
-by one entry per address seen since startup — protection that ends up costing more than what it
-protects.
+And callers that have gone quiet for a minute are dropped from the table. Without that, the table
+grows by one entry per address seen since startup, and the protection ends up costing more than
+what it protects.
 
 The default is sixty a minute, which fits a reception desk. A load bench holds a single key and
 passes that from its first concurrency level, so the compose file lets the value be raised for
@@ -97,10 +97,11 @@ the duration of a measurement without changing the service value.
 
 ## The audit log
 
-One JSON line per interaction, appended, readable without a tool. It carries the request id, the
-timestamp, the anonymised description, the level, the rule's level and reasons, the anonymised
-answer, whether the description was bounded, the latency, the model that actually answered, the
-engine, the retention period in days, and the digest of the line before it.
+The log holds one JSON line per interaction, appended and readable without a tool. Each line
+carries the request id, the timestamp, the anonymised description, the level, the rule's level
+and reasons, the anonymised answer, whether the description was bounded, the latency, the model
+that actually answered, the engine, the retention period in days, and the digest of the line
+before it.
 
 Five things about it are not obvious.
 
@@ -110,10 +111,10 @@ text goes through the engine of its own language, once: running the English pass
 narrative used to mask clinical words as if they were names.
 
 **The model version is read from what is loaded**, and passed at call time rather than taken from
-a setting. A setting can name one model while another answers, and a trace that can say the wrong
-thing is not a trace.
+a setting. A setting can name one model while another answers, and the log would then record the
+wrong one.
 
-**The retention is applied, not only announced.** The log is one file per day, and the files
+**The retention is enforced.** The log is one file per day, and the files
 older than the retention period are deleted at startup and on the first write of each day. The
 period is also written into every line, so the obligation travels with the data.
 
@@ -125,11 +126,11 @@ names where:
 uv run python scripts/verify_audit_log.py var/logs/audit
 ```
 
-It detects, it does not prevent: a file the host can delete is still a file. Detection is what an
-audit needs.
+The chain detects a modification but cannot prevent one, since the host can still delete the
+file. Detection is what an audit needs.
 
 **One writer.** Appending to a file is atomic for one process, so the deployment runs a single
-gateway container. That is a limit of scale, stated rather than worked around.
+gateway container. That limits how far the service can scale.
 
 In the container the log is a named volume. A host folder is mounted as root, and the service
 runs unprivileged: every request then failed on the write, after having produced its decision.
@@ -152,25 +153,25 @@ same.
 | accents garbled in Windows PowerShell 5.1 | `Invoke-RestMethod` decodes a JSON reply that declares no charset as Latin-1; the service sends UTF-8, as JSON requires | call it from PowerShell 7, or decode the raw bytes of `Invoke-WebRequest` as UTF-8 |
 
 <!-- source: data/processed/metadata.json -->
-The two 422 deserve their sentence. Cutting a patient's story without saying so is the one thing a
-system of this kind must never do, so the gateway refuses a description longer than 800 characters,
+The gateway answers 422 in two cases. A system of this kind must never cut a patient's story
+without saying so, which is why the gateway refuses a description longer than 800 characters,
 the same bound the build places on every training narrative, rather than serving a text unlike
 anything the model learnt on. The bound is in characters because the gateway carries no tokenizer,
-which is the point of a thin gateway. When the engine still refuses a text, the caller is told that
-the text is the cause, not that the engine is down: retrying would change nothing.
+which keeps it thin. When the engine still refuses a text, the caller is told that the text is the
+cause, not that the engine is down: retrying would change nothing.
 
 ## What is deployed, and what is not
 
 The on-demand deployment raises the same pair: one container with a card, running vLLM over the
-merged weights, and the gateway of the Docker image, unchanged. Nothing is rewritten, only rewired.
-The engine shuts itself down after fifteen minutes of silence and wakes on the next request that
-gets through to it.
+merged weights, and the gateway of the Docker image, unchanged. No code is rewritten for it; only
+the wiring changes. The engine shuts itself down after fifteen minutes of silence and wakes on the
+next request that gets through to it.
 
-Two doors keep a stranger from getting through. The engine sits behind the host's proxy
-authentication: without the workspace's proxy token, a request is turned away before any container
-starts, so finding the engine's address buys nothing — no generation on someone else's card,
-untraced, unmasked, uncounted and billed to them. And the gateway's only open route is its liveness
-probe, which touches nothing else.
+Two protections keep a stranger out. The engine sits behind the host's proxy authentication:
+without the workspace's proxy token, a request is turned away before any container starts, so the
+engine's address alone does not let anyone run generation on someone else's card, untraced,
+unmasked, uncounted and billed to them. And the gateway's only open route is its liveness probe,
+which touches nothing else.
 
 **The service is deployed, and stopped.** Stopped, it costs nothing and answers nothing; only the
 owner of the repository starts it, for a demonstration, and stops it afterwards. How, and who
@@ -205,9 +206,9 @@ from `reports/benchmark_endpoint.json`.
 Criteria 3 and 4 are judged on the unfavourable bound of the interval, not on the central value,
 and the clinical set cannot meet them whatever the model does. Zero misses on its forty urgent
 cases would still leave a bound of 0.088 on undertriage, and sixty answers all in format leave
-one of 0.940 on compliance — the same exact interval, computed by `upper_bound_without_miss` in
-`evaluation/metrics.py`. Meeting them takes 72 urgent cases without a miss, and 368 answers
-without a fault. What they ask for first is a larger evaluation, not a better model.
+one of 0.940 on compliance, both from the same exact interval, computed by
+`upper_bound_without_miss` in `evaluation/metrics.py`. Meeting them takes 72 urgent cases without
+a miss, and 368 answers without a fault, so the first thing they require is a larger evaluation.
 
 On Modal, by default, every request goes through Virginia, in the United States, and the
 container starts wherever the fleet has a free card: a narrative sent to the cloud deployment

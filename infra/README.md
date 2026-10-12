@@ -13,9 +13,9 @@ reception desk / hospital IS  ──HTTPS──▶  FastAPI gateway  ──HTTP�
                                           anonymisation and audit
 ```
 
-The split is deliberate. The gateway is light, carrying neither torch nor weights, and redeploys
-in seconds; the inference server updates without touching the business logic. The OpenAPI contract makes the
-integration independent of both.
+The split is deliberate: the gateway is light, carrying neither torch nor weights, and redeploys
+in seconds, while the inference server updates without touching the business logic. The OpenAPI
+contract makes the integration independent of both.
 
 ## 1. Preparing the model
 
@@ -94,7 +94,7 @@ Compose holds the gateway back until vLLM reports itself healthy. Started togeth
 requests would fail during the minutes the weights take to load, and the gateway would report
 itself green throughout.
 
-Measuring the stack end to end, on the gateway — which is what the service actually delivers,
+To measure the stack end to end, on the gateway, which is what the service delivers,
 anonymisation and audit log included:
 
 ```bash
@@ -135,11 +135,11 @@ as if they were.
 [Modal](https://modal.com) allocates a GPU on demand, bills by the second and shuts a container
 down when nothing asks for it. `modal_app.py` raises the same two pieces as the Docker stack of
 this folder: a GPU container serving the merged model under vLLM, and the project's FastAPI
-gateway, exposed as is. That is the project's own split, not an adaptation to the host, and not a
-line of the service code changes.
+gateway, exposed as is. The split is the project's own, carried over to the host unchanged, and
+not a line of the service code changes.
 
-The application's normal state is **stopped**. It is deployed and verified, then stopped: stopped,
-it costs nothing and answers nothing. A demonstration starts it, and stops it afterwards. Three
+The application's normal state is **stopped**. It is deployed, verified, then stopped, and while
+stopped it costs nothing and answers nothing. A demonstration starts it, and stops it afterwards. Three
 actions exist, all through the `CD` workflow, dispatched by hand on a `model-v*` tag:
 
 | Action | What it does |
@@ -157,11 +157,11 @@ actions exist, all through the `CD` workflow, dispatched by hand on a `model-v*`
    `github.actor == github.repository_owner` doubles the whole;
 2. **from the owner's workstation**, with their own Modal token, by the commands below.
 
-While it runs, two doors stay shut:
+While it runs, two protections stay in place:
 
 - the **engine** sits behind Modal's proxy authentication. A request that does not carry the
-  workspace's proxy token is refused before any container starts: the engine's address alone
-  buys nothing. The gateway presents that token, and the vLLM key stays as a second line;
+  workspace's proxy token is refused before any container starts, so the engine's address alone
+  is not enough to reach it. The gateway presents that token, and the vLLM key stays as a second line;
 - the gateway's public probe, `/health`, answers whether the gateway is alive and touches
   nothing else. `/ready`, which questions the engine, asks for the service key.
 
@@ -192,7 +192,7 @@ uv run modal deploy infra/modal_app.py
 uv run modal app stop clinical-triage --yes         # once the check is done
 ```
 
-The engine loads the weights **from the Hub, at a tagged revision**: the deployment stays
+The engine loads the weights from the Hub, at a tagged revision: the deployment stays
 replayable identically even if the default branch moves afterwards. The repository and the
 revision are chosen through `HF_NAMESPACE`, `TRIAGE_MODEL_ID` and `TRIAGE_MODEL_REVISION`, set in
 the shell at `modal deploy` time: `infra/modal_app.py` runs on the workstation and reads its
@@ -217,7 +217,7 @@ infra/docker-compose.yml up -d`, and port 8080 behind a reverse proxy with a TLS
 ### Shipping a new model version
 
 The weights and the dataset are uploaded from the training machine; they do not travel through
-continuous integration. The **version tag** is what ties the two together.
+continuous integration. The version tag ties the two together.
 
 ```bash
 uv run python scripts/build_hub_cards.py                  # render both cards, then commit them
@@ -238,7 +238,7 @@ uv run python scripts/publish_to_hub.py --what verify --tag model-v2.0.0
 
 Pinning the revision instead of the default branch is what makes a deployment reproducible:
 `main` designates content that changes at every publication, `model-v2.0.0` always designates the
-same weights. Rolling back becomes trivial too: dispatch the workflow on the previous tag.
+same weights. Rolling back then means dispatching the workflow on the previous tag.
 
 The two cards, [`hub/model-card.md`](hub/model-card.md) and
 [`hub/dataset-card.md`](hub/dataset-card.md), are rendered by `scripts/build_hub_cards.py` from
@@ -299,10 +299,10 @@ Variables the gateway itself reads, from `.env` at the root or from the containe
 | `TRIAGE_AUDIT_DIR` | directory of the audit log, one file per day | `var/logs/audit` |
 | `TRIAGE_RATE_LIMIT` | requests per minute and per caller | `60` |
 
-Variables the tools that raise the stack read, and not the service. They do not go through the
-`.env` at the root — `HF_NAMESPACE` excepted, which `config.py` also reads for publication:
-`docker compose -f infra/docker-compose.yml` looks for its environment file in `infra/`, and the
-`modal` command loads `infra/modal_app.py` outside the process that reads `.env`. Both kinds are
+The variables below are read by the tools that raise the stack, not by the service. They do not
+go through the `.env` at the root (except `HF_NAMESPACE`, which `config.py` also reads for
+publication): `docker compose -f infra/docker-compose.yml` looks for its environment file in
+`infra/`, and the `modal` command loads `infra/modal_app.py` outside the process that reads `.env`. Both kinds are
 set in the shell, as a prefix to the command or through `export`, as in the examples above.
 
 | Variable | Read by | Role | Default |
@@ -321,13 +321,13 @@ to the container: on the container stack those two come from the shell as well. 
 
 `.env.example` at the root lists the variables of the first table, along with the Hugging Face
 token and account the publication scripts need and the cache and tracking locations. Copied to
-`.env`, it is read by `config.py` — never overwriting a variable already set in the environment,
-so that a host keeps control of its own secrets. The file is excluded from git and from the
+`.env`, it is read by `config.py`, which never overwrites a variable already set in the
+environment, so that a host keeps control of its own secrets. The file is excluded from git and from the
 Docker build context.
 
 ## Security
 
-- **No key, no service.** Startup fails rather than falling back to an open port. Open mode
+- **A key is required.** Startup fails rather than falling back to an open port. Open mode
   exists for a local demonstration, and has to be asked for by name.
 - **Constant-time comparison**, so that the key cannot be reconstructed from the response time.
 - **Per-caller quota** over a sliding window: every request takes a GPU, and an endpoint without
@@ -352,8 +352,8 @@ Docker build context.
 | Model / rule disagreement | more than 25% over a day | clinical review of the sample |
 | HTTP error rate | more than 1% | operations alert |
 
-The **audit log** is mounted on a named volume called `audit`: without it, the traceability
-required for medical audits would disappear at every redeployment. A host folder does not do —
+The audit log is mounted on a named volume called `audit`: without it, the traceability
+required for medical audits would disappear at every redeployment. A host folder will not work:
 Docker mounts it as root, and the service, which runs unprivileged, cannot write there; it then
 refuses to start, and says so. The volume survives `docker compose down`; `docker compose down
 -v` erases it.
@@ -365,7 +365,7 @@ docker compose -f infra/docker-compose.yml cp api:/app/var/logs/audit .
 Plan for its rotation and its centralisation, and respect the retention period written into every
 line.
 
-The **rate of disagreement between the model and the explicit rule** is the most useful
+The rate of disagreement between the model and the explicit rule is the most useful
 production indicator: it needs no labels, is computed continuously, and catches a drift before a
 patient pays for it.
 

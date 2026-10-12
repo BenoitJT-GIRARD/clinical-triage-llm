@@ -1,13 +1,13 @@
 # Protocol
 
-How the published numbers were produced, and what each of them can and cannot support. The
-figures below are drawn by `scripts/build_figures.py` from the result files under `reports/`;
-each carries its sample size and its estimator in the image itself, and
+This page explains how the published numbers were produced, and what each of them can and cannot
+support. The figures below are drawn by `scripts/build_figures.py` from the result files under
+`reports/`; each carries its sample size and its estimator in the image itself, and
 [`../reports/figures/MANIFEST.json`](../reports/figures/MANIFEST.json) records what was drawn
 from what.
 
-The reader this page expects is someone who wants to check the claims, not take them, and
-who will look for the place where the protocol could have flattered itself.
+It assumes a reader who wants to check the claims and will look for the place where the protocol
+could have flattered itself.
 
 ## What is measured, on which population
 
@@ -16,8 +16,8 @@ questions.
 
 The **clinical set** is sixty cases written by hand, one at a time, each with the clinical reason
 for its label recorded beside it. Forty of them are urgent. None was seen during training, and the
-explicit rule never touched their labels — without which comparing the model to that rule would
-prove nothing. Nearly half are written to mislead: a presentation that sounds reassuring and is not,
+explicit rule never touched their labels; otherwise comparing the model to that rule would prove
+nothing. Nearly half are written to mislead: a presentation that sounds reassuring and is not,
 one that sounds alarming and is not, a negation, a vital sign that contradicts the narrative.
 
 The **internal test split** is a hundred and twenty cases held out of the training data, drawn by
@@ -42,8 +42,8 @@ Three more sets probe what a triage decision cannot show:
 > **How to read it.** Four counts of the same five thousand training examples, each cut a
 > different way. Bar height is a number of examples. The panels answer whether any one source,
 > level, language or confidence grade dominates the set, since a model trained on a lopsided
-> corpus learns the lopsidedness first. Read them together: a balance holding in one panel and
-> breaking in another is still an imbalance.
+> corpus learns the lopsidedness first. Read them together, since a set can be balanced in one
+> panel and unbalanced in another.
 
 The training corpus itself is balanced by construction across the three levels and the two
 languages; where its cases come from, and what the public corpora really yielded, is in
@@ -74,8 +74,8 @@ reach **0.8**.
 Read with its interval, that ranking is not established: two answers in sixty separate 0.833
 from 0.8, far less than the width of either interval. The loss ordering agrees with it, and the
 loss is measured on more than sixty numbers. And 0.833 is the winner's score on the very cases
-that chose it, so it is optimistic by construction: a selection score, not a result. The clinical
-set, which chose nothing, is the one that reports.
+that chose it, so it is optimistic by construction. The reported results come from the clinical
+set, which played no part in the choice.
 
 ### The end-of-sequence token
 
@@ -92,8 +92,8 @@ A short study measures it: three sets of trained modules at the same rank, on th
 hundred examples and seventy-five steps, judged on the n = 60 validation cases. With the projections
 alone, or with the embeddings added, the share of answers that stop on their own is **0.0**, and the
 median answer runs to the cap of **220** tokens. With the output head added, that share is **1.0**
-and the median falls to **96** tokens. Accuracy barely moves, **0.833** against **0.817**: the head
-buys an answer that ends, not a better decision.
+and the median falls to **96** tokens. Accuracy barely moves, **0.833** against **0.817**: the
+output head makes answers end without improving the decision.
 
 <!-- source: reports/training/sft.json -->
 ![Two curves, training and validation cross-entropy, falling as the optimiser advances on the run that produced the shipped weights, n = 4,000 training examples and 500 validation examples](../reports/figures/sft_training.png)
@@ -130,26 +130,26 @@ changes what a run costs, not what it learns, and on one card the cost decides.
 
 <!-- source: reports/training/dpo.json -->
 On its own validation pairs the alignment is complete: n = 240 pairs, **1.0** of them ordered
-correctly, with a reward margin of **8.66**. The loss is near zero within sixty steps: the pairs
-are easy to tell apart, which is what one deliberate defect per pair makes them. That number
-measures the alignment against the defects it was trained on, and nothing else. What it is worth
-elsewhere is further down this page.
+correctly, with a reward margin of **8.66**. The loss is near zero within sixty steps, because one
+deliberate defect per pair makes the pairs easy to tell apart. That number measures the alignment
+against the defects it was trained on, and nothing else. Its value on other pairs is measured
+further down this page.
 
 ## How two systems are compared
 
-Never by the overlap of two confidence intervals. Two systems evaluated on the same cases are
-paired data, and on paired data the information lives entirely in the cases where they disagree:
-comparing marginal intervals throws that away, and is systematically too cautious. Two intervals
-that all but coincide can still sit either side of a real difference.
+Two systems evaluated on the same cases are paired data, and on paired data the information lies
+entirely in the cases where they disagree. Comparing the overlap of two marginal confidence
+intervals throws that information away and is systematically too cautious: two intervals that all
+but coincide can still sit either side of a real difference.
 
 Every comparison in this repository is therefore an **exact McNemar test** on the same cases, and
-what it reports is the count each way — how many cases the model saves that the baseline loses,
+what it reports is the count each way: how many cases the model saves that the baseline loses,
 and the reverse. The counts are published beside the p-value, because they are what the p-value
 is computed from and because they are readable on their own.
 
 The same test, restricted to the urgent cases and to undertriage alone, is what separates the
-model from the rule. Accuracy dilutes: a system can be wrong often without danger and rarely with
-danger, and a triage tool is judged on the second.
+model from the rule. Accuracy mixes the two kinds of error: a system can be wrong often without
+danger and rarely with danger, and a triage tool is judged on the second.
 
 ## What was fixed before the results
 
@@ -187,7 +187,7 @@ urgent patients than the rule, and a gap that size is unlikely to be chance.
 On the same n = 40 urgent cases, against the linear classifier, the model misses **11** and the
 classifier **8**: **3** urgent patients caught by the model alone, **6** by the classifier alone,
 **p = 0.5078**. Accuracy on all n = 60 cases gives the same reading, **0.7167** against **0.6667**,
-**p = 0.6291**. Nothing separates them. Sixty cases support "the model does not beat n-grams here";
+**p = 0.6291**. Neither test separates them: sixty cases support "the model does not beat n-grams here";
 they do not support "the model is worse".
 
 ### The aligned model against the supervised one
@@ -227,9 +227,9 @@ misses **10** and this version **11**: **1** urgent patient caught by this versi
 by the previous one alone, **p = 1.0**. The two are compared on the clinical set only: the
 internal split was rebuilt with the dataset.
 
-The retraining did not change the triage decision by anything sixty cases can measure. What it
-changed is what stands behind the decision: a corrected dataset, a system prompt that is now the
-one the service sends, and an evaluation fixed in advance and repeated on three seeds.
+The retraining did not change the triage decision by anything sixty cases can measure. Its
+changes lie upstream of the decision: a corrected dataset, a system prompt that is now the one the
+service sends, and an evaluation fixed in advance and repeated on three seeds.
 
 ### The spread of the three seeds
 
@@ -237,8 +237,8 @@ one the service sends, and an evaluation fixed in advance and repeated on three 
 Over seeds 42, 43 and 44, the aligned model's accuracy on the n = 60 cases of the clinical set runs
 from **0.7** to **0.7833**, with a mean of **0.7333** and a standard deviation of **0.0441**. The
 urgent cases missed, out of n = 40, run from **9** to **13**, with a mean of **11** and a standard
-deviation of **2.0**. Same data, same setting: training alone moves the model by up to five cases in
-sixty, and by four urgent misses in forty.
+deviation of **2.0**. With the same data and the same setting, training alone moves the model by up
+to five cases in sixty, and by four urgent misses in forty.
 
 <!-- source: reports/seed_study.json -->
 Two systems trained once each can therefore differ by that much on the seed alone. The shipped seed
@@ -253,7 +253,7 @@ A model that missed none of the n = 40 urgent cases would still carry an exact u
 **0.0881** on its undertriage: forty cases cannot tell a model that never misses from one that
 misses nearly nine urgent patients in a hundred. It takes **72** urgent cases without a miss to
 bring that bound under **0.05**. The clinical set can measure a large difference, like the one
-against the rule. It cannot certify a small rate.
+against the rule, but it cannot certify a small rate.
 
 ## Which intervals, and why
 
@@ -290,8 +290,9 @@ dependency, and the test verifies that the choice costs no precision.
 <!-- source: reports/evaluation_results.json -->
 On the cases that present straightforwardly, n = 32, the model reaches **0.875** accuracy and
 misses **3** of the twenty urgent ones. On the falsely reassuring cases, n = 10, all of them
-urgent, it reaches **0.4** and misses **6**. That is the failure mode, and it is the one that
-matters: a presentation written to sound benign is exactly what a triage desk sees on a bad day.
+urgent, it reaches **0.4** and misses **6**. That is the model's main failure mode, and the one
+that matters: a presentation written to sound benign is exactly what a triage desk sees on a
+bad day.
 
 The subgroup samples are small, three cases for discordant vitals and four for negation, and
 the figures say so instead of drawing a rate on them: below six cases no interval is publishable
@@ -314,8 +315,8 @@ error it did not make. For the shipped model the column is empty; for the base m
 **32** of the n = 60 answers.
 
 <!-- source: reports/evaluation_results.json -->
-Read by level, n = 20 cases each, the shape of the failure is plain: recall on the
-life-threatening level is **0.45** while its precision is **0.8182**. All eleven urgent cases the
+Read by level, n = 20 cases each, recall on the life-threatening level is **0.45** while its
+precision is **0.8182**. All eleven urgent cases the
 model misses are life-threatening ones filed lower, nine of them as moderate; no moderate case is
 filed below its level. The model is reluctant to send a patient to the top level, and right when
 it does.
@@ -368,12 +369,12 @@ exercise, and this repository has not done it.
 
 ## What the protocol cannot rule out
 
-Three training seeds, one card, one set of sixty cases. The seeds measure how much the training
-alone moves the numbers, and the interval on each proportion covers the sampling of the sixty
-cases. Nothing covers a different set of cases written by someone else.
+The protocol rests on three training seeds, one card and one set of sixty cases. The seeds
+measure how much the training alone moves the numbers, and the interval on each proportion covers
+the sampling of the sixty cases. Nothing covers a different set of cases written by someone else.
 
-The evaluation set was written by the same person who wrote the catalogue. They share an author,
-and therefore a way of describing a patient; a case written by a nurse would not look like these.
+The evaluation set was written by the same person who wrote the catalogue, so the two share a way
+of describing a patient; a case written by a nurse would not look like these.
 That is the limitation most likely to flatter the numbers, and no measurement in this repository
 addresses it.
 

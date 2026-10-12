@@ -37,22 +37,21 @@ other costs a patient, and it is the one this repository measures: **undertriage
 sent down the queue who should have gone up it.
 
 A department can write a keyword rule in an afternoon, and that rule is the thing to beat. On the
-sixty hand-written cases of this evaluation it misses more than half the urgent ones — it reads
-words, and a chest pain described without the word "pain" is invisible to it. The question here
-is whether a **large language model** small enough to serve on one card, **fine-tuned** on the
-department's own vocabulary and then **preference-aligned**, does better than that rule; and
-whether "better" survives the harder comparison, against an ordinary classifier trained on the
-same examples.
+sixty hand-written cases of this evaluation it misses more than half the urgent ones, because it
+reads words: a chest pain described without the word "pain" is invisible to it. The question is
+whether a large language model small enough to serve on one card, fine-tuned on the department's
+own vocabulary and then preference-aligned, does better than that rule, and whether it still does
+better in the harder comparison, against an ordinary classifier trained on the same examples.
 
-Asking the question honestly cost more than answering it. No public medical corpus is labelled
-in triage levels, so the ground truth had to be built: a clinical catalogue written for the
+Most of the work went into the ground truth. No public medical corpus is labelled in triage
+levels, so it had to be built: a clinical catalogue written for the
 project, a generator that draws vignettes from it, and four public corpora read in full, three of
 which yielded cases that describe a patient. How, and what each source really yielded, is in
 [`data/README.md`](data/README.md) and [`docs/data-source.md`](docs/data-source.md).
 
 ## What it does
 
-Four routes, and the second is the point.
+The service has four routes, and the project is built around the second one.
 
 | Route | What it answers |
 |---|---|
@@ -64,9 +63,9 @@ Four routes, and the second is the point.
 <!-- source: docs/images/MANIFEST.json -->
 ![The published contract of the running service: four routes, the three that need a key marked with a padlock, and the schemas generated from the Pydantic models](docs/images/api-contract.png)
 
-Hide that disagreement and the nurse reads a level without knowing that the rule, which never
-hallucinates, would have sent the patient elsewhere. So `rule_level`, `rule_reasons` and
-`agreement` travel in every reply, beside the model's own answer.
+If that disagreement were hidden, the nurse would read a level without knowing that the rule,
+which never hallucinates, would have sent the patient elsewhere. That is why `rule_level`,
+`rule_reasons` and `agreement` travel in every reply, beside the model's own answer.
 
 ```mermaid
 flowchart LR
@@ -80,33 +79,33 @@ flowchart LR
 
 ### How it is built
 
-`Qwen3-1.7B-Base` is fine-tuned with LoRA on the project's bilingual set: **Transformers**
+`Qwen3-1.7B-Base` is fine-tuned with LoRA on the project's bilingual set. **Transformers**
 holds the model, **PEFT** holds the adapter, **TRL** runs the supervised pass and then the DPO
 pass over preference pairs that each carry one deliberate defect, and **Unsloth** supplies the
 kernels that make it fit on one consumer card. **PyTorch** is underneath all four. Every run
-writes to a local **MLflow** store, which is what makes the four LoRA settings comparable
-after the fact rather than from memory. The ordinary baseline is a **scikit-learn** linear
-classifier over n-grams, trained on the same examples, and it is the demanding comparison.
+writes to a local **MLflow** store, so the four LoRA settings can be compared after the fact from
+what was recorded. The ordinary baseline is a **scikit-learn** linear classifier over n-grams,
+trained on the same examples, and it is the demanding comparison.
 
-Serving splits in two. A **FastAPI** gateway behind **Uvicorn** validates, runs the questionnaire,
-applies the explicit rule, anonymises and logs; generation is delegated to **vLLM** over its
-OpenAI-compatible route. Request and reply shapes are **Pydantic** models, which is why the contract
-page above is generated rather than written. The gateway's **Docker** image carries neither weights
-nor torch, so a new model version ships without rebuilding it. **Modal** runs that same pair in the
+Serving runs as two processes. A **FastAPI** gateway behind **Uvicorn** validates the request, runs
+the questionnaire, applies the explicit rule, anonymises and logs; **vLLM** does the generation
+over its OpenAI-compatible route. Request and reply shapes are **Pydantic** models, so the contract
+page above is generated from them. The gateway's **Docker** image carries neither weights nor
+torch, so a new model version ships without rebuilding it. **Modal** runs that same pair in the
 cloud: a GPU engine that shuts down after fifteen idle minutes, and the gateway unchanged. It stays
 stopped between demonstrations.
 
-Around all that: the environment is held to its lock file by **uv**, every run is read by **Ruff**
-and by **Bandit**, and **pytest** works in three tiers — the last of which starts the gateway in a
-process of its own and talks to it over the network. `datasets` keeps its cache in Arrow, and the
-**Parquet** reader is imported before torch in the suite: on Windows the other order ends the
-process with an access violation.
+**uv** holds the environment to its lock file, **Ruff** and **Bandit** read every run, and
+**pytest** works in three tiers; the last one starts the gateway in a process of its own and talks
+to it over the network. `datasets` keeps its cache in Arrow, and the **Parquet** reader is imported
+before torch in the suite, because on Windows the other order ends the process with an access
+violation.
 
 ## The result
 
-Sixty cases written by hand, forty of them urgent, none of them seen during training and none
-labelled by the rule that is compared against here. The models in the table are those of seed
-42, the seed fixed in advance as the one shipped.
+The evaluation uses sixty cases written by hand, forty of them urgent. None of them was seen
+during training, and none was labelled by the rule the model is compared against. The models in
+the table are those of seed 42, the seed fixed in advance as the one shipped.
 
 <!-- source: reports/evaluation_results.json -->
 | system | accuracy | undertriage | overtriage | format compliance |
@@ -140,19 +139,17 @@ labelled by the rule that is compared against here. The models in the table are 
 > the same cases, the paired tests below decide.
 
 <!-- source: reports/evaluation_results.json -->
-Against the rule it would replace, the shipped model halves the failure that matters, on the
-n = 40 urgent cases of that set: **11** missed, against **22**. Read as a paired test on the
-same cases, which is the only honest way to read two systems that saw the same patients, the
-paired test gives **p = 0.035**. This comparison was fixed as the primary analysis before the
-model was evaluated. The release gate asks less of it: a model that misses more urgent cases
-than the rule is not published.
+Against the rule it would replace, the shipped model halves undertriage on the n = 40 urgent
+cases of that set: **11** missed, against **22**. A paired test on the same cases, which is how
+two systems that saw the same patients have to be compared, gives **p = 0.035**. This comparison
+was fixed as the primary analysis before the model was evaluated. The release gate asks less of
+it: a model that misses more urgent cases than the rule is not published.
 
 <!-- source: reports/evaluation_results.json -->
-Against the ordinary classifier it is a different story, and this is the finding the project
-publishes rather than buries: on the same n = 40 urgent cases the model misses **11** and the
-classifier **8**, and the paired test gives **p = 0.508**. Fine-tuning buys a justification and
-a course of action a nurse can read; it shows no sign of a better triage decision than n-grams
-and a linear SVM.
+Against the ordinary classifier the result is different, and the project publishes it as a
+finding: on the same n = 40 urgent cases the model misses **11** and the classifier **8**, and the
+paired test gives **p = 0.508**. Fine-tuning adds a justification and a course of action a nurse
+can read, but it shows no sign of a better triage decision than n-grams and a linear SVM.
 
 ### Both opinions, read together
 
@@ -179,8 +176,8 @@ On the internal test split, n = 120 cases, the model scores **0.950**. That numb
 restatement, not triage: most cases in that split were generated from presentations seen during
 training under another wording, and the rest are corpus cases labelled by the same rule as the
 corpus cases it trained on. The clinical set, n = 60, is the one that measures transfer, and the
-model scores **0.717** there: the distance from **0.950** is the size of the illusion a single-set
-evaluation would have produced.
+model scores **0.717** there. The drop from **0.950** is how far a single-set evaluation would
+have overstated its accuracy.
 
 ### What the alignment learnt
 
@@ -188,10 +185,10 @@ evaluation would have produced.
 On n = 100 preference pairs built on the hand-written cases, the alignment favours the right answer
 over the defective one in **0.84** of them: what it learnt on generated narratives holds on written
 ones. On the n = 777 pairs of an external medical preference set it does so in **0.3655**, below
-chance — and on the n = 180 of those pairs whose two answers are of similar length, in **0.500**
-exactly. It learnt the defects it was shown, not medicine at large; below chance, its score reflects
-answer length. On the clinical set the aligned model misses one urgent case fewer than the
-supervised one.
+chance, and on the n = 180 of those pairs whose two answers are of similar length, in **0.500**
+exactly. It learnt the defects it was shown, not medicine at large; its score below
+chance reflects answer length. On the clinical set the aligned model misses one
+urgent case fewer than the supervised one.
 
 ### Three trainings, one shipped
 
@@ -209,14 +206,14 @@ seeds, the alignment rescues one patient and loses none.
 The model this repository served before, version 1.0.0, run through the same evaluation on the same
 n = 60 cases, also scores **0.717**. Of the n = 40 urgent cases, it misses **10** where this version
 misses **11**: two patients caught by the old model alone, one by the new, **p = 1.0**. The
-retraining left the triage decision where it was; what changed is what stands behind it: a corrected
-dataset, a model trained on the prompt the service actually sends, and analyses fixed before the
-results and run on three seeds.
+retraining left the triage decision where it was. What changed is what stands behind it: a
+corrected dataset, a model trained on the prompt the service actually sends, and analyses fixed
+before the results and run on three seeds.
 
 ### What moved the result, and what was left aside
 
 <!-- source: reports/training/module_comparison.json -->
-Training the output head beside the projections is what made the model finish its answers. On the
+Training the output head beside the projections made the model finish its answers. On the
 n = 60 validation cases of that study, the share of answers that stop on their own went from
 **0.0** to **1.0**, and the median answer from the cap of **220** tokens to **96**, for an
 accuracy that barely moved.
@@ -227,18 +224,18 @@ Unsloth's kernels made the training fit and run faster on one card: over the sam
 with plain Transformers.
 
 The largest gain on the urgent cases needs no training at all: keeping the more urgent of the two
-opinions, as shown above. Left aside, each for a measured reason: UltraMedical-Preference as
-training data, because, beyond its pairs of comparable length, it prefers the longer answer 470
-times in 597; three of the four LoRA settings, one tied with the kept setting on the validation
-cases and behind it on validation loss; harder preference pairs, which only a preference set
-independent of their construction could judge fairly; and, for the triage decision, the retraining
-itself, which moved nothing measurable against version 1.0.0.
+opinions, as shown above. The following were left aside, each for a measured reason:
+UltraMedical-Preference as training data, because, beyond its pairs of comparable length, it
+prefers the longer answer 470 times in 597; three of the four LoRA settings, one tied with the kept
+setting on the validation cases and behind it on validation loss; harder preference pairs, which
+only a preference set independent of their construction could judge fairly; and, for the triage
+decision, the retraining itself, which moved nothing measurable against version 1.0.0.
 
 ## Why these numbers can be believed
 
 The evaluation set was written by hand, case by case, with the clinical reason for each label
-recorded beside it. It never passed through the triage rule, which is what makes the comparison
-against that rule meaningful: on the corpus part of the training data the rule recovers its own
+recorded beside it. It never passed through the triage rule, so the comparison against that rule
+means something: on the corpus part of the training data the rule recovers its own
 labels by construction, and measuring it there would measure the filter.
 
 The analyses were fixed before the results. Which seed is shipped, which comparison is primary,
@@ -281,8 +278,8 @@ moved no published figure. Four were about how a measurement gets written down:
   the estimator from the sample size. It now goes through `interval_for_proportion`: nothing
   changes on 60 or 120 cases, and a subgroup of three would no longer get the wrong interval.
 
-The fifth mattered most. Four tests of the experiment-tracking module failed in the environment
-continuous integration installs, because `describe_environment()` imported torch without a
+The fifth defect was the most serious: four tests of the experiment-tracking module failed in the
+environment continuous integration installs, because `describe_environment()` imported torch without a
 guard; those four tests are the ones that check that tracking never stops a run. A missing
 library is now reported as `unavailable`, and the suite passes whole without the training group.
 
@@ -297,8 +294,8 @@ uv run clinical-triage          # what is configured, and what is present
 uv run pytest                   # the three tiers
 ```
 
-The pipeline, in order. Building the dataset needs the Hub; every step from the tuning to the
-evaluation needs a GPU:
+The pipeline runs in this order. Building the dataset needs the Hub, and every step from the
+tuning to the evaluation needs a GPU:
 
 ```bash
 uv run python scripts/build_dataset.py
@@ -358,24 +355,24 @@ corrected dataset, a model retrained on three seeds and a release gate, is in
 The clinical catalogue behind the training data was written for this project and **has not been
 validated by an emergency physician**. Nothing here should meet a patient.
 
-Sixty cases is a small evaluation, and it shows: the interval on the shipped model's accuracy runs
-from 0.59 to 0.81. Even a model that missed none of the forty urgent cases could still miss nearly
+Sixty cases is a small evaluation: the interval on the shipped model's accuracy runs from 0.59 to
+0.81. Even a model that missed none of the forty urgent cases could still miss nearly
 nine urgent patients in a hundred, as far as forty cases can tell; certifying fewer than five in a
 hundred takes seventy-two urgent cases without a miss. The comparison against the ordinary
 classifier is not close to significant either way, so "the model is not shown to be better" is what
 the data supports, not "the model is worse". Three seeds give the size of what training alone moves;
 they say nothing about cases written by someone else.
 
-The alignment does not transfer beyond the defects it was trained on, and the service's latency
+The alignment does not transfer beyond the defects it was trained on. The service's latency
 ([`docs/operations.md`](docs/operations.md#what-one-decision-costs)) was measured on the
-deployment itself, three runs from one workstation far from the service: the profile of an
-evening, not a capacity plan. The three triage levels simplify the
+deployment itself, in three runs on a single evening from one workstation far from the service,
+so it is not a capacity plan. The three triage levels simplify the
 five of the French emergency triage scale, and the model reads French and English but always
 answers in French; the questionnaire is in French only.
 
 ## Licence and data
 
-The code is under the MIT licence — see [LICENSE](LICENSE). The published model weights are
+The code is under the MIT licence (see [LICENSE](LICENSE)). The published model weights are
 under Apache-2.0, the licence of the base model they derive from, and the published dataset
 under CC BY 4.0.
 
