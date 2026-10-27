@@ -85,10 +85,10 @@ def _protected_vocabulary() -> frozenset[str]:
 def _engines():
     """Initialise, once, the analysis and anonymisation engines.
 
-    The language engine is bilingual (French and English spaCy). Four recognisers absent from
-    Presidio are added: the French social security number, the phone number in national and in
-    international form, and the date of birth in DD/MM/YYYY as well as YYYY-MM-DD. Each is
-    registered in both languages.
+    The language engine is bilingual (French and English spaCy). Five recognisers absent from
+    Presidio are added: the French social security number, the French phone number in national
+    and in international form, the phone number of any other country in international form, and
+    the date of birth in DD/MM/YYYY and in YYYY-MM-DD. Each is registered in both languages.
     """
     from presidio_analyzer import AnalyzerEngine, Pattern, PatternRecognizer
     from presidio_analyzer.nlp_engine import NlpEngineProvider

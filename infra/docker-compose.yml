@@ -71,9 +71,9 @@ services:
       TRIAGE_MODEL_VERSION: qwen3-1.7b-clinical-triage
       TRIAGE_AUDIT_DIR: /app/var/logs/audit
       # Quota per caller. Sixty a minute matches a reception desk; a load bench, on the other
-      # hand, holds a single key and passes that count from its first concurrency level. It
-      # raises the quota for the duration of the measurement, without changing the service
-      # value.
+      # hand, holds a single key, and with its default settings its two concurrent levels send
+      # eighty requests in less than a minute. It raises the quota for the duration of the
+      # measurement, without changing the service value.
       TRIAGE_RATE_LIMIT: "${TRIAGE_RATE_LIMIT:-60}"
       # No default value: the service refuses to start without a key.
       TRIAGE_API_KEY: ${TRIAGE_API_KEY:?set TRIAGE_API_KEY before starting the stack}

@@ -146,7 +146,8 @@ def _headroom(ax, tops: list[float]) -> None:
 
 
 def dataset_composition(statistics: dict, destination: Path) -> Path:
-    """What the training corpus is made of: source, triage level, language, label confidence.
+    """What the supervised set is made of, all three splits together: source, triage level,
+    language, label confidence.
 
     Four exhaustive counts. Nothing here is a sample of anything, so nothing carries an
     interval, and the figure says so; an unexplained absence would read as an omission.
@@ -189,7 +190,7 @@ def dataset_composition(statistics: dict, destination: Path) -> Path:
     return save_figure(
         fig,
         destination,
-        n={"training examples": statistics["sft_total"]},
+        n={"examples, training + validation + test": statistics["sft_total"]},
         source=SOURCE,
         note=COUNTED,
     )
@@ -273,11 +274,14 @@ def hyperparameter_tuning(comparison: dict, destination: Path) -> Path:
     right.set_ylim(0, ceiling * 1.2)
 
     fig.tight_layout()
+    # Named after the estimator `interval_for_proportion` picks for this many cases: Wilson above
+    # thirty, exact Clopper-Pearson from six to thirty.
+    estimator = "Wilson" if cases > 30 else "exact Clopper-Pearson"
     return save_figure(
         fig,
         destination,
         n={"validation cases": cases},
-        dispersion="95% Clopper-Pearson interval on the accuracy; the loss is a single value",
+        dispersion=f"95% {estimator} interval on the accuracy; the loss is a single value",
         source=SOURCE,
         note=f"kept: {kept}",
     )

@@ -155,13 +155,15 @@ MEDQUAD_BOILERPLATE = (
 # Acceptable lengths for a patient description.
 #
 # The upper bound is not a round number. It is the largest value for which **no** kept case
-# exceeds the service's description budget: 324 tokens, that is the 768 window minus the system
+# exceeds the service's description budget: 331 tokens, that is the 768 window minus the system
 # prompt and the room reserved for the answer. At the density measured on the corpora, 800
 # characters fit in 100% of cases, 900 in 99.3%, 1,200 in 92.6%. Training beyond that would
 # teach the model on narratives the service would truncate. Lowering the bound to 600 would
 # discard 635 authentic MediQAl vignettes with nothing requiring it.
-# ``tests/unit/data/test_corpus_cases.py`` redoes this computation and fails if the model window
-# or the generation budget changes.
+# ``tests/unit/data/test_corpus_cases.py`` checks the measurement published in metadata.json: that
+# the delivered set was built under this bound, and that its longest description fits the budget
+# measured at that build. A change to the model window or the generation budget is caught by the
+# next dataset build, which measures the budget again.
 MIN_LENGTH = 60
 MAX_LENGTH = SERVING.max_description_characters
 

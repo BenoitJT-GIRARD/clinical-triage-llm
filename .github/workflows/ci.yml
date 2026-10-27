@@ -1,7 +1,7 @@
 name: CI
 
-# Continuous quality: style, security, tests and the build of the service image, on every push
-# and every pull request.
+# Continuous quality: style, security, tests and the build of the service image, in a run
+# started on request (`workflow_dispatch`).
 #
 # The training dependencies are deliberately left out (`--no-group train`): no test imports
 # torch, and installing them would download 2.5 GB of CUDA libraries on every run. The security
@@ -24,7 +24,7 @@ name: CI
 on:
   workflow_dispatch:
 
-# A new push cancels the previous run on the same branch.
+# A run started on a branch cancels the run still in progress on the same branch.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

@@ -68,16 +68,18 @@ metrics:
 
   format_compliance:
     definition: >-
-      The share of answers the information system can parse: three labelled lines, a level
-      taken from the closed list, and a clean stop.
+      The share of answers from which the information system can read one triage level: the
+      label "Niveau de priorité" followed by a level of the closed list, and no second such label
+      naming a different level. The justification and recommendation lines are not required, and
+      a clean stop is counted separately, as `clean_stops`.
     unit: "proportion, 0 to 1"
     direction: higher_is_better
     anchor: >-
       1.0 — reports/evaluation_results.json#clinical_set.models.dpo-merged.format_compliance
     business_reading: >-
-      Every answer reaches the reception screen as a level, a justification and a course of
-      action. The base model reaches it for under half of them, which is the difference
-      between a demonstration and something an integrator can call.
+      Every answer reaches the reception screen with a level it can read. The base model
+      reaches it for under half of them, which is the difference between a demonstration and
+      something an integrator can call.
     source: "scripts/run_evaluation.py, parsing each answer with the service's own parser"
     uncertainty: >-
       A proportion on the same sixty cases. No interval is published: at 1.0 on sixty cases the

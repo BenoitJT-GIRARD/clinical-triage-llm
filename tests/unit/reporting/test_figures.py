@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import pytest
 from matplotlib.container import ErrorbarContainer
 
+from clinical_triage.evaluation.metrics import clopper_pearson, wilson_interval
 from clinical_triage.reporting import figures
 
 STATISTICS = {
@@ -63,9 +64,10 @@ def _manifest(path) -> dict:
 
 
 def test_the_dataset_composition_is_drawn(tmp_path):
+    """The bars count the whole supervised set, so the stamp must not call it the training split."""
     path = figures.dataset_composition(STATISTICS, tmp_path / "composition.png")
     assert path.read_bytes().startswith(b"\x89PNG")
-    assert _manifest(path)["n"] == "n(training examples) = 4998"
+    assert _manifest(path)["n"] == "n(examples, training + validation + test) = 4998"
 
 
 def test_the_systems_comparison_is_drawn(tmp_path):
@@ -122,7 +124,26 @@ def test_the_hyperparameter_tuning_is_drawn(tmp_path):
     path = figures.hyperparameter_tuning(comparison, tmp_path / "tuning.png")
     recorded = _manifest(path)
     assert recorded["n"] == "n(validation cases) = 60"
-    assert "Clopper-Pearson" in recorded["dispersion"]
+    assert recorded["dispersion"].startswith("95% Wilson interval on the accuracy")
+
+
+@pytest.mark.parametrize(
+    ("cases", "estimator", "interval"),
+    [(60, "Wilson", wilson_interval), (20, "Clopper-Pearson", clopper_pearson)],
+)
+def test_the_tuning_figure_names_the_interval_it_draws(tmp_path, cases, estimator, interval):
+    """The stamp names the estimator whose bounds the whiskers actually span."""
+    comparison = {
+        "kept": "r16_lr2e-4",
+        "protocol": {"evaluated_cases": cases},
+        "variants": [{"variant": "r16_lr2e-4", "selection_accuracy": 0.8, "eval_loss": 0.41}],
+    }
+    path = figures.hyperparameter_tuning(comparison, tmp_path / "tuning.png")
+    container = next(c for c in plt.gcf().axes[0].containers if isinstance(c, ErrorbarContainer))
+    ((low, high),) = [segment[:, 1] for segment in container.lines[2][0].get_segments()]
+
+    assert (low, high) == pytest.approx(interval(round(0.8 * cases), cases))
+    assert estimator in _manifest(path)["dispersion"]
 
 
 def test_a_validation_loss_that_was_not_measured_is_not_drawn_as_a_zero(tmp_path):

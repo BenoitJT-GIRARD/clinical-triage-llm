@@ -103,9 +103,10 @@ def test_the_length_bound_fits_inside_the_service_budget():
 
     The budget is not recomputed here: ``scripts/build_dataset.py`` measures it with the base
     model's tokenizer at every build, on the cases actually kept, and refuses the build if one
-    of them exceeds it. What this test does is tie the constant to that published measurement —
-    it fails the day ``MAX_LENGTH`` changes, or the model window, or the generation budget,
-    without the set being rebuilt.
+    of them exceeds it. This test reads that published measurement in ``metadata.json``. It
+    fails the day ``MAX_LENGTH`` changes without the set being rebuilt, or if the longest
+    published description exceeds the published budget. It reads neither the model window nor
+    the generation budget: a change to either is caught by the next build of the dataset.
     """
     published = json.loads((PATHS.data_processed / "metadata.json").read_text(encoding="utf-8"))[
         "statistics"

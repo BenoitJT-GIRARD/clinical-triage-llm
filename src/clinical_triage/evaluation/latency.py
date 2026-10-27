@@ -16,7 +16,8 @@ what the engine produces.
 
 The cost of the engine alone stays measurable (``target="engine"``), and the published protocol
 presents it for what it is: a decomposition. The gateway also reports its own inference duration
-in every reply, which isolates its overhead without re-running anything.
+in every reply. Subtracting it from the latency the client measures gives what the gateway and
+the network between client and gateway add to generation, without re-running anything.
 
 In both cases the real endpoint served by vLLM is measured, never the development engine: a
 figure obtained with ``transformers`` in sequential generation has nothing to do with it, vLLM
@@ -41,8 +42,9 @@ class Measure:
     """One timed request.
 
     ``inference_ms`` is filled in for the gateway only: it publishes the duration of its own
-    generation, and the difference with the total latency gives its overhead — explicit rule,
-    anonymisation, writing to the log.
+    generation. The difference with the total latency is everything else on the round trip: the
+    network between client and gateway, then the gateway's own work (explicit rule,
+    anonymisation, writing to the log).
     """
 
     latency_ms: float
@@ -160,8 +162,9 @@ def benchmark(
             )
             overheads = [m.latency_ms - m.inference_ms for m in measures if m.inference_ms]
             if overheads:
-                # What the gateway adds to generation: explicit rule, anonymisation of both
-                # texts, writing to the audit log.
+                # What the round trip adds to generation: the network between client and
+                # gateway, and the gateway's own work (explicit rule, anonymisation of both texts,
+                # writing to the audit log).
                 summary["gateway_overhead_ms"] = latency_summary(overheads)["p50_ms"]
             results[f"concurrency_{concurrency}"] = summary
             logger.info(

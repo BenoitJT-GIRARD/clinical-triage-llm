@@ -1,7 +1,9 @@
-"""Check that no line of the audit log was edited, inserted or deleted since it was written.
+"""Check the chain of digests that reveals a line of the audit log edited, inserted or deleted.
 
 Each line carries the digest of the one before it. The check walks the chain across the day
-files and names the first line where it breaks; it exits with a non-zero status if it finds one.
+files and names every line where it breaks; it exits with a non-zero status if it finds one.
+Two changes leave the chain intact and go unreported: a change to the last line, and the
+deletion of the first lines.
 
 Usage::
 

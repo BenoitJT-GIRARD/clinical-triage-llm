@@ -141,8 +141,8 @@ HEALTH_ROUTE: str | None = "/openapi.json"
 #: header a caller has to present.
 CAPTURE_KEY = "capture-key"
 
-#: The complaint typed into the questionnaire, chosen because the explicit rule answers it on
-#: its own: no model, no GPU, and an answer that is entirely this repository's logic.
+#: The complaint typed into the questionnaire. The questionnaire never calls the model, so the
+#: capture needs no GPU, and this complaint selects the chest theme of the questionnaire plan.
 COMPLAINT = "gêne dans la poitrine à l'effort"
 
 #: The repository's captures. Nothing else in this file changes from one repository to
@@ -156,7 +156,7 @@ CAPTURES: tuple[Capture, ...] = (
             "behind it: the page is the contract, which does not depend on the engine"
         ),
         demonstrates_behaviour=(
-            "the three routes and the X-API-Key scheme are generated from the Pydantic models, "
+            "the four routes and the X-API-Key scheme are generated from the Pydantic models, "
             "so the page a caller reads cannot drift from what the service enforces"
         ),
         data_source="none: the page is generated from the Pydantic models",
@@ -231,8 +231,9 @@ CAPTURES: tuple[Capture, ...] = (
         demonstrates_behaviour=(
             "the questionnaire adapts to the complaint instead of reading a fixed list: the "
             "chest theme is detected and the next question asked is the one about radiating "
-            "pain. Nothing here goes through the model — the answer is the explicit rule's, "
-            "computed in the gateway"
+            "pain. Nothing here goes through the model: the gateway checks the complaint and the "
+            "answers for a red flag, finds none, and takes the next question from the "
+            "questionnaire plan"
         ),
         data_source=(
             "the questionnaire plan of src/clinical_triage/serving/questionnaire.py, written "

@@ -8,9 +8,10 @@ stop emitting its end token.
 
 Three rules frame the construction of the pairs:
 
-1. **same format, same length.** The rejected answer respects the three-line structure. Each
-   defect comes in several lengths, and the one closest to the preferred answer is kept: the
-   difference between the two then lies in the substance, and in nothing else.
+1. **same format, similar length.** The rejected answer respects the three-line structure.
+   Each defect comes in several lengths, and the rejected answer is drawn at random between the
+   two candidates nearest to the preferred answer in length: the difference between the two
+   answers then lies in their substance.
 2. **never an escalation as the rejected answer.** The system prompt requires escalating at the
    slightest doubt. Opposing an "over-cautious" answer as a bad example would teach exactly the
    opposite. Rejected answers are undertriages, recommendations that delay care, asserted
@@ -166,8 +167,8 @@ class PreferencePairRecord:
     source: str
 
 
-# Each builder returns several candidates of different lengths. The pair builder keeps the one
-# whose length is closest to the preferred answer.
+# Each builder returns several candidates of different lengths. The pair builder keeps the two
+# whose length is closest to the preferred answer and draws one of them.
 
 
 def _undertriage(example: TriageExample, rng: random.Random) -> list[str]:

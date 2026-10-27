@@ -16,9 +16,11 @@ Five properties, none of which goes without saying:
 - **the retention is applied, not only announced.** One file per day; a file past the retention period goes when the service
   starts, or when a new day's first line is written;
 - **a modification shows.** Every line holds the SHA-256 digest of its predecessor, even across a
-  day's boundary, so a line edited, inserted or deleted breaks the chain from there on, and
-  :func:`verify` names the place. It detects, it does not prevent — a log a user can delete is still
-  a file — and that is the property an audit needs;
+  day's boundary, so a line edited, inserted or deleted breaks the link held by the line after
+  it, and :func:`verify` names that line. Two changes leave the chain intact: a change to the
+  last line, which no line follows yet, and the deletion of the first lines, after which the
+  first remaining line is the anchor, as after a purge. It detects, it does not prevent — a log
+  a user can delete is still a file — and that is the property an audit needs;
 - **one writer.** Only within one process is an append atomic, which is why the deployment
   runs a single gateway container.
 """
@@ -200,7 +202,8 @@ def verify(directory: Path | None = None) -> list[str]:
     """Walk the chain and name every line whose link does not match the line before it.
 
     The first line kept is the anchor: after a purge, the line it points to is legitimately
-    gone.
+    gone. No line holds the digest of the last one, so a change to the last line goes
+    unreported, and the next write chains onto the changed line.
     """
     directory = directory or audit_directory()
     problems = []

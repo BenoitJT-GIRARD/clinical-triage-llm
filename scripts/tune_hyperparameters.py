@@ -10,8 +10,8 @@ with the best accuracy is kept, and ``train_sft.py`` reads it back. Its accuracy
 and the model is judged on the clinical set and nowhere else.
 
 ``--study modules`` compares three sets of adapted modules (projections only; projections and
-embeddings; projections, embeddings and output head) on the same protocol, adding the share of answers that stop cleanly. It
-is the study that showed the output head must be trained.
+embeddings; projections and output head) on the same protocol, adding the share of answers that
+stop cleanly. It is the study that showed the output head must be trained.
 
 ``--study engines`` trains the same configuration for a few steps with Unsloth and with
 Transformers and PEFT alone, and compares memory and speed. Each engine runs in a process of its
