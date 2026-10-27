@@ -1,91 +1,94 @@
 # Where the data comes from
 
-The dataset draws on six sources, and only one of them carries the triage levels the model is
-trained on. For each source, this page gives what it is, the licence it is used under, what was
-taken from it and what was left. The counts are in [`../data/README.md`](../data/README.md), the
-card published beside the dataset on the Hub; this page covers provenance and rights.
+The project read six sources, and four of them contribute to the dataset files. Only one, the
+clinical catalogue written for the project, comes with triage levels, and the cases taken from
+public corpora receive their level from the project's explicit rule. For each source, this page
+gives what it is, the licence it is used under, what was taken from it and what was left out. The
+counts are in [`../data/README.md`](../data/README.md), the card published with the dataset on the
+Hub, and this page covers provenance and rights.
 
-It is written for someone deciding whether this dataset may be reused, and under what conditions.
+It is written for someone deciding whether this dataset may be reused, and under what
+conditions.
 
-## The corpora, as they were read
+## The sources and their licences
 
-Every corpus was read from the Hugging Face Hub on 2026-10-09, the date the published set was built;
-the build records that date, with the repository revision, in `metadata.json`. None of them is
-redistributed here in its original form: what the dataset carries is derived cases, and the
-derivation is in the code.
+The dataset build read the four case corpora from the Hugging Face Hub on 2026-10-09, the date the
+published set was built, and recorded that date in `metadata.json`. The repository revision stored
+beside it was entered by hand after the build. UltraMedical-Preference is read by the evaluation
+script and contributes nothing to the dataset files. No source is redistributed in its original
+form. The dataset carries derived cases, and the code performs the derivation.
 
 | source | where | licence | what was taken |
 |---|---|---|---|
-| Clinical catalogue | written for this project, `src/clinical_triage/data/clinical_catalogue.py` | MIT | the triage levels themselves |
+| Clinical catalogue | written for this project, `src/clinical_triage/data/clinical_catalogue.py` | MIT | the generated vignettes and their triage levels |
 | MediQAl | <https://huggingface.co/datasets/ANR-MALADES/MediQAl> | CC BY 4.0 | French clinical vignettes |
-| MedQuAD | <https://huggingface.co/datasets/keivalya/MedQuad-MedicalQnADataset> | CC BY 4.0 | symptom descriptions turned into complaints |
+| MedQuAD | <https://huggingface.co/datasets/keivalya/MedQuad-MedicalQnADataset> | CC BY 4.0 | symptom descriptions rewritten as complaints |
 | MedMCQA | <https://huggingface.co/datasets/openlifescienceai/medmcqa> | Apache-2.0 | English clinical vignettes |
-| FrenchMedMCQA | <https://huggingface.co/datasets/nthngdy/frenchmedmcqa> | Apache-2.0 | nothing: no case survived the filters |
-| UltraMedical-Preference | <https://huggingface.co/datasets/TsinghuaC3I/UltraMedical-Preference> | MIT | nothing for training; an evaluation set only |
+| FrenchMedMCQA | <https://huggingface.co/datasets/nthngdy/frenchmedmcqa> | Apache-2.0 | nothing, since no case passed the filters |
+| UltraMedical-Preference | <https://huggingface.co/datasets/TsinghuaC3I/UltraMedical-Preference> | MIT | nothing for training; it serves as an evaluation set |
 
-Two of the six are read through a mirror rather than the original repository. The licence
-recorded for MedQuAD is the one the original `abachaa/MedQuAD` repository carries, and the one
-for FrenchMedMCQA is `qanastek/frenchmedmcqa`'s, since a mirror cannot grant rights of its own
-and the original's licence is the one that applies. Both are recorded in `metadata.json` under
+Two of the six are read through a mirror. A mirror cannot grant rights of its own, so the licence
+that applies is that of the original repository: `abachaa/MedQuAD` for MedQuAD, and
+`qanastek/frenchmedmcqa` for FrenchMedMCQA. `metadata.json` records both under
 `licence_checked_on`.
 
-## What each one gave, and why
+## What each source contributed
 
-The clinical catalogue is the only source of triage levels. It holds seventy presentations, each
-written with its complaint, its signs, its history, a vital-sign profile and the clinical reason
-for its level. A generator draws vignettes from it, varying the wording, the patient's age, the
-measured vitals and the language, and the level travels with the presentation: it is never read
-back out of the text. No rule, model or keyword decides the level, which is what makes it ground
-truth.
+The clinical catalogue is the only source that comes with triage levels. It holds seventy
+presentations, each written with its complaint, its signs, its history, a vital-sign profile and
+the clinical reason for its level. A generator draws vignettes from it, varying the wording, the
+patient's age, the measured vital signs and the language. Each vignette inherits the level of its
+presentation, and the level is never inferred from the generated text. No rule, model or keyword
+decides these levels, so they can serve as ground truth.
 
-MediQAl is the only source corpus made of patient cases. Its clinical-case column carries
-French vignettes with a complaint and, for some of them, the vital signs on arrival. It is the
-authentic French material of the set.
+MediQAl is the only source corpus made of patient cases. Its clinical-case column holds French
+vignettes that give a complaint and, in part of them, the vital signs measured on arrival. It
+supplies the French cases written outside the project.
 
-MedMCQA gives the English half its vignettes. The other source corpora hold no
-English clinical vignette at all. Without a second language the dataset would have been French
-only, and the service reads both. MedMCQA's yield is poor, a hundred and eighty
-thousand rows for nearly thirteen hundred cases, but those cases are real presentations written by
-someone else, which is exactly what a catalogue cannot provide.
+MedMCQA supplies the English vignettes. The other source corpora contain no English clinical
+vignette, and without a second language the dataset would have been French only, while the
+service reads both. The yield of MedMCQA is low, over a hundred and eighty thousand rows for
+nearly thirteen hundred cases, but those cases were written by other authors, which the catalogue
+cannot provide.
 
-FrenchMedMCQA gave nothing. Its questions are pharmacy questions: of its entries, six are
-recognised as describing a patient and none of those carries a sign the triage rule can read. The
-corpus stays in the funnel table, because a source that was tried and yields zero is itself a
-result.
+FrenchMedMCQA contributed nothing. Its questions are pharmacy questions. Six of its entries are
+recognised as describing a patient, and none of those six carries a sign the triage rule can
+read. The corpus remains in the funnel table, because a source that was tried and yielded zero
+cases is itself a result.
 
-UltraMedical-Preference is never trained on. Outside the pairs built to compare answers of
-similar length, its preferred answer is the longer one in 470 pairs out of 597; an alignment
-trained on that signal learns that longer is better. Its test split is used as an external
-evaluation set, where the aligned model does badly, as reported in
-[`protocol.md`](protocol.md#what-the-alignment-bought-and-what-it-did-not).
+UltraMedical-Preference is never used for training. In its pairs that were not built to match
+answer lengths, the answer marked as preferred is the longer one 470 times out of 597, and an
+alignment trained on that signal would learn that longer answers are better. Its test split
+serves as an external evaluation set, on which the aligned model scores poorly, as reported in
+[`protocol.md`](protocol.md#effect-of-the-alignment-on-preference-pairs).
 
-## What the corpus cases are allowed to decide
+## How corpus cases are labelled and bounded
 
-A case extracted from a public corpus carries no triage level of its own. The explicit rule reads
-it and proposes one, and the case is kept only if a sign was recognised. Its label therefore
-carries a `medium` confidence, written into every example, against `high` for a catalogue
-vignette.
+A case extracted from a public corpus has no triage level of its own. The explicit rule reads it
+and proposes a level, and the case is kept only if the rule recognised a sign. Its label
+therefore carries a `medium` confidence, recorded in every example, against `high` for a
+catalogue vignette.
 
-Two bounds keep that contribution in its place. Per cell of the level × language grid, a corpus
-may not exceed the places that cell has. Globally, corpus cases stay a minority of the set. Both
-are there for the same reason: corpus labels come from the rule, and a set where they dominate is
-a transcription of the rule, which the evaluation would then flatter.
+Two bounds limit that contribution. In each cell of the level × language grid, corpus cases may
+not exceed the number of places the cell has. Over the whole set, corpus cases are capped at 35%
+of the examples, which keeps them a minority. Both bounds exist because corpus labels come from
+the rule, and a set dominated by them would amount to a transcription of the rule.
 
 ## Personal data
 
-No real patient data is used. The catalogue vignettes are synthetic, and the public corpora are
-research sets with no identifying content. The anonymisation pass runs anyway, on both languages,
-and a separate check looks afterwards for what it might have let through. The data card lists three
-things: the entities masked, the ones left alone on purpose, and the residue the check still reports
+No real patient data is used. The catalogue vignettes are synthetic. The public corpora are
+research datasets without identifying content. The anonymisation pass still runs on both
+languages, and a separate check then looks for anything it missed. The data card lists the
+entities masked, the entities deliberately left unmasked, and the residue the check still reports
 (see [`../data/README.md`](../data/README.md#personal-data)).
 
 ## Reusing this dataset
 
-The derived dataset is published on the Hub under the repository named in `config.py`, with the
-card of [`../data/README.md`](../data/README.md) beside it. It inherits the constraints of its
-sources: the CC BY 4.0 of MediQAl and MedQuAD requires attribution, which the card carries, and
-the Apache-2.0 and MIT of the others are compatible with it.
+The derived dataset is published on the Hub under the repository named in `config.py`, with
+[`../data/README.md`](../data/README.md) as its card. It inherits the conditions of its sources.
+The CC BY 4.0 licence of MediQAl and MedQuAD requires attribution, which the card provides, and
+the Apache-2.0 and MIT licences of the other sources are compatible with it.
 
-The dataset has no clinical validity. Its levels come from a catalogue written by a developer,
-not by a clinician, and nothing in this dataset should be used to train a system that meets a
-patient.
+The dataset has no clinical validity. The developer set its levels through a catalogue and a
+keyword rule that no clinician has reviewed, and the dataset must not be used to train a system
+that will be used on patients.
