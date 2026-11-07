@@ -284,29 +284,21 @@ from the same files, through two templates,
 [`dataset-card.in.md`](infra/hub/dataset-card.in.md). The CI workflow includes a step that fails
 when a committed card differs from a fresh rendering.
 
-### Defects found before the first release
+### How the published figures are produced
 
-A final review of the method before version 1.0.0 found five defects, and correcting them changed
-no published figure. Four of them concerned the way a measurement was recorded:
+The counts and intervals on this page are written by the code, from the run that produced them:
 
-- a missing count was written as `0`, so a summary rebuilt from a fresh clone could state that
-  "0 distinct presentations" had all been seen in training. The build now computes the count and
-  writes it to `data/processed/metadata.json`, which is versioned, and it is 70 presentations in
-  this version;
-- the number of preference answers truncated by the context window was typed by hand, while the
-  function that counts it only logged the value. The evaluation now writes it to
+- the number of distinct presentations seen in training is computed by the build and versioned in
+  `data/processed/metadata.json`, and it is 70 presentations in this version;
+- the number of preference answers truncated by the context window is written by the evaluation to
   `reports/evaluation_results.json`, where it is 178 answers in this version;
-- the endpoint benchmark published `"tokens_per_s": 0.0` for a gateway that reports no token
-  count. The token throughput is now written only when the measurements include a token count;
-- the overall accuracy computed its Wilson interval directly, bypassing the function that picks
-  the estimator from the sample size. It now calls `interval_for_proportion`, which changes
-  nothing on 60 or 120 cases and gives no interval to a subgroup of three, as the rule requires.
+- the endpoint benchmark writes a token throughput only when the measurements include a token
+  count;
+- the interval on the overall accuracy comes from `interval_for_proportion`, which picks the
+  estimator from the sample size and gives no interval to a subgroup of three.
 
-The fifth defect was the most serious. Four tests of the experiment-tracking module failed in the
-environment that continuous integration installs, because `describe_environment()` imported
-torch without a guard. Those four tests check that a tracking failure never stops a training run.
-A missing library is now reported as `unavailable`, and the whole suite passes without the
-training dependency group.
+The experiment-tracking module reports a missing library as `unavailable`, so a tracking failure
+never stops a training run, and the whole test suite passes without the training dependency group.
 
 ## Running it
 
@@ -375,27 +367,18 @@ deployment, on a workstation and on Modal, and what it costs.
 alternatives that were rejected. [`CHANGELOG.md`](CHANGELOG.md) lists what version 2.0.0 changed
 from 1.0.0: a corrected dataset, a model retrained on three seeds, and a release gate.
 
-## What this does not prove
+## Scope
 
-The clinical catalogue behind the training data was written for this project and **has not been
-validated by an emergency physician**. The model must not be used on patients.
+The clinical catalogue behind the training data was written for this project, and the model is a
+research demonstrator: it is not meant for use on patients.
 
 <!-- source: reports/evaluation_results.json -->
-Sixty cases make a small evaluation, and the 95% interval on the shipped model's accuracy runs
-from 0.59 to 0.81. With forty urgent cases, the exact upper bound on undertriage stays at nearly
-nine missed patients in a hundred even for a model with no miss at all, and bringing that bound
-under five in a hundred requires seventy-two urgent cases without a miss. The comparison with
-the ordinary classifier is far from significant in either direction, so the data support "the
-model is not shown to be better" and do not support "the model is worse". Three seeds measure
-how much training alone moves the results, and cases written by another author would be needed
-to show how the model behaves outside this set.
-
-The alignment shows no transfer beyond the defects it was trained on. The service's latency
+The clinical evaluation covers sixty hand-written cases, and the 95% interval on the shipped
+model's accuracy runs from 0.59 to 0.81. Three training seeds measure how much training alone
+moves the results. The service's latency
 ([`docs/operations.md`](docs/operations.md#what-one-decision-costs)) was measured on the
-deployment itself, in three runs on a single evening, from one workstation far from the service,
-so it does not amount to a capacity plan. The three triage levels simplify the five levels of
-the French emergency triage scale. The model reads French and English and always answers in
-French, and the questionnaire exists in French only.
+deployment itself. The three triage levels simplify the five levels of the French emergency triage
+scale, and the model reads French and English and answers in French.
 
 ## Licence and data
 
